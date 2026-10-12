@@ -63,7 +63,7 @@ jobs:
           generate_release_notes: true
       
       - name: Build and push release images
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: .
           push: true
