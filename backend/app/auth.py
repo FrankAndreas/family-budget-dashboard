@@ -1,3 +1,6 @@
+import logging
+import os
+import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
@@ -7,8 +10,13 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from . import schemas, database, models
 
-# SECRET_KEY should be in env vars in production
-SECRET_KEY = "supersecretkeyshouldbechanged"
+logger = logging.getLogger(__name__)
+
+# Signs the login tokens. Without SECRET_KEY a random key is used, which is safe but logs everyone
+# out whenever the backend restarts; set it (e.g. in .env) to keep sessions across restarts.
+SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
+if not os.getenv("SECRET_KEY"):
+    logger.warning("SECRET_KEY is not set; using a random key, so logins won't survive a restart")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 

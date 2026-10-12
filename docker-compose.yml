@@ -13,6 +13,8 @@ services:
       - ./data:/app/data
     environment:
       - DATABASE_URL=sqlite:///./data/budget.db
+      # Read from .env (see .env.example); empty means a random key per start
+      - SECRET_KEY=${SECRET_KEY:-}
     restart: unless-stopped
 
   frontend:
