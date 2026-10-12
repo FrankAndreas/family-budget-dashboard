@@ -115,6 +115,10 @@ jobs:
   security-scan:
     name: Security Scanning
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # Upload Trivy results to the repository's code scanning alerts
+      security-events: write
     
     steps:
       - name: Checkout code
@@ -151,6 +155,9 @@ jobs:
     permissions:
       contents: read
       packages: write
+      # Needed by attest-build-provenance to sign and store the attestations
+      id-token: write
+      attestations: write
     
     steps:
       - name: Checkout code
@@ -197,6 +204,7 @@ jobs:
             type=raw,value=${{ github.sha }}
       
       - name: Build and push Backend image
+        id: build-backend
         uses: docker/build-push-action@v5
         with:
           context: ./backend
@@ -208,6 +216,7 @@ jobs:
           platforms: linux/amd64,linux/arm64
       
       - name: Build and push Frontend image
+        id: build-frontend
         uses: docker/build-push-action@v5
         with:
           context: ./frontend
@@ -222,14 +231,14 @@ jobs:
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
-          subject-digest: ${{ steps.meta-backend.outputs.digest }}
+          subject-digest: ${{ steps.build-backend.outputs.digest }}
           push-to-registry: true
       
       - name: Generate artifact attestation for Frontend
         uses: actions/attest-build-provenance@v1
         with:
           subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
-          subject-digest: ${{ steps.meta-frontend.outputs.digest }}
+          subject-digest: ${{ steps.build-frontend.outputs.digest }}
           push-to-registry: true
 
   # Integration Tests
