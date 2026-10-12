@@ -1,0 +1,72 @@
+# Dependabot configuration for automated dependency updates
+
+version: 2
+updates:
+  # Backend Python dependencies
+  - package-ecosystem: "pip"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "backend"
+    commit-message:
+      prefix: "chore(backend)"
+      include: "scope"
+    reviewers:
+      - "your-github-username"
+    assignees:
+      - "your-github-username"
+  
+  # Frontend npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "frontend"
+    commit-message:
+      prefix: "chore(frontend)"
+      include: "scope"
+    reviewers:
+      - "your-github-username"
+    assignees:
+      - "your-github-username"
+    ignore:
+      # Ignore major version updates for stability
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+  
+  # GitHub Actions
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    labels:
+      - "dependencies"
+      - "ci/cd"
+    commit-message:
+      prefix: "chore(ci)"
+  
+  # Docker
+  - package-ecosystem: "docker"
+    directory: "/backend"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"
+  
+  - package-ecosystem: "docker"
+    directory: "/frontend"
+    schedule:
+      interval: "weekly"
+    labels:
+      - "dependencies"
+      - "docker"

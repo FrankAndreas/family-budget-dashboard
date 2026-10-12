@@ -1,0 +1,74 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  create-release:
+    name: Create Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Generate changelog
+        id: changelog
+        uses: metcalfc/changelog-generator@v4.3.1
+        with:
+          myToken: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          body: |
+            ## 🎉 Family Budget Dashboard ${{ github.ref_name }}
+            
+            ### Changes
+            ${{ steps.changelog.outputs.changelog }}
+            
+            ### Docker Images
+            
+            **Backend:**
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}/backend:${{ github.ref_name }}
+            ```
+            
+            **Frontend:**
+            ```bash
+            docker pull ghcr.io/${{ github.repository }}/frontend:${{ github.ref_name }}
+            ```
+            
+            ### Quick Start
+            ```bash
+            # Download docker-compose.yml
+            curl -O https://raw.githubusercontent.com/${{ github.repository }}/${{ github.ref_name }}/docker-compose.yml
+            
+            # Update image tags to ${{ github.ref_name }}
+            # Start services
+            docker compose up -d
+            ```
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+      
+      - name: Build and push release images
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/backend:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}/backend:latest
+            ghcr.io/${{ github.repository }}/frontend:${{ github.ref_name }}
+            ghcr.io/${{ github.repository }}/frontend:latest

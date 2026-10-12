@@ -1,0 +1,119 @@
+name: Pull Request Checks
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  # Quick validation for PRs
+  pr-validation:
+    name: PR Validation
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      
+      - name: Check PR title
+        uses: amannn/action-semantic-pull-request@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Check for large files
+        run: |
+          large_files=$(find . -type f -size +10M -not -path "./.git/*" -not -path "./venv/*")
+          if [ -n "$large_files" ]; then
+            echo "❌ Large files detected (>10MB):"
+            echo "$large_files"
+            exit 1
+          fi
+          echo "✅ No large files detected"
+      
+      - name: Check for secrets
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.pull_request.base.sha }}
+          head: ${{ github.event.pull_request.head.sha }}
+      
+      - name: Validate Docker Compose
+        run: |
+          docker compose config > /dev/null
+          echo "✅ docker-compose.yml is valid"
+  
+  # Code quality checks
+  code-quality:
+    name: Code Quality
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install Python dependencies
+        run: |
+          pip install black flake8 pylint bandit safety
+      
+      - name: Check code formatting (Black)
+        run: |
+          cd backend
+          black --check app/ || echo "::warning::Code formatting issues found. Run 'black app/' to fix."
+      
+      - name: Security check (Bandit)
+        run: |
+          cd backend
+          bandit -r app/ -f json -o bandit-report.json || true
+          if [ -f bandit-report.json ]; then
+            cat bandit-report.json
+          fi
+      
+      - name: Dependency security check (Safety)
+        run: |
+          cd backend
+          safety check --json || echo "::warning::Security vulnerabilities found in dependencies"
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+      
+      - name: Install frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+      
+      - name: Check TypeScript
+        run: |
+          cd frontend
+          npm run type-check || echo "::warning::TypeScript errors found"
+  
+  # Documentation check
+  docs-check:
+    name: Documentation Check
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Check for README updates
+        run: |
+          if git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E "^(backend|frontend)/.*\.(py|tsx?|jsx?)$"; then
+            if ! git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.event.pull_request.head.sha }} | grep -E "\.md$"; then
+              echo "::warning::Code changes detected but no documentation updates"
+            fi
+          fi
+      
+      - name: Check markdown links
+        uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          use-quiet-mode: 'yes'
+          config-file: '.github/markdown-link-check-config.json'
+        continue-on-error: true

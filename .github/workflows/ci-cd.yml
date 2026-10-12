@@ -1,0 +1,319 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  release:
+    types: [ created ]
+
+env:
+  REGISTRY: ghcr.io
+  # Registry paths must be lowercase, and github.repository keeps the owner's capitals
+  # (expressions have no lower()); change these if the repository moves
+  IMAGE_NAME_BACKEND: frankandreas/family-budget-dashboard/backend
+  IMAGE_NAME_FRONTEND: frankandreas/family-budget-dashboard/frontend
+
+jobs:
+  # Backend Testing and Linting
+  backend-test:
+    name: Backend Tests & Linting
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: Install dependencies
+        run: |
+          cd backend
+          pip install -r requirements.txt
+          pip install pytest pytest-cov flake8 black mypy
+      
+      - name: Run Black (code formatting check)
+        run: |
+          cd backend
+          black --check app/
+      
+      - name: Run Flake8 (linting)
+        run: |
+          cd backend
+          flake8 app/ --max-line-length=120 --extend-ignore=E203,W503
+      
+      - name: Run MyPy (type checking)
+        run: |
+          cd backend
+          mypy app/ --ignore-missing-imports
+        continue-on-error: true
+      
+      # The tests run the API in-process against a temporary SQLite database (see tests/conftest.py)
+      - name: Run pytest
+        run: |
+          pip install -r tests/requirements.txt
+          pytest -v --cov=backend/app --cov-report=xml --cov-report=term
+      
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.xml
+          flags: backend
+          name: backend-coverage
+        continue-on-error: true
+
+
+  # Frontend Testing and Linting
+  frontend-test:
+    name: Frontend Tests & Linting
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+      
+      - name: Install dependencies
+        run: |
+          cd frontend
+          npm ci
+      
+      - name: Run ESLint
+        run: |
+          cd frontend
+          npm run lint
+        continue-on-error: true
+      
+      - name: Run TypeScript check
+        run: |
+          cd frontend
+          npm run type-check
+      
+      - name: Build frontend
+        run: |
+          cd frontend
+          npm run build
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-build
+          path: frontend/dist
+          retention-days: 7
+
+  # Security Scanning
+  security-scan:
+    name: Security Scanning
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Run Trivy vulnerability scanner (Backend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: 'backend'
+          format: 'sarif'
+          output: 'trivy-backend-results.sarif'
+      
+      - name: Run Trivy vulnerability scanner (Frontend)
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: 'frontend'
+          format: 'sarif'
+          output: 'trivy-frontend-results.sarif'
+      
+      - name: Upload Trivy results to GitHub Security
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: 'trivy-backend-results.sarif'
+        continue-on-error: true
+
+  # Build and Push Docker Images
+  build-and-push:
+    name: Build & Push Docker Images
+    runs-on: ubuntu-latest
+    needs: [backend-test, frontend-test]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      - name: Extract metadata (tags, labels) for Backend
+        id: meta-backend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+            # Full commit hash, used by the integration tests to pull exactly this build
+            type=raw,value=${{ github.sha }}
+      
+      - name: Extract metadata (tags, labels) for Frontend
+        id: meta-frontend
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
+          tags: |
+            type=ref,event=branch
+            type=ref,event=pr
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+            # Full commit hash, used by the integration tests to pull exactly this build
+            type=raw,value=${{ github.sha }}
+      
+      - name: Build and push Backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ steps.meta-backend.outputs.tags }}
+          labels: ${{ steps.meta-backend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+      
+      - name: Build and push Frontend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: ${{ steps.meta-frontend.outputs.tags }}
+          labels: ${{ steps.meta-frontend.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+      
+      - name: Generate artifact attestation for Backend
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
+          subject-digest: ${{ steps.meta-backend.outputs.digest }}
+          push-to-registry: true
+      
+      - name: Generate artifact attestation for Frontend
+        uses: actions/attest-build-provenance@v1
+        with:
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
+          subject-digest: ${{ steps.meta-frontend.outputs.digest }}
+          push-to-registry: true
+
+  # Integration Tests
+  integration-test:
+    name: Integration Tests
+    runs-on: ubuntu-latest
+    needs: [build-and-push]
+    if: github.event_name != 'pull_request'
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      
+      # Run the images that were just published and smoke-test them over HTTP
+      - name: Start published images
+        run: |
+          docker run -d --name backend -p 8000:8000 -e DATABASE_URL=sqlite:////tmp/ci.db \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
+          docker run -d --name frontend -p 3000:3000 \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ github.sha }}
+
+      - name: Wait for services
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:8000/health && curl -sf -o /dev/null http://localhost:3000; then exit 0; fi
+            sleep 2
+          done
+          echo "Services did not come up"
+          docker logs backend
+          docker logs frontend
+          exit 1
+
+      - name: Smoke test
+        run: python3 tests/smoke_test.py http://localhost:8000
+
+      - name: Show logs on failure
+        if: failure()
+        run: |
+          docker logs backend
+          docker logs frontend
+
+      - name: Stop services
+        if: always()
+        run: docker rm -f backend frontend
+
+  # Deployment (example for production)
+  # Disabled until there is a real target: the steps below only print a message.
+  # To enable, replace `false` with: github.ref == 'refs/heads/main' && github.event_name == 'push'
+  deploy:
+    name: Deploy to Production
+    runs-on: ubuntu-latest
+    needs: [integration-test]
+    if: false
+    environment:
+      name: production
+      url: https://budget.example.com
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Deploy notification
+        run: |
+          echo "🚀 Deploying version ${{ github.sha }} to production"
+          echo "Backend image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}"
+          echo "Frontend image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ github.sha }}"
+      
+      # Add your deployment steps here (e.g., SSH to server, kubectl apply, etc.)
+      # Example:
+      # - name: Deploy to server
+      #   uses: appleboy/ssh-action@master
+      #   with:
+      #     host: ${{ secrets.DEPLOY_HOST }}
+      #     username: ${{ secrets.DEPLOY_USER }}
+      #     key: ${{ secrets.DEPLOY_KEY }}
+      #     script: |
+      #       cd /opt/family-budget-dashboard
+      #       docker compose pull
+      #       docker compose up -d

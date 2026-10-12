@@ -1,0 +1,24 @@
+# Python
+__pycache__/
+*.py[cod]
+venv/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.coverage
+coverage.xml
+
+# Local database (keep the folder so Docker doesn't create it as root)
+data/*
+!data/.gitkeep
+
+# Node
+node_modules/
+dist/
+
+# Environment and editors
+.env
+.env.*
+.idea/
+.vscode/
+.DS_Store

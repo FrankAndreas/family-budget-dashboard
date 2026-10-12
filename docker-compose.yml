@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  backend:
+    build: ./backend
+    container_name: budget-backend
+    # Run as the host user so files created in ./data and ./backend aren't owned by root
+    user: "${UID:-1000}:${GID:-1000}"
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend:/app
+      - ./data:/app/data
+    environment:
+      - DATABASE_URL=sqlite:///./data/budget.db
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: budget-frontend
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+    environment:
+      - VITE_API_URL=http://localhost:8000
+    depends_on:
+      - backend
+    # For development, we'll override the command to run the dev server
+    command: npm run dev -- --host 0.0.0.0 --port 3000
