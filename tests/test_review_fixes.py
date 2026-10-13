@@ -81,6 +81,25 @@ class TestSetupAndAuth:
         assert client.get(f"{BASE_URL}/me", headers=headers).json()["username"] == "p2"
 
 
+class TestPinHashing:
+    def test_pins_hashed_by_passlib_still_work(self, client):
+        # Created by the old passlib-based code for PIN 2468; existing users must keep logging in
+        from app import auth, database, models
+
+        with database.SessionLocal() as db:
+            db.add(
+                models.User(
+                    username="old",
+                    pin_hash="$2b$12$S1D1HlTbO4cDlGTLZHyuoellJh/C78IQ6HohAdzDL0gfnvmup1Cuy",
+                    role=models.UserRole.PARENT,
+                )
+            )
+            db.commit()
+        assert isinstance(login(client, "old", "2468"), dict)
+        assert login(client, "old", "1111") == 401
+        assert auth.verify_pin("2468", "not-a-bcrypt-hash") is False
+
+
 class TestUserLifecycle:
     def test_inactive_user_locked_out(self, client):
         parent = register(client, "p")

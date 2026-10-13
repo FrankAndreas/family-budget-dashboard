@@ -4,7 +4,7 @@ import secrets
 from datetime import datetime, timedelta
 from typing import Optional
 from jose import JWTError, jwt
-from passlib.context import CryptContext
+import bcrypt
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -20,16 +20,21 @@ if not os.getenv("SECRET_KEY"):
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 
-def verify_pin(plain_pin, hashed_pin):
-    return pwd_context.verify(plain_pin, hashed_pin)
+# PINs are hashed with bcrypt directly (passlib is unmaintained and breaks with bcrypt 5).
+# The hash format is unchanged, so PINs hashed by passlib keep working.
+def verify_pin(plain_pin: str, hashed_pin: str) -> bool:
+    try:
+        return bcrypt.checkpw(plain_pin.encode(), hashed_pin.encode())
+    except ValueError:
+        # Not a valid bcrypt hash: treat it like a wrong PIN instead of a server error
+        return False
 
 
-def get_pin_hash(pin):
-    return pwd_context.hash(pin)
+def get_pin_hash(pin: str) -> str:
+    return bcrypt.hashpw(pin.encode(), bcrypt.gensalt()).decode()
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
