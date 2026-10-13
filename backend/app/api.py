@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import timedelta
-from . import crud, schemas, auth, database, privacy
+from . import crud, schemas, auth, database, models, privacy
 
 router = APIRouter()
 
@@ -26,10 +26,16 @@ def check_member_tag(db: Session, member_id: Optional[str], account_id: str) -> 
 
 
 # Auth Routes
-@router.post("/register", response_model=schemas.User)
-def register_user(user: schemas.UserCreate, db: Session = Depends(database.get_db)):
-    db_user = crud.get_user_by_username(db, username=user.username)
-    if db_user:
+@router.post("/users", response_model=schemas.User)
+def create_user(
+    user: schemas.UserCreate,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    # No public sign-up: parents add family members (the first parent is created on startup)
+    if current_user.role != "PARENT":
+        raise HTTPException(status_code=403, detail="Only parents can add family members")
+    if crud.get_user_by_username(db, username=user.username):
         raise HTTPException(status_code=400, detail="Username already registered")
     return crud.create_user(db=db, user=user)
 

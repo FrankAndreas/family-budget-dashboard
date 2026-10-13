@@ -5,7 +5,9 @@ import time
 from jose import jwt
 
 from helpers import (
+    ADMIN,
     BASE_URL,
+    admin_headers,
     add_transaction,
     balance,
     category_id,
@@ -26,8 +28,31 @@ class TestSetupAndAuth:
         minutes_left = (jwt.get_unverified_claims(token)["exp"] - time.time()) / 60
         assert minutes_left > 2900
 
-    def test_six_digit_pin(self, client):
-        assert isinstance(register(client, "p", pin="123456"), dict)
+    def test_pin_is_four_digits(self, client):
+        admin = admin_headers(client)
+        create = lambda pin: client.post(  # noqa: E731
+            f"{BASE_URL}/users", json={"username": f"u{pin}", "pin": pin}, headers=admin
+        ).status_code
+        assert create("1234") == 200
+        assert create("123") == 422
+        assert create("123456") == 422
+        assert create("12a4") == 422
+
+    def test_no_public_signup(self, client):
+        body = {"username": "x", "pin": "1234"}
+        assert client.post(f"{BASE_URL}/users", json=body).status_code == 401
+        assert client.post(f"{BASE_URL}/register", json=body).status_code in (404, 405)
+        child = register(client, "kid", role="CHILD")
+        assert client.post(f"{BASE_URL}/users", json=body, headers=child).status_code == 403
+
+    def test_parent_resets_pin(self, client):
+        admin = admin_headers(client)
+        register(client, "kid", role="CHILD")
+        kid_id = user_id(client, admin, "kid")
+        assert client.put(f"{BASE_URL}/users/{kid_id}", json={"pin": "12"}, headers=admin).status_code == 422
+        assert client.put(f"{BASE_URL}/users/{kid_id}", json={"pin": "4321"}, headers=admin).status_code == 200
+        assert login(client, "kid", "1234") == 401
+        assert isinstance(login(client, "kid", "4321"), dict)
 
     def test_rename_keeps_session(self, client):
         headers = register(client, "p")
@@ -45,8 +70,9 @@ class TestUserLifecycle:
         assert login(client, "kid") == 403
 
     def test_last_parent_protected(self, client):
-        parent = register(client, "p")
-        pid = user_id(client, parent, "p")
+        # The admin is the only parent of a fresh install
+        parent = admin_headers(client)
+        pid = user_id(client, parent, ADMIN)
         assert client.put(f"{BASE_URL}/users/{pid}", json={"is_active": False}, headers=parent).status_code == 400
         assert client.put(f"{BASE_URL}/users/{pid}", json={"role": "CHILD"}, headers=parent).status_code == 400
         assert client.delete(f"{BASE_URL}/users/{pid}", headers=parent).status_code == 400

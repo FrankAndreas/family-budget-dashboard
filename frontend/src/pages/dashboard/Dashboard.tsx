@@ -224,7 +224,7 @@ export default function Dashboard() {
             <div className="glass-card p-6 mb-6">
                 <div className="flex justify-between items-center">
                     <div>
-                        <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-magenta-400 bg-clip-text text-transparent">
+                        <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-transparent">
                             Family Budget
                         </h1>
                         <p className="text-slate-400 mt-1">Welcome back, {user?.username} ({user?.role})</p>

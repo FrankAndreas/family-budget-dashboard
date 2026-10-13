@@ -1,140 +1,233 @@
 import { useState } from 'react';
 import api, { errorMessage } from '../api';
+import { useAuth } from '../AuthContext';
 import { useFamily } from '../useFamily';
 import type { FamilyUser } from '../family';
+import PinInput from './PinInput';
+import { isValidPin } from '../pin';
 
-// Parents only: add children and switch them between "dependent" and "own allowance (Jugendlohn)"
+type MemberType = 'PARENT' | 'ALLOWANCE_CHILD' | 'DEPENDENT_CHILD';
+
+const MEMBER_TYPES: Record<MemberType, string> = {
+    PARENT: 'Parent',
+    ALLOWANCE_CHILD: 'Child with own allowance (Jugendlohn)',
+    DEPENDENT_CHILD: 'Younger child (no own money, no login)'
+};
+
+const describe = (member: FamilyUser) => {
+    if (member.role === 'PARENT') return 'Parent';
+    return member.has_allowance ? 'Own allowance (Jugendlohn)' : 'No own money: costs are household expenses';
+};
+
+// Everyone who logs in has a PIN; younger children don't log in
+const hasLogin = (member: FamilyUser) => member.role === 'PARENT' || member.has_allowance;
+
+// Parents only: add family members, reset PINs, and switch children between "dependent" and "own allowance"
 export default function FamilyManager() {
+    const { user } = useAuth();
     const { users, reload } = useFamily();
-    const [newChildName, setNewChildName] = useState('');
-    // Child currently being given an own allowance, and the PIN they'll log in with
-    const [allowanceChildId, setAllowanceChildId] = useState<string | null>(null);
-    const [allowancePin, setAllowancePin] = useState('');
     const [error, setError] = useState('');
+    const [notice, setNotice] = useState('');
 
-    const children = users.filter(u => u.role === 'CHILD');
+    // Add form
+    const [newName, setNewName] = useState('');
+    const [newType, setNewType] = useState<MemberType>('DEPENDENT_CHILD');
+    const [newPin, setNewPin] = useState('');
 
-    const handleAddChild = async (e: React.FormEvent) => {
+    // Member whose PIN is being set (reset, or for a new own allowance), and the PIN
+    const [pinMemberId, setPinMemberId] = useState<string | null>(null);
+    const [pinAction, setPinAction] = useState<'reset' | 'allowance'>('reset');
+    const [memberPin, setMemberPin] = useState('');
+
+    const members = [...users].sort((a, b) =>
+        a.role === b.role ? a.username.localeCompare(b.username) : a.role === 'PARENT' ? -1 : 1
+    );
+
+    const showResult = (message: string) => {
+        setError('');
+        setNotice(message);
+        reload();
+    };
+
+    const handleAdd = async (e: React.FormEvent) => {
         e.preventDefault();
+        const name = newName.trim();
+        if (newType !== 'DEPENDENT_CHILD' && !isValidPin(newPin)) {
+            setError('The PIN must be exactly 4 digits');
+            return;
+        }
+
         try {
-            await api.post('/api/v1/members', { username: newChildName });
-            setNewChildName('');
-            setError('');
-            reload();
+            if (newType === 'DEPENDENT_CHILD') {
+                await api.post('/api/v1/members', { username: name });
+            } else {
+                await api.post('/api/v1/users', {
+                    username: name,
+                    pin: newPin,
+                    role: newType === 'PARENT' ? 'PARENT' : 'CHILD'
+                });
+            }
+            setNewName('');
+            setNewPin('');
+            showResult(newType === 'DEPENDENT_CHILD' ? `Added ${name}.` : `Added ${name}. They can now log in with their PIN.`);
         } catch (err) {
-            setError(errorMessage(err, 'Failed to add child'));
+            setNotice('');
+            setError(errorMessage(err, 'Failed to add family member'));
         }
     };
 
-    const updateChild = async (child: FamilyUser, update: Record<string, unknown>) => {
+    const openPinForm = (member: FamilyUser, action: 'reset' | 'allowance') => {
+        setPinMemberId(member.id);
+        setPinAction(action);
+        setMemberPin('');
+    };
+
+    const closePinForm = () => {
+        setPinMemberId(null);
+        setMemberPin('');
+    };
+
+    const handlePinSubmit = async (e: React.FormEvent, member: FamilyUser) => {
+        e.preventDefault();
+        if (!isValidPin(memberPin)) {
+            setError('The PIN must be exactly 4 digits');
+            return;
+        }
+
         try {
-            await api.put(`/api/v1/users/${child.id}`, update);
-            setAllowanceChildId(null);
-            setAllowancePin('');
-            setError('');
-            reload();
+            const update = pinAction === 'allowance' ? { has_allowance: true, pin: memberPin } : { pin: memberPin };
+            await api.put(`/api/v1/users/${member.id}`, update);
+            closePinForm();
+            showResult(pinAction === 'allowance'
+                ? `${member.username} now has an own allowance and logs in with the new PIN.`
+                : `PIN for ${member.username} changed.`);
         } catch (err) {
+            setNotice('');
+            setError(errorMessage(err, 'Failed to save the PIN'));
+        }
+    };
+
+    const handleRemoveAllowance = async (member: FamilyUser) => {
+        if (!confirm(`${member.username} will no longer have own money. Their expenses become household expenses. Continue?`)) return;
+        try {
+            await api.put(`/api/v1/users/${member.id}`, { has_allowance: false });
+            showResult(`${member.username} no longer has an own allowance.`);
+        } catch (err) {
+            setNotice('');
             setError(errorMessage(err, 'Failed to update child'));
         }
-    };
-
-    const handleGiveAllowance = (e: React.FormEvent, child: FamilyUser) => {
-        e.preventDefault();
-        updateChild(child, { has_allowance: true, pin: allowancePin });
-    };
-
-    const handleRemoveAllowance = (child: FamilyUser) => {
-        if (!confirm(`${child.username} will no longer have own money. Their expenses become household expenses. Continue?`)) return;
-        updateChild(child, { has_allowance: false });
     };
 
     return (
         <div className="glass-card p-6">
             <h2 className="text-2xl font-bold mb-2">Family</h2>
             <p className="text-slate-400 mb-6 text-sm">
-                Younger children have no money of their own: their costs are household expenses you can tag with them.
-                Once a child gets an own allowance (Jugendlohn), they log in with a PIN and manage their own accounts and budgets.
+                Parents add everyone here; there is no sign-up page. Younger children have no money of their own: their
+                costs are household expenses you can tag with them. Once a child gets an own allowance (Jugendlohn), they
+                log in with a PIN and manage their own accounts and budgets.
             </p>
 
-            {error && (
-                <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 flex justify-between items-center">
-                    <span>{error}</span>
-                    <button onClick={() => setError('')} className="text-red-300 hover:text-white" aria-label="Dismiss error">✕</button>
+            {(error || notice) && (
+                <div className={`mb-4 p-3 rounded-lg flex justify-between items-center border ${error
+                    ? 'bg-red-500/20 border-red-500/50 text-red-300'
+                    : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
+                    }`}>
+                    <span>{error || notice}</span>
+                    <button onClick={() => { setError(''); setNotice(''); }} className="hover:text-white" aria-label="Dismiss message">✕</button>
                 </div>
             )}
 
-            <div className="space-y-3 mb-6">
-                {children.length === 0 ? (
-                    <p className="text-slate-400 text-center py-4">No children added yet</p>
-                ) : (
-                    children.map(child => (
-                        <div key={child.id} className="p-4 bg-slate-800/30 rounded-lg">
-                            <div className="flex justify-between items-center gap-4">
-                                <div>
-                                    <h3 className="font-semibold">{child.username}</h3>
-                                    <p className="text-sm text-slate-400">
-                                        {child.has_allowance ? 'Own allowance (Jugendlohn)' : 'No own money: costs are household expenses'}
-                                    </p>
-                                </div>
-                                {child.has_allowance ? (
-                                    <button
-                                        onClick={() => handleRemoveAllowance(child)}
-                                        className="text-sm text-slate-400 hover:text-white"
-                                    >
-                                        Remove allowance
-                                    </button>
-                                ) : allowanceChildId !== child.id && (
-                                    <button
-                                        onClick={() => setAllowanceChildId(child.id)}
-                                        className="btn-primary text-sm"
-                                    >
-                                        Give own allowance
-                                    </button>
-                                )}
+            <div className="space-y-3 mb-8">
+                {members.map(member => (
+                    <div key={member.id} className="p-4 bg-slate-800/30 rounded-lg">
+                        <div className="flex flex-wrap justify-between items-center gap-3">
+                            <div>
+                                <h3 className="font-semibold">
+                                    {member.username}
+                                    {member.id === user?.id && <span className="ml-2 text-xs font-normal text-slate-400">(you)</span>}
+                                </h3>
+                                <p className="text-sm text-slate-400">{describe(member)}</p>
                             </div>
-
-                            {allowanceChildId === child.id && (
-                                <form onSubmit={(e) => handleGiveAllowance(e, child)} className="mt-3 flex gap-2">
-                                    <input
-                                        type="password"
-                                        inputMode="numeric"
-                                        placeholder="PIN for the child (4-6 digits)"
-                                        value={allowancePin}
-                                        onChange={(e) => {
-                                            if (/^\d*$/.test(e.target.value)) setAllowancePin(e.target.value);
-                                        }}
-                                        minLength={4}
-                                        maxLength={6}
-                                        className="flex-1 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                        required
-                                    />
-                                    <button type="submit" className="btn-primary text-sm" disabled={allowancePin.length < 4}>
-                                        Save
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={() => { setAllowanceChildId(null); setAllowancePin(''); }}
-                                        className="px-3 text-slate-400 hover:text-white text-sm"
-                                    >
-                                        Cancel
-                                    </button>
-                                </form>
+                            {pinMemberId !== member.id && (
+                                <div className="flex gap-3 text-sm">
+                                    {hasLogin(member) && (
+                                        <button onClick={() => openPinForm(member, 'reset')} className="text-slate-400 hover:text-white">
+                                            {member.id === user?.id ? 'Change my PIN' : 'Reset PIN'}
+                                        </button>
+                                    )}
+                                    {member.role === 'CHILD' && member.has_allowance && (
+                                        <button onClick={() => handleRemoveAllowance(member)} className="text-slate-400 hover:text-white">
+                                            Remove allowance
+                                        </button>
+                                    )}
+                                    {member.role === 'CHILD' && !member.has_allowance && (
+                                        <button onClick={() => openPinForm(member, 'allowance')} className="btn-primary text-sm">
+                                            Give own allowance
+                                        </button>
+                                    )}
+                                </div>
                             )}
                         </div>
-                    ))
-                )}
+
+                        {pinMemberId === member.id && (
+                            <form onSubmit={(e) => handlePinSubmit(e, member)} className="mt-3 flex flex-col gap-2 sm:flex-row">
+                                <div className="flex-1">
+                                    <label htmlFor={`pin-${member.id}`} className="sr-only">New PIN for {member.username}</label>
+                                    <PinInput
+                                        id={`pin-${member.id}`}
+                                        value={memberPin}
+                                        onChange={setMemberPin}
+                                        placeholder={pinAction === 'allowance' ? 'PIN for logging in (4 digits)' : 'New PIN (4 digits)'}
+                                        autoComplete="new-password"
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <button type="submit" className="btn-primary text-sm" disabled={!isValidPin(memberPin)}>Save</button>
+                                    <button type="button" onClick={closePinForm} className="px-3 text-slate-400 hover:text-white text-sm">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        )}
+                    </div>
+                ))}
             </div>
 
-            <form onSubmit={handleAddChild} className="flex gap-2">
-                <input
-                    type="text"
-                    placeholder="Child's name"
-                    value={newChildName}
-                    onChange={(e) => setNewChildName(e.target.value)}
-                    className="flex-1 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                    required
-                />
-                <button type="submit" className="btn-primary text-sm">+ Add Child</button>
+            <h3 className="text-lg font-semibold mb-3">Add a family member</h3>
+            <form onSubmit={handleAdd} className="space-y-3">
+                <div className="flex flex-col gap-1.5">
+                    <label htmlFor="new-member-name" className="text-sm font-semibold text-slate-300">Name</label>
+                    <input
+                        id="new-member-name"
+                        type="text"
+                        value={newName}
+                        onChange={(e) => setNewName(e.target.value)}
+                        placeholder="Name they log in with"
+                        className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-600 text-white placeholder-slate-500 focus:outline-none focus:border-blue-400"
+                        required
+                    />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                    <label htmlFor="new-member-type" className="text-sm font-semibold text-slate-300">Type</label>
+                    <select
+                        id="new-member-type"
+                        value={newType}
+                        onChange={(e) => setNewType(e.target.value as MemberType)}
+                        className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-600 text-white"
+                    >
+                        {(Object.keys(MEMBER_TYPES) as MemberType[]).map(type => (
+                            <option key={type} value={type}>{MEMBER_TYPES[type]}</option>
+                        ))}
+                    </select>
+                </div>
+                {newType !== 'DEPENDENT_CHILD' && (
+                    <div className="flex flex-col gap-1.5">
+                        <label htmlFor="new-member-pin" className="text-sm font-semibold text-slate-300">PIN</label>
+                        <PinInput id="new-member-pin" value={newPin} onChange={setNewPin} autoComplete="new-password" />
+                        <small className="text-slate-500">Tell them their PIN; they log in with their name and this PIN.</small>
+                    </div>
+                )}
+                <button type="submit" className="btn-primary w-full">+ Add {newType === 'PARENT' ? 'Parent' : 'Child'}</button>
             </form>
         </div>
     );

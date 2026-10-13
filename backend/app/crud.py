@@ -14,8 +14,8 @@ def create_user(db: Session, user: schemas.UserCreate):
         username=user.username,
         pin_hash=hashed_pin,
         role=user.role,
-        privacy_enabled=user.privacy_enabled,
-        has_allowance=user.has_allowance,
+        # A child with a login manages own money; younger children are added via create_member
+        has_allowance=True,
     )
     db.add(db_user)
     db.commit()

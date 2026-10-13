@@ -1,5 +1,10 @@
+import os
+import re
+import secrets
+from typing import Optional
+
 from sqlalchemy.orm import Session
-from . import models
+from . import auth, models
 
 DEFAULT_CATEGORIES = [
     # Income categories
@@ -31,3 +36,27 @@ def seed_categories(db: Session) -> int:
         db.add(models.Category(**cat_data, is_global=True))
     db.commit()
     return len(DEFAULT_CATEGORIES)
+
+
+def seed_admin(db: Session) -> Optional[str]:
+    """On an empty database, create the first parent ("Admin") with a 4-digit PIN.
+
+    The PIN is random unless INITIAL_ADMIN_PIN is set (used by CI). Returns the PIN so it can be
+    shown once, or None if there are already users.
+    """
+    if db.query(models.User).count() > 0:
+        return None
+
+    pin = os.getenv("INITIAL_ADMIN_PIN") or f"{secrets.randbelow(10000):04d}"
+    if not re.fullmatch(r"\d{4}", pin):
+        raise ValueError("INITIAL_ADMIN_PIN must be exactly 4 digits")
+    db.add(
+        models.User(
+            username="Admin",
+            pin_hash=auth.get_pin_hash(pin),
+            role=models.UserRole.PARENT,
+            has_allowance=True,
+        )
+    )
+    db.commit()
+    return pin

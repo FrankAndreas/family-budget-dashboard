@@ -10,18 +10,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import database, models  # noqa: E402
+from app import auth, database, models  # noqa: E402
 from app.main import app  # noqa: E402
 from app.seed import seed_categories  # noqa: E402
+from helpers import ADMIN, ADMIN_PIN  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def fresh_db():
-    """Every test starts with empty tables and the default categories."""
+    """Every test starts with the default categories and one parent ("Admin", like a fresh install)."""
     models.Base.metadata.drop_all(bind=database.engine)
     models.Base.metadata.create_all(bind=database.engine)
     with database.SessionLocal() as db:
         seed_categories(db)
+        # Known PIN instead of the random one a real install gets
+        db.add(models.User(username=ADMIN, pin_hash=auth.get_pin_hash(ADMIN_PIN), role=models.UserRole.PARENT))
+        db.commit()
     yield
 
 

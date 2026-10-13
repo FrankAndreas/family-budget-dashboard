@@ -12,7 +12,6 @@ interface User {
 interface AuthContextType {
     user: User | null;
     login: (username: string, pin: string) => Promise<void>;
-    register: (username: string, pin: string, role: 'PARENT' | 'CHILD') => Promise<void>;
     logout: () => void;
     refreshUser: () => Promise<void>;
     isLoading: boolean;
@@ -47,12 +46,6 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(userResponse.data);
     };
 
-    const register = async (username: string, pin: string, role: 'PARENT' | 'CHILD') => {
-        await api.post('/api/v1/register', { username, pin, role });
-        // Auto login after register
-        await login(username, pin);
-    };
-
     // Reload the current user after their settings change on the server
     const refreshUser = async () => {
         const response = await api.get('/api/v1/me');
@@ -65,7 +58,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, register, logout, refreshUser, isLoading }}>
+        <AuthContext.Provider value={{ user, login, logout, refreshUser, isLoading }}>
             {children}
         </AuthContext.Provider>
     );

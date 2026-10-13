@@ -15,6 +15,7 @@ services:
       - DATABASE_URL=sqlite:///./data/budget.db
       # Read from .env (see .env.example); empty means a random key per start
       - SECRET_KEY=${SECRET_KEY:-}
+      - INITIAL_ADMIN_PIN=${INITIAL_ADMIN_PIN:-}
     restart: unless-stopped
 
   frontend:

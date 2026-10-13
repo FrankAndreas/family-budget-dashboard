@@ -1,6 +1,5 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+/* Tailwind v4: the v3 `@tailwind base/components/utilities` directives no longer generate spacing, colours or sizes */
+@import "tailwindcss";
 
 :root {
   /* Aurora Theme - Glassmorphism Palette */

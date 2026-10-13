@@ -1,6 +1,9 @@
 """Smoke test against a running backend (used by the CI integration job on the published image).
 
-Usage: python3 tests/smoke_test.py http://localhost:8000
+Usage: python3 tests/smoke_test.py http://localhost:8000 [admin PIN]
+
+The backend must have started on an empty database with INITIAL_ADMIN_PIN set to that PIN
+(default 0000), so the first parent "Admin" can log in.
 
 Only uses the standard library, so it runs without installing anything.
 """
@@ -32,14 +35,19 @@ def check(description, condition):
         sys.exit(1)
 
 
-def main(base_url):
+def main(base_url, admin_pin):
     username = f"smoke_{int(time.time())}"
 
     status, categories = call(base_url, "GET", "/categories")
     check("categories are seeded", status == 200 and len(categories) > 0)
 
-    status, _ = call(base_url, "POST", "/register", {"username": username, "pin": "1234", "role": "PARENT"})
-    check("register parent", status == 200)
+    status, admin_login = call(base_url, "POST", "/login", {"username": "Admin", "pin": admin_pin})
+    check("first parent 'Admin' was created on startup", status == 200)
+
+    status, _ = call(
+        base_url, "POST", "/users", {"username": username, "pin": "1234", "role": "PARENT"}, admin_login["access_token"]
+    )
+    check("admin adds a parent", status == 200)
 
     status, login = call(base_url, "POST", "/login", {"username": username, "pin": "1234"})
     check("login", status == 200 and "access_token" in login)
@@ -50,7 +58,11 @@ def main(base_url):
 
     groceries = next(c["id"] for c in categories if c["type"] == "EXPENSE")
     status, transaction = call(
-        base_url, "POST", "/transactions", {"account_id": account["id"], "category_id": groceries, "amount": 12.5}, token
+        base_url,
+        "POST",
+        "/transactions",
+        {"account_id": account["id"], "category_id": groceries, "amount": 12.5},
+        token,
     )
     check("add expense (stored as negative)", status == 200 and transaction["amount"] == -12.5)
 
@@ -63,4 +75,4 @@ def main(base_url):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000")
+    main(sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000", sys.argv[2] if len(sys.argv) > 2 else "0000")

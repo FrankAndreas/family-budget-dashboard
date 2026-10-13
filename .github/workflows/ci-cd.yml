@@ -262,7 +262,7 @@ jobs:
       # Run the images that were just published and smoke-test them over HTTP
       - name: Start published images
         run: |
-          docker run -d --name backend -p 8000:8000 -e DATABASE_URL=sqlite:////tmp/ci.db \
+          docker run -d --name backend -p 8000:8000 -e DATABASE_URL=sqlite:////tmp/ci.db -e INITIAL_ADMIN_PIN=0000 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
           docker run -d --name frontend -p 3000:3000 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ github.sha }}

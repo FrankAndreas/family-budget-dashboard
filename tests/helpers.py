@@ -2,9 +2,20 @@
 
 BASE_URL = "/api/v1"
 
+# The first parent every test database starts with (see conftest.py)
+ADMIN = "Admin"
+ADMIN_PIN = "0000"
+
+
+def admin_headers(client):
+    return login(client, ADMIN, ADMIN_PIN)
+
 
 def register(client, username, role="PARENT", pin="1234"):
-    client.post(f"{BASE_URL}/register", json={"username": username, "pin": pin, "role": role})
+    """Have the admin add a family member, then log in as them."""
+    client.post(
+        f"{BASE_URL}/users", json={"username": username, "pin": pin, "role": role}, headers=admin_headers(client)
+    )
     return login(client, username, pin)
 
 

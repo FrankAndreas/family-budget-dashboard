@@ -326,7 +326,7 @@ export default function DataManager() {
                         <p className="text-sm text-slate-400 mb-3">
                             {user?.role === 'CHILD'
                                 ? 'When enabled, parents cannot view your transactions and balances.'
-                                : 'This setting is only available for child accounts. Parents can enable/disable privacy for their children.'}
+                                : 'Only a child with own allowance can turn this on, for their own data.'}
                         </p>
                         {user?.role === 'CHILD' && (
                             <label className="flex items-center gap-2 cursor-pointer">
