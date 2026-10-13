@@ -1,36 +1,43 @@
-version: '3.8'
+# Family Budget on a NAS (or any Docker host), with the published images.
+# Copy it to the app folder on the NAS as compose.yaml; see README_DOCKER.md.
+#
+# The backend runs as PUID:PGID from .env (default 999:999, the image's own
+# user). On a Synology, use a DSM user's IDs (see README_DOCKER.md). It never
+# runs as root: compose starts it as this user. The ./data folder must exist and
+# belong to that user before the first start.
+#
+# To try your local changes instead: docker compose up -d --build
 
 services:
   backend:
+    image: ghcr.io/frankandreas/family-budget-dashboard/backend:latest
     build: ./backend
     container_name: budget-backend
-    # Run as the host user so files created in ./data and ./backend aren't owned by root
-    user: "${UID:-1000}:${GID:-1000}"
-    ports:
-      - "8000:8000"
+    user: "${PUID:-999}:${PGID:-999}"
     volumes:
-      - ./backend:/app
-      - ./data:/app/data
+      - ./data:/app/data          # SQLite database
     environment:
       - DATABASE_URL=sqlite:///./data/budget.db
-      # Read from .env (see .env.example); empty means a random key per start
+      # Signs login tokens. If empty, a random key is used and everyone is
+      # logged out whenever the container restarts (e.g. on every update).
       - SECRET_KEY=${SECRET_KEY:-}
+      # PIN for the first parent "Admin" on an empty database; empty means a
+      # random PIN, printed once in the backend log
       - INITIAL_ADMIN_PIN=${INITIAL_ADMIN_PIN:-}
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1" ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
 
   frontend:
-    build:
-      context: ./frontend
-      dockerfile: Dockerfile
+    image: ghcr.io/frankandreas/family-budget-dashboard/frontend:latest
+    build: ./frontend
     container_name: budget-frontend
     ports:
-      - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    environment:
-      - VITE_API_URL=http://localhost:8000
+      - "${PORT:-8081}:8080"
     depends_on:
       - backend
-    # For development, we'll override the command to run the dev server
-    command: npm run dev -- --host 0.0.0.0 --port 3000
+    restart: unless-stopped
