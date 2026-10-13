@@ -1,10 +1,13 @@
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator
 from typing import Annotated, Optional, Literal
 from datetime import datetime, timezone
 from .models import UserRole, AccountType, CategoryType
 
 # PINs are exactly 4 digits (same rule as the family-chore app)
 Pin = Annotated[str, Field(pattern=r"^\d{4}$")]
+
+# Names people log in with: surrounding spaces are dropped, and they can't be empty
+Username = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
 
 
 # User Schemas
@@ -17,14 +20,14 @@ class UserBase(BaseModel):
 
 class UserCreate(BaseModel):
     # A parent, or a child with own allowance; both log in with a PIN
-    username: str = Field(min_length=1)
+    username: Username
     pin: Pin
     role: UserRole = UserRole.PARENT
 
 
 class MemberCreate(BaseModel):
     # A dependent child added by a parent: no login, no own accounts
-    username: str
+    username: Username
 
 
 class UserLogin(BaseModel):
@@ -41,7 +44,7 @@ class User(UserBase):
 
 
 class UserUpdate(BaseModel):
-    username: Optional[str] = None
+    username: Optional[Username] = None
     role: Optional[UserRole] = None
     privacy_enabled: Optional[bool] = None
     pin: Optional[Pin] = None

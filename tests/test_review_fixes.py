@@ -6,6 +6,7 @@ from jose import jwt
 
 from helpers import (
     ADMIN,
+    ADMIN_PIN,
     BASE_URL,
     admin_headers,
     add_transaction,
@@ -44,6 +45,26 @@ class TestSetupAndAuth:
         assert client.post(f"{BASE_URL}/register", json=body).status_code in (404, 405)
         child = register(client, "kid", role="CHILD")
         assert client.post(f"{BASE_URL}/users", json=body, headers=child).status_code == 403
+
+    def test_rename_members(self, client):
+        admin = admin_headers(client)
+        register(client, "Mum")
+        # Before renaming Admin: the register helper logs in as "Admin"
+        child = register(client, "kid", role="CHILD")
+        timmy = client.post(f"{BASE_URL}/members", json={"username": "Timmy"}, headers=admin).json()
+        admin_id = user_id(client, admin, ADMIN)
+        rename = lambda uid, name: client.put(  # noqa: E731
+            f"{BASE_URL}/users/{uid}", json={"username": name}, headers=admin
+        )
+        assert rename(admin_id, "  Papa ").json()["username"] == "Papa"
+        assert isinstance(login(client, "Papa", ADMIN_PIN), dict)
+        assert rename(timmy["id"], "Tim").json()["username"] == "Tim"
+        assert rename(timmy["id"], "Tim").status_code == 200
+        taken = rename(timmy["id"], "Mum")
+        assert taken.status_code == 400
+        assert taken.json()["detail"] == "That name is already taken"
+        assert rename(timmy["id"], "   ").status_code == 422
+        assert client.put(f"{BASE_URL}/users/{timmy['id']}", json={"username": "x"}, headers=child).status_code == 403
 
     def test_parent_resets_pin(self, client):
         admin = admin_headers(client)

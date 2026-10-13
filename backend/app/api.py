@@ -103,6 +103,11 @@ def update_user(
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    if user_update.username is not None:
+        existing = crud.get_user_by_username(db, username=user_update.username)
+        if existing and existing.id != target_user.id:
+            raise HTTPException(status_code=400, detail="That name is already taken")
+
     # Deactivating or demoting an active parent must leave at least one other active parent
     is_active_parent = target_user.role == "PARENT" and target_user.is_active
     removes_parent = user_update.is_active is False or (user_update.role is not None and user_update.role != "PARENT")

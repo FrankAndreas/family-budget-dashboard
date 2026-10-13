@@ -24,7 +24,7 @@ const hasLogin = (member: FamilyUser) => member.role === 'PARENT' || member.has_
 
 // Parents only: add family members, reset PINs, and switch children between "dependent" and "own allowance"
 export default function FamilyManager() {
-    const { user } = useAuth();
+    const { user, refreshUser } = useAuth();
     const { users, reload } = useFamily();
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
@@ -38,6 +38,10 @@ export default function FamilyManager() {
     const [pinMemberId, setPinMemberId] = useState<string | null>(null);
     const [pinAction, setPinAction] = useState<'reset' | 'allowance'>('reset');
     const [memberPin, setMemberPin] = useState('');
+
+    // Member being renamed, and the new name
+    const [renameMemberId, setRenameMemberId] = useState<string | null>(null);
+    const [newMemberName, setNewMemberName] = useState('');
 
     const members = [...users].sort((a, b) =>
         a.role === b.role ? a.username.localeCompare(b.username) : a.role === 'PARENT' ? -1 : 1
@@ -76,7 +80,39 @@ export default function FamilyManager() {
         }
     };
 
+    const openRenameForm = (member: FamilyUser) => {
+        closePinForm();
+        setRenameMemberId(member.id);
+        setNewMemberName(member.username);
+    };
+
+    const closeRenameForm = () => {
+        setRenameMemberId(null);
+        setNewMemberName('');
+    };
+
+    const handleRename = async (e: React.FormEvent, member: FamilyUser) => {
+        e.preventDefault();
+        const name = newMemberName.trim();
+        if (name === member.username) {
+            closeRenameForm();
+            return;
+        }
+
+        try {
+            await api.put(`/api/v1/users/${member.id}`, { username: name });
+            closeRenameForm();
+            showResult(`Renamed ${member.username} to ${name}.${hasLogin(member) ? ` They log in as ${name} now.` : ''}`);
+            // The header greets the logged-in user by name
+            if (member.id === user?.id) await refreshUser();
+        } catch (err) {
+            setNotice('');
+            setError(errorMessage(err, 'Failed to rename'));
+        }
+    };
+
     const openPinForm = (member: FamilyUser, action: 'reset' | 'allowance') => {
+        closeRenameForm();
         setPinMemberId(member.id);
         setPinAction(action);
         setMemberPin('');
@@ -148,8 +184,11 @@ export default function FamilyManager() {
                                 </h3>
                                 <p className="text-sm text-slate-400">{describe(member)}</p>
                             </div>
-                            {pinMemberId !== member.id && (
+                            {pinMemberId !== member.id && renameMemberId !== member.id && (
                                 <div className="flex gap-3 text-sm">
+                                    <button onClick={() => openRenameForm(member)} className="text-slate-400 hover:text-white">
+                                        Rename
+                                    </button>
                                     {hasLogin(member) && (
                                         <button onClick={() => openPinForm(member, 'reset')} className="text-slate-400 hover:text-white">
                                             {member.id === user?.id ? 'Change my PIN' : 'Reset PIN'}
@@ -168,6 +207,27 @@ export default function FamilyManager() {
                                 </div>
                             )}
                         </div>
+
+                        {renameMemberId === member.id && (
+                            <form onSubmit={(e) => handleRename(e, member)} className="mt-3 flex flex-col gap-2 sm:flex-row">
+                                <label htmlFor={`name-${member.id}`} className="sr-only">New name for {member.username}</label>
+                                <input
+                                    id={`name-${member.id}`}
+                                    type="text"
+                                    value={newMemberName}
+                                    onChange={(e) => setNewMemberName(e.target.value)}
+                                    autoFocus
+                                    required
+                                    className="flex-1 p-3 rounded-lg bg-slate-800/50 border border-slate-600 text-white focus:outline-none focus:border-blue-400"
+                                />
+                                <div className="flex gap-2">
+                                    <button type="submit" className="btn-primary text-sm" disabled={!newMemberName.trim()}>Save</button>
+                                    <button type="button" onClick={closeRenameForm} className="px-3 text-slate-400 hover:text-white text-sm">
+                                        Cancel
+                                    </button>
+                                </div>
+                            </form>
+                        )}
 
                         {pinMemberId === member.id && (
                             <form onSubmit={(e) => handlePinSubmit(e, member)} className="mt-3 flex flex-col gap-2 sm:flex-row">
