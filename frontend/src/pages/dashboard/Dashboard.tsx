@@ -41,9 +41,9 @@ interface Category {
 
 export default function Dashboard() {
     const { user, logout } = useAuth();
-    const { users, shares } = useFamily();
-    const { splits } = useSplits();
-    const { assets } = useAssets();
+    const { users, shares, reload: reloadFamily } = useFamily();
+    const { splits, reload: reloadSplits } = useSplits();
+    const { assets, reload: reloadAssets } = useAssets();
     const [activeTab, setActiveTab] = useState('overview');
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -275,7 +275,13 @@ export default function Dashboard() {
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
+                            onClick={() => {
+                                setActiveTab(tab.id);
+                                // Other tabs may have changed the family, splits or investments the forms here offer
+                                reloadFamily();
+                                reloadSplits();
+                                reloadAssets();
+                            }}
                             className={`flex-1 whitespace-nowrap py-3 px-4 rounded-lg font-semibold transition-all ${activeTab === tab.id
                                 ? 'bg-blue-500/20 text-blue-400 border-2 border-blue-400'
                                 : 'text-slate-400 hover:bg-slate-800/30'
