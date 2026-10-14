@@ -49,7 +49,8 @@ const previewFromError = (error: unknown): Preview | null => {
     return detail && typeof detail === 'object' && Array.isArray(detail.rows) ? detail : null;
 };
 
-export default function ImportTransactions() {
+// onImported: the booked rows changed balances and lists elsewhere in the app
+export default function ImportTransactions({ onImported }: { onImported?: () => void }) {
     const [file, setFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<Preview | null>(null);
     const [included, setIncluded] = useState<Set<number>>(new Set());
@@ -102,6 +103,7 @@ export default function ImportTransactions() {
                     : `Imported ${imported} transaction${imported === 1 ? '' : 's'}${skipped ? `; skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}` : ''}.`,
             });
             reset();
+            if (imported > 0) onImported?.();
         } catch (error) {
             const rows = previewFromError(error);
             if (rows) setPreview(rows);

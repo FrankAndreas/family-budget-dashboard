@@ -40,7 +40,8 @@ interface Status {
 
 const today = () => new Date().toISOString().split('T')[0];
 
-export default function DataManager() {
+// onDataChanged: an import or restore added accounts and transactions the rest of the app should reload
+export default function DataManager({ onDataChanged }: { onDataChanged?: () => void }) {
     const { user, refreshUser } = useAuth();
     const [importing, setImporting] = useState(false);
     const [privacyEnabled, setPrivacyEnabled] = useState(user?.privacy_enabled || false);
@@ -203,11 +204,12 @@ export default function DataManager() {
                 }
             }
 
+            onDataChanged?.();
             setStatus({
                 kind: skipped > 0 ? 'error' : 'success',
                 text: skipped > 0
-                    ? `Imported ${imported} budgets and transactions; ${skipped} could not be imported (unknown account or category). Refresh the page to see them.`
-                    : `Imported ${imported} budgets and transactions. Refresh the page to see them.`
+                    ? `Imported ${imported} budgets and transactions; ${skipped} could not be imported (unknown account or category).`
+                    : `Imported ${imported} budgets and transactions.`
             });
         } catch (error) {
             console.error('Failed to import data', error);
@@ -269,7 +271,7 @@ export default function DataManager() {
                 </div>
             </div>
 
-            <ImportTransactions />
+            <ImportTransactions onImported={onDataChanged} />
 
             {/* Restore Section */}
             <div className="mb-8">
