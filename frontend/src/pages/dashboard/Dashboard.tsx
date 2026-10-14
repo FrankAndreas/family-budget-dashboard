@@ -7,7 +7,8 @@ import DataManager from '../../components/DataManager';
 import FamilyManager from '../../components/FamilyManager';
 import ShareSettings from '../../components/ShareSettings';
 import CommonBudget from '../../components/CommonBudget';
-import { useSplits } from '../../finance';
+import Investments from '../../components/Investments';
+import { useAssets, useSplits } from '../../finance';
 import { useFamily } from '../../useFamily';
 import { accessTo, canWrite, dependents } from '../../family';
 
@@ -27,6 +28,7 @@ interface Transaction {
     category_id: string;
     member_id?: string | null;
     split_id?: string | null;
+    asset_id?: string | null;
 }
 
 interface Category {
@@ -40,6 +42,7 @@ export default function Dashboard() {
     const { user, logout } = useAuth();
     const { users, shares } = useFamily();
     const { splits } = useSplits();
+    const { assets } = useAssets();
     const [activeTab, setActiveTab] = useState('overview');
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -54,7 +57,8 @@ export default function Dashboard() {
         description: '',
         category_id: '',
         member_id: '',
-        split_id: ''
+        split_id: '',
+        asset_id: ''
     });
     // Set while the transaction form is editing an existing transaction instead of adding one
     const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
@@ -150,7 +154,7 @@ export default function Dashboard() {
     };
 
     const closeTransactionForm = () => {
-        setNewTransaction({ amount: '', description: '', category_id: '', member_id: '', split_id: '' });
+        setNewTransaction({ amount: '', description: '', category_id: '', member_id: '', split_id: '', asset_id: '' });
         setEditingTransactionId(null);
         setShowAddTransaction(false);
     };
@@ -161,7 +165,8 @@ export default function Dashboard() {
             description: transaction.description || '',
             category_id: transaction.category_id,
             member_id: transaction.member_id || '',
-            split_id: transaction.split_id || ''
+            split_id: transaction.split_id || '',
+            asset_id: transaction.asset_id || ''
         });
         setEditingTransactionId(transaction.id);
         setShowAddTransaction(true);
@@ -177,7 +182,8 @@ export default function Dashboard() {
             description: newTransaction.description,
             // null removes a tag when editing
             member_id: newTransaction.member_id || null,
-            split_id: newTransaction.split_id || null
+            split_id: newTransaction.split_id || null,
+            asset_id: newTransaction.asset_id || null
         };
         try {
             if (editingTransactionId) {
@@ -226,11 +232,14 @@ export default function Dashboard() {
     // Shared costs: a parent's expense divided with a split
     const canShare = isParent && !!selectedAccountObj && isParentAccount(selectedAccountObj) && splits.length > 0
         && isExpense(newTransaction.category_id);
+    // Repairs, service, tyres... can be linked to an investment
+    const canLinkItem = isParent && assets.length > 0 && isExpense(newTransaction.category_id);
+    const assetName = (id?: string | null) => assets.find(a => a.id === id)?.name;
 
     const tabs = [
         { id: 'overview', label: '📊 Overview' },
         { id: 'budgets', label: '💰 Budgets' },
-        ...(isParent ? [{ id: 'common', label: '🤝 Common' }] : []),
+        ...(isParent ? [{ id: 'common', label: '🤝 Common' }, { id: 'investments', label: '📦 Investments' }] : []),
         { id: 'analytics', label: '📈 Analytics' },
         { id: 'settings', label: '⚙️ Settings' }
     ];
@@ -459,7 +468,8 @@ export default function Dashboard() {
                                             ...newTransaction,
                                             category_id: e.target.value,
                                             // Only expenses can be shared
-                                            split_id: isExpense(e.target.value) ? newTransaction.split_id : ''
+                                            split_id: isExpense(e.target.value) ? newTransaction.split_id : '',
+                                            asset_id: isExpense(e.target.value) ? newTransaction.asset_id : ''
                                         })}
                                         className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
                                         required
@@ -502,6 +512,19 @@ export default function Dashboard() {
                                             ))}
                                         </select>
                                     )}
+                                    {canLinkItem && (
+                                        <select
+                                            value={newTransaction.asset_id}
+                                            onChange={(e) => setNewTransaction({ ...newTransaction, asset_id: e.target.value })}
+                                            className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                                            aria-label="For item"
+                                        >
+                                            <option value="">For item: none</option>
+                                            {assets.map(asset => (
+                                                <option key={asset.id} value={asset.id}>For item: {asset.name}</option>
+                                            ))}
+                                        </select>
+                                    )}
                                     <div className="flex gap-2">
                                         <button type="submit" className="btn-primary flex-1">
                                             {editingTransactionId ? 'Save Changes' : 'Add Transaction'}
@@ -527,6 +550,11 @@ export default function Dashboard() {
                                                     {memberName(transaction.member_id) && (
                                                         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300">
                                                             for {memberName(transaction.member_id)}
+                                                        </span>
+                                                    )}
+                                                    {assetName(transaction.asset_id) && (
+                                                        <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
+                                                            {assetName(transaction.asset_id)}
                                                         </span>
                                                     )}
                                                     {transaction.split_id && (
@@ -571,6 +599,7 @@ export default function Dashboard() {
 
             {activeTab === 'budgets' && <BudgetManager />}
             {activeTab === 'common' && <CommonBudget />}
+            {activeTab === 'investments' && <Investments />}
             {activeTab === 'analytics' && <Analytics />}
             {activeTab === 'settings' && (
                 <div className="space-y-6">
