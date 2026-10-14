@@ -218,3 +218,12 @@ def test_settlement_rules(client, parents, setup):
         headers=parents["mum"],
     )
     assert same.status_code == 400
+
+
+def test_deactivated_parent_can_still_settle(client, parents, setup):
+    shared(client, parents, setup, 100)
+    client.put(f"{BASE_URL}/users/{parents['dad_id']}", json={"is_active": False}, headers=parents["mum"])
+    # The open balance stays visible, and can be settled
+    assert balance_of(client, parents["mum"], parents["dad_id"]) == -50.0
+    assert settle(client, parents["mum"], parents, setup, 50).status_code == 200
+    assert balance_of(client, parents["mum"], parents["mum_id"]) == 0.0

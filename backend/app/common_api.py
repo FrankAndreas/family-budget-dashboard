@@ -148,7 +148,8 @@ def create_settlement(
     _: models.User = Depends(require_parent),
     db: Session = Depends(database.get_db),
 ):
-    parent_ids = {p.id for p in privacy.active_parents(db)}
+    # Also a deactivated parent, whose open balance must still be settled
+    parent_ids = {p.id for p in db.query(models.User.id).filter(models.User.role == models.UserRole.PARENT)}
     between = {settlement.from_user_id, settlement.to_user_id}
     if settlement.from_user_id == settlement.to_user_id or not between <= parent_ids:
         raise HTTPException(status_code=400, detail="Settling up is between two parents")
