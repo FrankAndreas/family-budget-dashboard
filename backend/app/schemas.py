@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 from typing import Annotated, Optional, Literal
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from .models import UserRole, AccountType, CategoryType, ShareLevel
 
 # PINs are exactly 4 digits (same rule as the family-chore app)
@@ -251,3 +251,37 @@ class Settlement(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Planned cost Schemas
+class PlannedCostIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    category_id: str
+    amount: float = Field(gt=0)
+    frequency: Literal["MONTHLY", "YEARLY"]
+    due_month: Optional[int] = Field(default=None, ge=1, le=12)
+    owner_id: Optional[str] = None
+    split_id: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class PlannedCost(PlannedCostIn):
+    id: str
+    monthly: float
+    next_due: Optional[date]
+    due_soon: bool
+    # Monthly amount per person
+    shares: dict[str, float]
+
+
+class OverviewItem(BaseModel):
+    kind: Literal["planned", "asset"]
+    id: str
+    name: str
+    monthly: float
+    shares: dict[str, float]
+
+
+class Overview(BaseModel):
+    items: list[OverviewItem]
+    totals: dict[str, float]

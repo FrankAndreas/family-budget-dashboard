@@ -159,3 +159,25 @@ class Settlement(Base):
     date = Column(DateTime, default=datetime.utcnow)
     from_transaction_id = Column(String, ForeignKey("transactions.id"))
     to_transaction_id = Column(String, ForeignKey("transactions.id"))
+
+
+class Frequency(str, enum.Enum):
+    MONTHLY = "MONTHLY"
+    YEARLY = "YEARLY"
+
+
+class PlannedCost(Base):
+    """A recurring cost planned ahead: a yearly bill (personal or common) or a common monthly cost."""
+
+    __tablename__ = "planned_costs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String)
+    category_id = Column(String, ForeignKey("categories.id"))
+    amount = Column(Float)
+    frequency = Column(Enum(Frequency))
+    due_month = Column(Integer, nullable=True)
+    # Exactly one of: a family member (personal) or a split (common)
+    owner_id = Column(String, ForeignKey("users.id"), nullable=True)
+    split_id = Column(String, ForeignKey("splits.id"), nullable=True)
+    notes = Column(String, nullable=True)

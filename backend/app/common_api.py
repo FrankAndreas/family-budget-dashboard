@@ -1,6 +1,6 @@
 """Common budget, splits, settlements, planned costs (yearly bills) and assets (investments). Parents only."""
 
-from datetime import datetime
+from datetime import date, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -75,6 +75,8 @@ def update_split(
 @router.delete("/splits/{split_id}", response_model=schemas.Split)
 def delete_split(split_id: str, _: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
     db_split = get_split(db, split_id)
+    if db.query(models.PlannedCost).filter(models.PlannedCost.split_id == split_id).first():
+        raise HTTPException(status_code=409, detail="In use by a planned cost; change or delete it first")
     db.delete(db_split)
     db.commit()
     return db_split
@@ -191,3 +193,141 @@ def delete_settlement(
     db.delete(db_settlement)
     db.commit()
     return db_settlement
+
+
+def today() -> date:
+    return date.today()
+
+
+def visible_owner(
+    db: Session, current_user: models.User, owner_id: Optional[str], split_id: Optional[str], write: bool = False
+) -> bool:
+    """Common items belong to all parents; a personal item follows the access rules for its owner's money."""
+    if split_id:
+        return True
+    owner = db.query(models.User).filter(models.User.id == owner_id).first()
+    level = privacy.access_level(db, current_user, owner) if owner else None
+    return privacy.can_write(level) if write else level is not None
+
+
+def check_owner(db: Session, current_user: models.User, owner_id: Optional[str], split_id: Optional[str]) -> None:
+    if bool(owner_id) == bool(split_id):
+        raise HTTPException(status_code=400, detail="Choose either an owner or a split")
+    if split_id:
+        get_split(db, split_id)
+    elif not visible_owner(db, current_user, owner_id, None, write=True):
+        raise HTTPException(status_code=403, detail="You can't manage that person's items")
+
+
+def monthly_shares(db: Session, monthly: float, owner_id: Optional[str], split_id: Optional[str]) -> dict[str, float]:
+    if split_id:
+        split = db.query(models.Split).filter(models.Split.id == split_id).first()
+        return finance.split_amount(monthly, split.shares if split else {})
+    return {owner_id: monthly} if owner_id else {}
+
+
+PLANNED_COST_FIELDS = ("id", "name", "category_id", "amount", "due_month", "owner_id", "split_id", "notes")
+
+
+def planned_cost_out(db: Session, cost: models.PlannedCost) -> dict:
+    monthly = finance.monthly_equivalent(cost.amount, cost.frequency.value)
+    due = finance.next_due(cost.due_month, today()) if cost.due_month else None
+    return {
+        **{field: getattr(cost, field) for field in PLANNED_COST_FIELDS},
+        "frequency": cost.frequency.value,
+        "monthly": monthly,
+        "next_due": due,
+        "due_soon": bool(due and finance.is_due_soon(due, today())),
+        "shares": monthly_shares(db, monthly, cost.owner_id, cost.split_id),
+    }
+
+
+def validate_planned_cost(db: Session, current_user: models.User, cost: schemas.PlannedCostIn) -> None:
+    check_owner(db, current_user, cost.owner_id, cost.split_id)
+    if cost.frequency == "YEARLY" and not cost.due_month:
+        raise HTTPException(status_code=400, detail="Choose the month the bill is due")
+    if cost.frequency == "MONTHLY" and not cost.split_id:
+        raise HTTPException(status_code=400, detail="Monthly planned costs are common costs; choose a split")
+    if not db.query(models.Category).filter(models.Category.id == cost.category_id).first():
+        raise HTTPException(status_code=400, detail="Category not found")
+
+
+def get_planned_cost(db: Session, current_user: models.User, cost_id: str, write: bool = False) -> models.PlannedCost:
+    cost = db.query(models.PlannedCost).filter(models.PlannedCost.id == cost_id).first()
+    if not cost or not visible_owner(db, current_user, cost.owner_id, cost.split_id, write):
+        raise HTTPException(status_code=404, detail="Planned cost not found")
+    return cost
+
+
+@router.get("/planned-costs", response_model=List[schemas.PlannedCost])
+def list_planned_costs(
+    frequency: Optional[str] = None,
+    current_user: models.User = Depends(require_parent),
+    db: Session = Depends(database.get_db),
+):
+    query = db.query(models.PlannedCost)
+    if frequency:
+        query = query.filter(models.PlannedCost.frequency == frequency)
+    rows = [planned_cost_out(db, c) for c in query if visible_owner(db, current_user, c.owner_id, c.split_id)]
+    return sorted(rows, key=lambda r: (r["next_due"] or date.max, r["name"]))
+
+
+@router.post("/planned-costs", response_model=schemas.PlannedCost)
+def create_planned_cost(
+    cost: schemas.PlannedCostIn,
+    current_user: models.User = Depends(require_parent),
+    db: Session = Depends(database.get_db),
+):
+    validate_planned_cost(db, current_user, cost)
+    data = cost.model_dump()
+    data["amount"] = finance.cents(data["amount"])
+    db_cost = models.PlannedCost(**data)
+    db.add(db_cost)
+    db.commit()
+    db.refresh(db_cost)
+    return planned_cost_out(db, db_cost)
+
+
+@router.put("/planned-costs/{cost_id}", response_model=schemas.PlannedCost)
+def update_planned_cost(
+    cost_id: str,
+    cost: schemas.PlannedCostIn,
+    current_user: models.User = Depends(require_parent),
+    db: Session = Depends(database.get_db),
+):
+    db_cost = get_planned_cost(db, current_user, cost_id, write=True)
+    validate_planned_cost(db, current_user, cost)
+    for key, value in cost.model_dump().items():
+        setattr(db_cost, key, finance.cents(value) if key == "amount" else value)
+    db.commit()
+    db.refresh(db_cost)
+    return planned_cost_out(db, db_cost)
+
+
+@router.delete("/planned-costs/{cost_id}")
+def delete_planned_cost(
+    cost_id: str, current_user: models.User = Depends(require_parent), db: Session = Depends(database.get_db)
+):
+    db.delete(get_planned_cost(db, current_user, cost_id, write=True))
+    db.commit()
+    return {"deleted": cost_id}
+
+
+def common_asset_items(db: Session) -> list[dict]:
+    # Common investments are added in the next task
+    return []
+
+
+@router.get("/common/overview", response_model=schemas.Overview)
+def common_overview(_: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
+    items = []
+    for cost in db.query(models.PlannedCost).filter(models.PlannedCost.split_id.isnot(None)):
+        monthly = finance.monthly_equivalent(cost.amount, cost.frequency.value)
+        shares = monthly_shares(db, monthly, None, cost.split_id)
+        items.append({"kind": "planned", "id": cost.id, "name": cost.name, "monthly": monthly, "shares": shares})
+    items += common_asset_items(db)
+    totals: dict[str, float] = {}
+    for item in items:
+        for user_id, amount in item["shares"].items():
+            totals[user_id] = finance.cents(totals.get(user_id, 0.0) + amount)
+    return {"items": items, "totals": totals}
