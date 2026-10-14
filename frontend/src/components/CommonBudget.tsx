@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { useFamily } from '../useFamily';
 import { money, useSplits, type Overview } from '../finance';
 import SplitManager from './SplitManager';
+import MonthlyCosts from './MonthlyCosts';
 
 interface Balance { user_id: string; amount: number }
 interface SharedExpense {
@@ -202,6 +203,8 @@ export default function CommonBudget() {
                     </div>
                 )}
             </div>
+
+            <MonthlyCosts splits={splits} onChange={refresh} />
 
             <div className="glass-card p-6">
                 <h2 className="text-xl font-bold mb-4">Shared expenses</h2>

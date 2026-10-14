@@ -8,6 +8,7 @@ import FamilyManager from '../../components/FamilyManager';
 import ShareSettings from '../../components/ShareSettings';
 import CommonBudget from '../../components/CommonBudget';
 import Investments from '../../components/Investments';
+import YearlyBills from '../../components/YearlyBills';
 import { useAssets, useSplits } from '../../finance';
 import { useFamily } from '../../useFamily';
 import { accessTo, canWrite, dependents } from '../../family';
@@ -239,7 +240,7 @@ export default function Dashboard() {
     const tabs = [
         { id: 'overview', label: '📊 Overview' },
         { id: 'budgets', label: '💰 Budgets' },
-        ...(isParent ? [{ id: 'common', label: '🤝 Common' }, { id: 'investments', label: '📦 Investments' }] : []),
+        ...(isParent ? [{ id: 'common', label: '🤝 Common' }, { id: 'investments', label: '📦 Investments' }, { id: 'bills', label: '🧾 Yearly bills' }] : []),
         { id: 'analytics', label: '📈 Analytics' },
         { id: 'settings', label: '⚙️ Settings' }
     ];
@@ -600,6 +601,7 @@ export default function Dashboard() {
             {activeTab === 'budgets' && <BudgetManager />}
             {activeTab === 'common' && <CommonBudget />}
             {activeTab === 'investments' && <Investments />}
+            {activeTab === 'bills' && <YearlyBills />}
             {activeTab === 'analytics' && <Analytics />}
             {activeTab === 'settings' && (
                 <div className="space-y-6">

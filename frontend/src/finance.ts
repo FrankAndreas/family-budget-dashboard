@@ -68,3 +68,25 @@ export function useAssets() {
     const reload = useCallback(() => setVersion(v => v + 1), []);
     return { assets, reload };
 }
+
+export interface PlannedCost {
+    id: string;
+    name: string;
+    category_id: string;
+    amount: number;
+    frequency: 'MONTHLY' | 'YEARLY';
+    due_month: number | null;
+    owner_id: string | null;
+    split_id: string | null;
+    notes: string | null;
+    monthly: number;
+    next_due: string | null;
+    due_soon: boolean;
+    // Monthly amount per person
+    shares: Record<string, number>;
+}
+
+export const MONTHS = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December'
+];
