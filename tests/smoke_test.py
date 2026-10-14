@@ -8,11 +8,13 @@ The backend must have started on an empty database with INITIAL_ADMIN_PIN set to
 Only uses the standard library, so it runs without installing anything.
 """
 
+import io
 import json
 import sys
 import time
 import urllib.error
 import urllib.request
+import zipfile
 
 
 def call(base_url, method, path, body=None, token=None):
@@ -27,6 +29,33 @@ def call(base_url, method, path, body=None, token=None):
             return response.status, json.loads(response.read() or "null")
     except urllib.error.HTTPError as error:
         return error.code, json.loads(error.read() or "null")
+
+
+def upload(base_url, path, filename, content, token):
+    """POST a file as multipart/form-data, the way the browser sends it."""
+    boundary = f"smoke{int(time.time())}"
+    body = (
+        f'--{boundary}\r\nContent-Disposition: form-data; name="file"; filename="{filename}"\r\n\r\n'.encode()
+        + content.encode()
+        + f"\r\n--{boundary}--\r\n".encode()
+    )
+    request = urllib.request.Request(
+        f"{base_url}/api/v1{path}",
+        method="POST",
+        data=body,
+        headers={"Content-Type": f"multipart/form-data; boundary={boundary}", "Authorization": f"Bearer {token}"},
+    )
+    try:
+        with urllib.request.urlopen(request) as response:
+            return response.status, json.loads(response.read())
+    except urllib.error.HTTPError as error:
+        return error.code, json.loads(error.read() or "null")
+
+
+def download(base_url, path, token):
+    request = urllib.request.Request(f"{base_url}/api/v1{path}", headers={"Authorization": f"Bearer {token}"})
+    with urllib.request.urlopen(request) as response:
+        return response.status, response.read()
 
 
 def check(description, condition):
@@ -92,6 +121,19 @@ def main(base_url, admin_pin):
     me = next(u["id"] for u in users if u["username"] == username)
     owed = next(b["amount"] for b in balances if b["user_id"] == me)
     check("common balance counts the shared expense", status == 200 and owed > 0)
+
+    # Export for analysis and bulk import
+    status, content = download(base_url, "/export/analysis.zip", token)
+    names = zipfile.ZipFile(io.BytesIO(content)).namelist()
+    check("export for analysis is a ZIP with transactions", status == 200 and "transactions.csv" in names)
+    category = next(c["name"] for c in categories if c["type"] == "EXPENSE")
+    csv_file = f"date,account,category,amount,reference\n2026-10-12,Smoke,{category},7.5,smoke-{username}\n"
+    status, result = upload(base_url, "/import/preview", "receipts.csv", csv_file, token)
+    check("import preview checks the file", status == 200 and result["ok"] == 1)
+    status, result = upload(base_url, "/import", "receipts.csv", csv_file, token)
+    check("import books the file", status == 200 and result["imported"] == 1)
+    status, result = upload(base_url, "/import/preview", "receipts.csv", csv_file, token)
+    check("importing it again is recognised as a duplicate", status == 200 and result["duplicates"] == 1)
 
     status, _ = call(base_url, "GET", "/me")
     check("unauthenticated request rejected", status == 401)
