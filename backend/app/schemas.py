@@ -193,3 +193,19 @@ class Share(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+# Split Schemas
+Percent = Annotated[int, Field(ge=0, le=100)]
+
+
+class SplitIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    shares: dict[str, Percent]
+
+
+class Split(SplitIn):
+    id: str
+
+    class Config:
+        from_attributes = True

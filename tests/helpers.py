@@ -11,10 +11,12 @@ def admin_headers(client):
     return login(client, ADMIN, ADMIN_PIN)
 
 
-def register(client, username, role="PARENT", pin="1234"):
-    """Have the admin add a family member, then log in as them."""
+def register(client, username, role="PARENT", pin="1234", by=None):
+    """Have a parent (default: the admin) add a family member, then log in as them."""
     client.post(
-        f"{BASE_URL}/users", json={"username": username, "pin": pin, "role": role}, headers=admin_headers(client)
+        f"{BASE_URL}/users",
+        json={"username": username, "pin": pin, "role": role},
+        headers=by or admin_headers(client),
     )
     return login(client, username, pin)
 
@@ -51,3 +53,8 @@ def add_transaction(client, headers, account_id, category, amount, **extra):
         json={"account_id": account_id, "category_id": category, "amount": amount, **extra},
         headers=headers,
     )
+
+
+def create_split(client, headers, name, shares):
+    """shares: {user_id: percent}"""
+    return client.post(f"{BASE_URL}/splits", json={"name": name, "shares": shares}, headers=headers)

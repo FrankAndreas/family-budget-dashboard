@@ -112,3 +112,14 @@ class Share(Base):
     owner_id = Column(String, ForeignKey("users.id"))
     grantee_id = Column(String, ForeignKey("users.id"))
     level = Column(Enum(ShareLevel))
+
+
+class Split(Base):
+    """A preset ratio for dividing common costs between the parents, e.g. "By income" 70/30."""
+
+    __tablename__ = "splits"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, unique=True)
+    # {parent user id: whole percent}; sums to 100
+    shares = Column(JSON, default={})
