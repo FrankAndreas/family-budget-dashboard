@@ -1,0 +1,96 @@
+# Example configuration for the converters in tools/converters (all values invented).
+# Copy it to converter.toml (git-ignored), use your own IBANs and names, and keep it outside the repository
+# or let .gitignore keep it out.
+#
+# Names (accounts, owners, categories, items, children) must exist in the app; the converters check them
+# against the JSON Schema you download in Settings → Data Management → "JSON Schema (for AI tools)".
+# Matching of names ignores upper/lower case.
+
+# ---------------------------------------------------------------- bank.py
+
+[bank.accounts]
+# IBAN of the export (spaces don't matter) → account in the app; owner only if two accounts share the name
+"CH93 0076 2011 6238 5295 7" = { account = "Household" }
+"CH56 0483 5012 3456 7800 9" = { account = "Joint account", owner = "Sam" }
+
+[bank.fallback]
+# Category for lines no rule recognises (they are also listed in the report)
+expense = "Unsorted"
+income = "Other Income"
+
+# Rules: the first one that matches decides. match is a regular expression searched in the booking text,
+# ignoring case. Card purchases are matched as "Einkauf <merchant>" (date, time and card number removed).
+#
+#   action = "book" (default)  needs category; optional item, for, shared, description
+#   action = "transfer"        money to/from another of the family's accounts (category Transfer)
+#   action = "ignore"          not written at all (e.g. a credit card bill when the card has its own export)
+#   sign   = "debit"/"credit"  only lines going out / coming in. A booking rule matches only lines that fit its
+#                              category anyway: an expense category only debits, an income category only credits.
+
+[[bank.rules]]
+match = '^Einkauf (TWINT )?MIGROS\b'
+action = "transfer"               # spending is booked from the receipts, on the Migros account
+description = "Migros"
+
+[[bank.rules]]
+match = '^LSV Viseca'
+action = "transfer"               # credit card bill; the purchases come from the card's own export
+
+[[bank.rules]]
+match = '^Übertrag (von|auf) '
+action = "transfer"               # own savings account
+
+[[bank.rules]]
+match = '^Dauerauftrag Alex und Sam'
+action = "transfer"               # to the joint account
+
+[[bank.rules]]
+match = '^Dauerauftrag Leasing Bank'
+category = "Transportation"
+item = "Family car"               # investment from the inventory
+
+[[bank.rules]]
+match = '^Gutschrift TWINT '
+category = "Reimbursements"       # money paid back by others
+
+[[bank.rules]]
+match = '^Gutschrift ACME AG'
+category = "Salary"
+
+[[bank.rules]]
+match = '^LSV KRANKENKASSE'
+category = "Healthcare"
+
+[[bank.rules]]
+match = '^Zahlung Telco AG'
+category = "Utilities"
+
+[[bank.rules]]
+match = '^Einkauf .*(Bäckerei|Metzgerei)'
+category = "Groceries"
+
+[[bank.rules]]
+match = '^Zahlung TWINT MUSTER, KIM'
+category = "Other Expense"
+for = "Kim"                       # a child without own allowance
+
+[[bank.rules]]
+match = '^Bargeldbezug'
+action = "ignore"
+
+# ---------------------------------------------------------------- migros.py
+
+[migros]
+account = "Migros"                    # clearing account: transfers in from the bank, receipts out
+default_category = "Groceries"
+refund_category = "Reimbursements"    # a receipt whose total is negative (returns, deposit)
+
+# Branch rules (match on the branch name) and article rules (match on the article; they win over branches)
+[[migros.branches]]
+match = 'Do it|Garden'
+category = "Other Expense"
+
+[[migros.articles]]
+match = 'Windeln|Feuchttücher'
+category = "Other Expense"
+for = "Kim"

@@ -40,12 +40,12 @@ jobs:
       - name: Run Black (code formatting check)
         run: |
           cd backend
-          black --check app/
+          black --check app/ ../tools/
       
       - name: Run Flake8 (linting)
         run: |
           cd backend
-          flake8 app/ --max-line-length=120 --extend-ignore=E203,W503
+          flake8 app/ ../tools/ --max-line-length=120 --extend-ignore=E203,W503
       
       - name: Run MyPy (type checking)
         run: |
