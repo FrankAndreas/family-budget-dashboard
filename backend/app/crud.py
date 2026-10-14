@@ -79,6 +79,14 @@ def delete_user(db: Session, user_id: str):
     db.query(models.Share).filter((models.Share.owner_id == user_id) | (models.Share.grantee_id == user_id)).delete(
         synchronize_session=False
     )
+    # The payments stay on the other parent's account; the settlement records go with the member
+    db.query(models.Settlement).filter(
+        (models.Settlement.from_user_id == user_id) | (models.Settlement.to_user_id == user_id)
+    ).delete(synchronize_session=False)
+    # Splits stop naming the member; parents edit them to add up to 100 again
+    for split in db.query(models.Split):
+        if user_id in (split.shares or {}):
+            split.shares = {k: v for k, v in split.shares.items() if k != user_id}
 
     db.delete(db_user)
     db.commit()

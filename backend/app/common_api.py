@@ -75,8 +75,11 @@ def update_split(
 @router.delete("/splits/{split_id}", response_model=schemas.Split)
 def delete_split(split_id: str, _: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
     db_split = get_split(db, split_id)
-    if db.query(models.PlannedCost).filter(models.PlannedCost.split_id == split_id).first():
-        raise HTTPException(status_code=409, detail="In use by a planned cost; change or delete it first")
+    in_use = db.query(models.PlannedCost).filter(models.PlannedCost.split_id == split_id).first() or (
+        db.query(models.Asset).filter(models.Asset.split_id == split_id).first()
+    )
+    if in_use:
+        raise HTTPException(status_code=409, detail="In use by a planned cost or investment; change or delete it first")
     db.delete(db_split)
     db.commit()
     return db_split
@@ -313,11 +316,6 @@ def delete_planned_cost(
     return {"deleted": cost_id}
 
 
-def common_asset_items(db: Session) -> list[dict]:
-    # Common investments are added in the next task
-    return []
-
-
 @router.get("/common/overview", response_model=schemas.Overview)
 def common_overview(_: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
     items = []
@@ -331,3 +329,151 @@ def common_overview(_: models.User = Depends(require_parent), db: Session = Depe
         for user_id, amount in item["shares"].items():
             totals[user_id] = finance.cents(totals.get(user_id, 0.0) + amount)
     return {"items": items, "totals": totals}
+
+
+ASSET_FIELDS = ("id", "name", "price", "purchase_date", "lifespan_years", "owner_id", "split_id", "notes")
+
+
+def asset_out(db: Session, asset: models.Asset) -> dict:
+    follow_ups = db.query(models.Transaction).filter(models.Transaction.asset_id == asset.id).all()
+    stats = finance.asset_stats(
+        asset.price, asset.purchase_date, asset.lifespan_years, sum(abs(t.amount) for t in follow_ups), today()
+    )
+    return {
+        **{field: getattr(asset, field) for field in ASSET_FIELDS},
+        **stats,
+        "shares": monthly_shares(db, stats["monthly_set_aside"], asset.owner_id, asset.split_id),
+    }
+
+
+def get_asset(db: Session, current_user: models.User, asset_id: str, write: bool = False) -> models.Asset:
+    asset = db.query(models.Asset).filter(models.Asset.id == asset_id).first()
+    if not asset or not visible_owner(db, current_user, asset.owner_id, asset.split_id, write):
+        raise HTTPException(status_code=404, detail="Investment not found")
+    return asset
+
+
+def common_asset_items(db: Session) -> list[dict]:
+    items = []
+    for asset in db.query(models.Asset).filter(models.Asset.split_id.isnot(None)):
+        monthly = finance.cents(asset.price / (asset.lifespan_years * 12))
+        shares = monthly_shares(db, monthly, None, asset.split_id)
+        items.append({"kind": "asset", "id": asset.id, "name": asset.name, "monthly": monthly, "shares": shares})
+    return items
+
+
+@router.get("/assets", response_model=List[schemas.Asset])
+def list_assets(current_user: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
+    assets = [a for a in db.query(models.Asset) if visible_owner(db, current_user, a.owner_id, a.split_id)]
+    return sorted((asset_out(db, a) for a in assets), key=lambda a: a["replacement_due"])
+
+
+@router.get("/assets/{asset_id}", response_model=schemas.AssetDetail)
+def read_asset(
+    asset_id: str, current_user: models.User = Depends(require_parent), db: Session = Depends(database.get_db)
+):
+    asset = get_asset(db, current_user, asset_id)
+    expenses = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.asset_id == asset.id)
+        .order_by(models.Transaction.date.desc())
+        .all()
+    )
+    return {**asset_out(db, asset), "expenses": expenses}
+
+
+@router.post("/assets", response_model=schemas.Asset)
+def create_asset(
+    asset: schemas.AssetIn, current_user: models.User = Depends(require_parent), db: Session = Depends(database.get_db)
+):
+    check_owner(db, current_user, asset.owner_id, asset.split_id)
+    data = asset.model_dump()
+    data["price"] = finance.cents(data["price"])
+    db_asset = models.Asset(**data)
+    db.add(db_asset)
+    db.commit()
+    db.refresh(db_asset)
+    return asset_out(db, db_asset)
+
+
+@router.put("/assets/{asset_id}", response_model=schemas.Asset)
+def update_asset(
+    asset_id: str,
+    asset: schemas.AssetIn,
+    current_user: models.User = Depends(require_parent),
+    db: Session = Depends(database.get_db),
+):
+    db_asset = get_asset(db, current_user, asset_id, write=True)
+    check_owner(db, current_user, asset.owner_id, asset.split_id)
+    for key, value in asset.model_dump().items():
+        setattr(db_asset, key, finance.cents(value) if key == "price" else value)
+    db.commit()
+    db.refresh(db_asset)
+    return asset_out(db, db_asset)
+
+
+def unlink_and_delete_asset(db: Session, asset: models.Asset) -> None:
+    # The follow-up expenses stay as normal expenses
+    db.query(models.Transaction).filter(models.Transaction.asset_id == asset.id).update(
+        {models.Transaction.asset_id: None}, synchronize_session=False
+    )
+    db.delete(asset)
+
+
+@router.delete("/assets/{asset_id}")
+def delete_asset(
+    asset_id: str, current_user: models.User = Depends(require_parent), db: Session = Depends(database.get_db)
+):
+    unlink_and_delete_asset(db, get_asset(db, current_user, asset_id, write=True))
+    db.commit()
+    return {"deleted": asset_id}
+
+
+# Removing a family member: their investments and yearly bills need a new home first
+ITEM_MODELS = {"asset": models.Asset, "planned": models.PlannedCost}
+
+
+def owned_items(db: Session, user_id: str) -> list[dict]:
+    return [
+        {"kind": kind, "id": item.id, "name": item.name}
+        for kind, model in ITEM_MODELS.items()
+        for item in db.query(model).filter(model.owner_id == user_id)
+    ]
+
+
+@router.get("/users/{user_id}/items", response_model=List[schemas.OwnedItem])
+def list_owned_items(user_id: str, _: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
+    return owned_items(db, user_id)
+
+
+def apply_item_decisions(db: Session, user_id: str, decisions: list[schemas.ItemDecision]) -> None:
+    """Move or delete every item the member owns, as decided. Raises 409/400 before changing anything."""
+    owned = {(item["kind"], item["id"]) for item in owned_items(db, user_id)}
+    decided = {(d.kind, d.id): d.to for d in decisions if (d.kind, d.id) in owned}
+    undecided = [item for item in owned_items(db, user_id) if (item["kind"], item["id"]) not in decided]
+    if undecided:
+        raise HTTPException(status_code=409, detail={"message": "Decide where their items go", "items": undecided})
+    # Only yearly bills and investments have an owner (monthly planned costs are always common)
+    for target in decided.values():
+        kind, _, target_id = target.partition(":")
+        valid = (
+            target == "delete"
+            or (kind == "split" and db.query(models.Split).filter(models.Split.id == target_id).first())
+            or (
+                kind == "owner"
+                and target_id != user_id
+                and db.query(models.User).filter(models.User.id == target_id).first()
+            )
+        )
+        if not valid:
+            raise HTTPException(status_code=400, detail=f"Can't move an item to {target}")
+    for (kind, item_id), target in decided.items():
+        item = db.query(ITEM_MODELS[kind]).filter(ITEM_MODELS[kind].id == item_id).one()
+        if target == "delete":
+            if kind == "asset":
+                unlink_and_delete_asset(db, item)
+            else:
+                db.delete(item)
+            continue
+        target_kind, _, target_id = target.partition(":")
+        item.owner_id, item.split_id = (target_id, None) if target_kind == "owner" else (None, target_id)

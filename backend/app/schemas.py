@@ -285,3 +285,48 @@ class OverviewItem(BaseModel):
 class Overview(BaseModel):
     items: list[OverviewItem]
     totals: dict[str, float]
+
+
+# Asset Schemas
+class AssetIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
+    price: float = Field(gt=0)
+    purchase_date: date
+    lifespan_years: int = Field(ge=1, le=100)
+    owner_id: Optional[str] = None
+    split_id: Optional[str] = None
+    notes: Optional[str] = None
+
+
+class Asset(AssetIn):
+    id: str
+    age_years: float
+    replacement_due: date
+    is_due: bool
+    monthly_set_aside: float
+    total_cost: float
+    cost_per_year: float
+    # Monthly set-aside per person
+    shares: dict[str, float]
+
+
+class AssetDetail(Asset):
+    expenses: list[Transaction]
+
+
+# Removing a family member: where each of their investments and bills goes
+class OwnedItem(BaseModel):
+    kind: Literal["asset", "planned"]
+    id: str
+    name: str
+
+
+class ItemDecision(BaseModel):
+    kind: Literal["asset", "planned"]
+    id: str
+    # "owner:<user id>", "split:<split id>" or "delete"
+    to: str
+
+
+class MemberRemoval(BaseModel):
+    items: list[ItemDecision] = []

@@ -2,7 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import timedelta
+from fastapi import Body
+
 from . import crud, schemas, auth, database, models, privacy
+from .common_api import apply_item_decisions, visible_owner
 
 router = APIRouter()
 
@@ -38,6 +41,15 @@ def check_shared(db: Session, split_id: Optional[str], account_id: str, category
     if not split:
         raise HTTPException(status_code=400, detail="Split not found")
     return dict(split.shares)
+
+
+def check_asset(db: Session, current_user, asset_id: Optional[str]) -> None:
+    """An expense can belong to an investment the current user can see."""
+    if asset_id is None:
+        return
+    asset = db.query(models.Asset).filter(models.Asset.id == asset_id).first()
+    if not asset or not visible_owner(db, current_user, asset.owner_id, asset.split_id):
+        raise HTTPException(status_code=400, detail="Investment not found")
 
 
 # Auth Routes
@@ -141,6 +153,7 @@ def update_user(
 @router.delete("/users/{user_id}", response_model=schemas.User)
 def delete_user(
     user_id: str,
+    removal: Optional[schemas.MemberRemoval] = Body(default=None),
     current_user: schemas.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
@@ -160,6 +173,8 @@ def delete_user(
         if user_to_delete.is_active and admin_count <= 1:
             raise HTTPException(status_code=400, detail="Cannot delete the last admin user")
 
+    # Their investments and yearly bills go where the parent decided (409 lists any without a decision)
+    apply_item_decisions(db, user_id, removal.items if removal else [])
     return crud.delete_user(db, user_id)
 
 
@@ -281,6 +296,7 @@ def create_transaction(
         raise HTTPException(status_code=400, detail="Transfers are booked with Settle up")
     check_member_tag(db, transaction.member_id, transaction.account_id)
     split_shares = check_shared(db, transaction.split_id, transaction.account_id, category)
+    check_asset(db, current_user, transaction.asset_id)
     return crud.create_transaction(db, transaction=transaction, category=category, split_shares=split_shares)
 
 
@@ -305,6 +321,8 @@ def update_transaction(
     # The split's percents are read again only when the split itself changes; otherwise the
     # booked copy stays (also when that split was deleted since)
     fields = transaction_update.model_fields_set
+    if "asset_id" in fields:
+        check_asset(db, current_user, transaction_update.asset_id)
     if "split_id" in fields and transaction_update.split_id != db_transaction.split_id:
         split_shares = check_shared(db, transaction_update.split_id, db_transaction.account_id, category)
     else:
