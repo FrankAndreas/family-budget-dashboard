@@ -26,8 +26,10 @@ Unchanged: children with own allowance (Jugendlohn) and their privacy toggle; de
 
 New and changed tables (SQLite; new columns via `migrate.NEW_COLUMNS`, new tables via `create_all`).
 
-**`shares`** — a parent shares their own finances with another parent.
-`owner_id`, `grantee_id` (both parents), `level` = `VIEW` | `EDIT`. One row per pair; no row = none.
+**`shares`** — a parent or a child with own allowance shares their own finances with a parent.
+`owner_id`, `grantee_id` (a parent), `level` = `NONE` | `VIEW` | `EDIT`. One row per pair. No row means
+"none" for a parent owner and "view" for a child owner (the former default); a child's explicit "none"
+is stored as `NONE`.
 
 **`splits`** — preset ratios between the parents, at most 4.
 `id`, `name` (unique), `shares` JSON `{parent_id: percent}`; percents are whole numbers ≥ 0,
@@ -47,7 +49,9 @@ two transactions it created (`from_transaction_id`, `to_transaction_id`).
 Monthly planned costs are always common (personal monthly costs are covered by budgets).
 
 **`assets`** (investments) — `name`, `price`, `purchase_date`, `lifespan_years` (> 0),
-`owner_id` **or** `split_id`, `notes` (warranty, serial number, ...).
+`owner_id` (a parent or a child, e.g. the teen's mountain bike) **or** `split_id`, `notes`
+(warranty, serial number, ...). Children don't see the Investments tab; parents manage a child's items
+(a dependent child's always, an allowance child's with "view and manage").
 
 **Categories** — new type `TRANSFER` next to `INCOME` and `EXPENSE`, and a seeded category
 "Settle up" (added by name on startup, also to existing databases). Transfers change account
@@ -60,9 +64,12 @@ balances but count in neither income, expenses, budgets nor analytics.
   with their accounts, transactions and budgets. Never the owner's PIN or share settings.
 - The household scope goes away: budgets belong to the parent who created them (existing
   `user_id`), and `budget_owner_ids` returns just the owner.
-- Children: unchanged (parents see an allowance child unless privacy is on; never edit).
-- Dependent children stay visible to all parents; any parent can tag their own expenses with them,
-  shared or not.
+- Children with own allowance share like parents: per parent "don't share / view / view and manage".
+  Without a setting it stays as before: parents view, unless the child turned on privacy (which hides
+  everything regardless of the setting). With "view and manage" a parent can book, edit and delete on the
+  child's accounts and manage the child's budgets.
+- Dependent children stay visible to all parents, who all manage them (tags, their investments);
+  any parent can tag their own expenses with them, shared or not.
 - Common budget, splits, planned costs and assets: every parent sees and manages all common items
   and their own personal ones; personal items of another parent follow the share level.
   Children don't see these tabs.
@@ -108,7 +115,9 @@ Tabs: Overview · Budgets · Common · Investments · Yearly bills · Analytics 
 - **Yearly bills:** list sorted by next due date, due soon highlighted, total per year, monthly
   set-aside (per parent for common bills); add / edit / delete (name, category, amount, due month,
   owner: me or common + split). Monthly planned costs are managed in the Common tab.
-- **Settings → Family:** "Share my finances with Anna: none / view / edit" for parents.
+- **Settings → Sharing:** "Share my finances with Anna: none / view / view and manage", for parents and
+  children with own allowance.
+- **Settings → Family:** a "Remove" action per member opens the inventory form.
 
 ## Rules and edge cases
 
@@ -121,6 +130,10 @@ Tabs: Overview · Budgets · Common · Investments · Yearly bills · Analytics 
 - Only one parent: Common tab explains that sharing needs a second parent; splits can't be created.
 - A new parent added later gets 0 % in existing splits until a parent edits them.
 - Deactivating a parent: their open balance stays visible until settled.
+- **Removing a parent or child** opens a form listing their investments and yearly bills; for each,
+  choose another family member, common with a split, or delete (a "move all to" choice fills them in).
+  The API refuses the deletion (409) while any of their items has no decision. Their accounts,
+  transactions and budgets are deleted as before; follow-up expenses of moved items stay linked.
 - Existing data: accounts and budgets stay with their current owner; no shares are created, so
   parents no longer see each other until they share.
 

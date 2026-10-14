@@ -10,6 +10,61 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-14-separate-finances-design.md`
 
+## Amendments (2026-10-14, user feedback) — these override the tasks below
+
+**A. Children share like parents (Task 1, Task 8).**
+- `models.ShareLevel` gets `NONE = "NONE"`. `PUT /shares/{grantee_id}`: the caller may be a parent or a child
+  with own allowance; the grantee must be a parent other than the caller. For a parent owner, `NONE` deletes
+  the row; for a child owner, `NONE` is stored (because no row means "view" for children).
+- `privacy.access_level`: target child **with** allowance → `None` if `privacy_enabled`, else the share
+  row's level (`NONE` → `None`), else `"VIEW"`. Target dependent child (no allowance) → `"EDIT"` for parents.
+  Target parent → share level (`NONE`/no row → `None`).
+- `privacy.can_list_user`: children also see the parents (names only), so they can choose whom to share with.
+- Extra tests in `tests/test_shares.py`:
+  ```python
+  def test_child_lets_parent_manage(client, parents):
+      teen = register(client, "teen", role="CHILD")
+      teen_account = create_account(client, teen, "Teen bank")
+      groceries = category_id(client, "Groceries")
+      assert add_transaction(client, parents["mum"], teen_account, groceries, 5).status_code == 403
+      assert share(client, teen, parents["mum_id"], "EDIT").status_code == 200
+      assert add_transaction(client, parents["mum"], teen_account, groceries, 5).status_code == 200
+      assert add_transaction(client, parents["dad"], teen_account, groceries, 5).status_code == 403
+
+
+  def test_child_can_hide_from_one_parent(client, parents):
+      teen = register(client, "teen", role="CHILD")
+      create_account(client, teen, "Teen bank")
+      share(client, teen, parents["dad_id"], "NONE")
+      assert "Teen bank" in account_names(client, parents["mum"])
+      assert "Teen bank" not in account_names(client, parents["dad"])
+      assert client.get(f"{BASE_URL}/shares", headers=teen).json()[0]["level"] == "NONE"
+  ```
+  and in `test_share_only_between_parents` replace `assert share(client, teen, parents["mum_id"], "VIEW").status_code == 403`
+  with a dependent child: `timmy = client.post(f"{BASE_URL}/members", json={"username": "timmy"}, headers=parents["mum"]).json()`
+  and `assert share(client, parents["mum"], timmy["id"], "VIEW").status_code == 400`; a child sharing with another
+  child is 400 too.
+- Task 8 `ShareSettings` is shown to parents **and** allowance children (list = parents other than me);
+  for a child the default shown is `VIEW` when no row exists; `ShareInfo.level` includes `'NONE'`.
+  `accessTo` mirrors the backend rules above, and `buildScopes` includes allowance children with their
+  access (`VIEW` or `EDIT`) and lets `BudgetManager` manage them when `EDIT`.
+
+**B. Removing a member decides where their inventory goes (Task 7, new Task 11b).**
+- Asset and planned-cost `owner_id` may be any family member (parent or child). `check_owner` uses
+  `access_level(...)` write rules (dependent children: any parent; allowance child: parent with EDIT).
+- `DELETE /users/{id}` takes an optional JSON body
+  `{"items": [{"kind": "asset"|"planned", "id": str, "to": "owner:<user id>"|"split:<split id>"|"delete"}]}`.
+  If the user owns assets or planned costs not covered by `items`, respond **409** with
+  `{"detail": "Decide where their items go", "items": [{"kind","id","name"}]}`. A target owner must be another
+  existing member (not the deleted one); a target split must exist. Moved assets keep their linked expenses;
+  deleted assets unlink them. `GET /users/{id}/items` returns the same `[{"kind","id","name"}]` list for the form.
+- Replace Task 7's cleanup test with one that first gets 409, then deletes with decisions (one asset moved to Mum,
+  one bill to the split, one asset deleted) and checks the results.
+- **Task 11b (frontend):** in `FamilyManager`, a "Remove" button per member (not yourself) opens an inline form:
+  loads `GET /users/{id}/items`; a "Move all to" select (family members except them, the splits, "Delete") fills
+  every row; each row has its own select; a warning that accounts, transactions and budgets are deleted; Confirm
+  sends `api.delete(url, { data: { items } })`. Without items the form just asks for confirmation.
+
 ## Global Constraints
 
 - All money values rounded to cents with `crud.to_cents` (stored as Float).
