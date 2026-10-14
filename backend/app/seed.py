@@ -6,6 +6,8 @@ from typing import Optional
 from sqlalchemy.orm import Session
 from . import auth, models
 
+SETTLE_UP = "Settle up"
+
 DEFAULT_CATEGORIES = [
     # Income categories
     {"name": "Salary", "type": "INCOME", "icon": "💰"},
@@ -24,18 +26,19 @@ DEFAULT_CATEGORIES = [
     {"name": "Clothing", "type": "EXPENSE", "icon": "👕"},
     {"name": "Dining Out", "type": "EXPENSE", "icon": "🍽️"},
     {"name": "Other Expense", "type": "EXPENSE", "icon": "💸"},
+    # Booked only by settling up in the common budget
+    {"name": SETTLE_UP, "type": "TRANSFER", "icon": "🔁"},
 ]
 
 
 def seed_categories(db: Session) -> int:
-    """Create the default categories if the table is empty. Returns how many were created."""
-    if db.query(models.Category).count() > 0:
-        return 0
-
-    for cat_data in DEFAULT_CATEGORIES:
+    """Create the default categories that don't exist yet (by name). Returns how many were created."""
+    existing = {name for (name,) in db.query(models.Category.name)}
+    missing = [cat for cat in DEFAULT_CATEGORIES if cat["name"] not in existing]
+    for cat_data in missing:
         db.add(models.Category(**cat_data, is_global=True))
     db.commit()
-    return len(DEFAULT_CATEGORIES)
+    return len(missing)
 
 
 def seed_admin(db: Session) -> Optional[str]:

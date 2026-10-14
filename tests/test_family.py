@@ -1,4 +1,4 @@
-"""Family model: shared parent household, children with own allowance, dependent children tagged on expenses."""
+"""Family model: private parent finances, children with own allowance, dependent children tagged on expenses."""
 
 import pytest
 
@@ -32,12 +32,12 @@ def test_only_parents_add_members(client, family):
     assert client.post(f"{BASE_URL}/members", json={"username": "x"}, headers=family["teen"]).status_code == 403
 
 
-def test_parents_share_household(client, family):
+def test_parents_are_private(client, family):
     names = sorted(a["name"] for a in client.get(f"{BASE_URL}/accounts", headers=family["mum"]).json())
-    assert names == ["Dad bank", "Mum bank", "Teen bank"]
+    assert names == ["Mum bank", "Teen bank"]
     assert (
         add_transaction(client, family["mum"], family["dad_account"], category_id(client, "Groceries"), 10).status_code
-        == 200
+        == 403
     )
 
 
@@ -59,7 +59,7 @@ def test_tagging_rules(client, family):
     )
     assert (
         add_transaction(
-            client, family["mum"], family["teen_account"], clothing, 5, member_id=family["timmy_id"]
+            client, family["teen"], family["teen_account"], clothing, 5, member_id=family["timmy_id"]
         ).status_code
         == 400
     )
@@ -69,23 +69,24 @@ def test_tagging_rules(client, family):
     assert untagged["member_id"] is None
 
 
-def test_household_and_child_budgets(client, family):
+def test_parent_and_child_budgets(client, family):
     groceries, clothing = category_id(client, "Groceries"), category_id(client, "Clothing")
-    household = client.post(
+    mums = client.post(
         f"{BASE_URL}/budgets", json={"category_id": groceries, "limit": 400}, headers=family["mum"]
     ).json()
     own = client.post(f"{BASE_URL}/budgets", json={"category_id": clothing, "limit": 50}, headers=family["teen"]).json()
 
-    assert [b["id"] for b in client.get(f"{BASE_URL}/budgets", headers=family["dad"]).json()] == [household["id"]]
+    assert client.get(f"{BASE_URL}/budgets", headers=family["dad"]).json() == []
+    assert [b["id"] for b in client.get(f"{BASE_URL}/budgets", headers=family["mum"]).json()] == [mums["id"]]
     assert [b["id"] for b in client.get(f"{BASE_URL}/budgets", headers=family["teen"]).json()] == [own["id"]]
     inspected = client.get(f"{BASE_URL}/budgets", params={"user_id": family["teen_id"]}, headers=family["mum"]).json()
     assert [b["id"] for b in inspected] == [own["id"]]
 
     mum_id = user_id(client, family["mum"], "mum")
     assert client.get(f"{BASE_URL}/budgets", params={"user_id": mum_id}, headers=family["teen"]).status_code == 403
-    # Parents manage household budgets together, but only inspect a child's
+    # Parents only inspect a child's budgets, and don't touch each other's without a share
     assert client.delete(f"{BASE_URL}/budgets/{own['id']}", headers=family["mum"]).status_code == 404
-    assert client.delete(f"{BASE_URL}/budgets/{household['id']}", headers=family["dad"]).status_code == 200
+    assert client.delete(f"{BASE_URL}/budgets/{mums['id']}", headers=family["dad"]).status_code == 404
 
 
 def test_switching_allowance(client, family):

@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react';
 import api, { errorMessage, fetchTransactionsForUsers } from '../api';
-import { useAuth } from '../AuthContext';
 import { useFamily } from '../useFamily';
-import { HOUSEHOLD_SCOPE, type Scope } from '../family';
+import type { Scope } from '../family';
 import ScopeSelector from './ScopeSelector';
 
 interface Budget {
@@ -35,7 +34,7 @@ async function loadBudgetsWithSpending(scope: Scope): Promise<BudgetWithCategory
     const [budgetsRes, categoriesRes, transactions] = await Promise.all([
         api.get('/api/v1/budgets', { params: scope.budgetOwnerId ? { user_id: scope.budgetOwnerId } : {} }),
         api.get('/api/v1/categories'),
-        // Only the scope's accounts count (e.g. a child's own allowance stays out of the household)
+        // Only the scope's accounts count
         fetchTransactionsForUsers<Transaction>(scope.userIds)
     ]);
     const categories: Category[] = categoriesRes.data;
@@ -62,9 +61,8 @@ async function loadBudgetsWithSpending(scope: Scope): Promise<BudgetWithCategory
 }
 
 export default function BudgetManager() {
-    const { user } = useAuth();
     const { scopes } = useFamily();
-    const [scopeKey, setScopeKey] = useState(HOUSEHOLD_SCOPE);
+    const [scopeKey, setScopeKey] = useState('');
     const [budgets, setBudgets] = useState<BudgetWithCategory[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [showAddBudget, setShowAddBudget] = useState(false);
@@ -78,10 +76,8 @@ export default function BudgetManager() {
     });
 
     const activeScope = scopes.find(s => s.key === scopeKey) ?? scopes[0];
-    // Parents manage household budgets, a child with own allowance manages their own; inspecting is read-only
-    const canManage = !!activeScope && (
-        (activeScope.key === HOUSEHOLD_SCOPE && user?.role === 'PARENT') || activeScope.key === user?.id
-    );
+    // Own budgets, or someone who shared with "view and manage"; everything else is read only
+    const canManage = !!activeScope && activeScope.access !== 'VIEW';
 
     // Bumped to load the budgets again after a change
     const [reloadKey, setReloadKey] = useState(0);
@@ -109,7 +105,8 @@ export default function BudgetManager() {
             await api.post('/api/v1/budgets', {
                 category_id: newBudget.category_id,
                 limit: parseFloat(newBudget.limit),
-                period: newBudget.period
+                period: newBudget.period,
+                user_id: activeScope?.budgetOwnerId
             });
             setNewBudget({ category_id: '', limit: '', period: 'MONTHLY' });
             setShowAddBudget(false);
@@ -180,7 +177,7 @@ export default function BudgetManager() {
 
             {!canManage && activeScope && (
                 <p className="mb-4 text-sm text-slate-400">
-                    Viewing {activeScope.label}. Only {activeScope.label.replace(' (own allowance)', '')} can change these budgets.
+                    Viewing {activeScope.label} (read only).
                 </p>
             )}
 

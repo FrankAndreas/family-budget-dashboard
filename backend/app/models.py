@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Boolean, Float, ForeignKey, DateTime, Enum, JSON
+from sqlalchemy import Column, String, Boolean, Float, ForeignKey, DateTime, Date, Enum, Integer, JSON
 from sqlalchemy.orm import relationship
 from .database import Base
 from datetime import datetime
@@ -20,6 +20,15 @@ class AccountType(str, enum.Enum):
 class CategoryType(str, enum.Enum):
     INCOME = "INCOME"
     EXPENSE = "EXPENSE"
+    # Money moved between parents (settling up): changes balances, counts in neither income nor expenses
+    TRANSFER = "TRANSFER"
+
+
+class ShareLevel(str, enum.Enum):
+    # NONE is only stored for children, whose finances parents may view by default
+    NONE = "NONE"
+    VIEW = "VIEW"
+    EDIT = "EDIT"
 
 
 class User(Base):
@@ -76,6 +85,12 @@ class Transaction(Base):
     description = Column(String, nullable=True)
     # Optional tag: the dependent child this household expense was for
     member_id = Column(String, ForeignKey("users.id"), nullable=True)
+    # Shared with the other parent(s): the split used, and its percents at booking time
+    # (so editing the split later doesn't change past balances)
+    split_id = Column(String, ForeignKey("splits.id"), nullable=True)
+    split_shares = Column(JSON, nullable=True)
+    # The investment this follow-up cost belongs to (repair, service, ...)
+    asset_id = Column(String, ForeignKey("assets.id"), nullable=True)
 
     account = relationship("Account", back_populates="transactions")
     category = relationship("Category")
@@ -92,3 +107,77 @@ class Budget(Base):
 
     user = relationship("User", back_populates="budgets")
     category = relationship("Category")
+
+
+class Share(Base):
+    """Someone shares their own finances with a parent: read only (VIEW) or managing them (EDIT)."""
+
+    __tablename__ = "shares"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    owner_id = Column(String, ForeignKey("users.id"))
+    grantee_id = Column(String, ForeignKey("users.id"))
+    level = Column(Enum(ShareLevel))
+
+
+class Split(Base):
+    """A preset ratio for dividing common costs between the parents, e.g. "By income" 70/30."""
+
+    __tablename__ = "splits"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String, unique=True)
+    # {parent user id: whole percent}; sums to 100
+    shares = Column(JSON, default={})
+
+
+class Asset(Base):
+    """A long-lived purchase (TV, fridge, car, bike): planned for replacement, with its follow-up costs."""
+
+    __tablename__ = "assets"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String)
+    price = Column(Float)
+    purchase_date = Column(Date)
+    lifespan_years = Column(Integer)
+    # Exactly one of: a family member (personal) or a split (common)
+    owner_id = Column(String, ForeignKey("users.id"), nullable=True)
+    split_id = Column(String, ForeignKey("splits.id"), nullable=True)
+    notes = Column(String, nullable=True)
+
+
+class Settlement(Base):
+    """One parent paid another to settle the common budget; booked as two transfer transactions."""
+
+    __tablename__ = "settlements"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    from_user_id = Column(String, ForeignKey("users.id"))
+    to_user_id = Column(String, ForeignKey("users.id"))
+    amount = Column(Float)
+    date = Column(DateTime, default=datetime.utcnow)
+    from_transaction_id = Column(String, ForeignKey("transactions.id"))
+    to_transaction_id = Column(String, ForeignKey("transactions.id"))
+
+
+class Frequency(str, enum.Enum):
+    MONTHLY = "MONTHLY"
+    YEARLY = "YEARLY"
+
+
+class PlannedCost(Base):
+    """A recurring cost planned ahead: a yearly bill (personal or common) or a common monthly cost."""
+
+    __tablename__ = "planned_costs"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String)
+    category_id = Column(String, ForeignKey("categories.id"))
+    amount = Column(Float)
+    frequency = Column(Enum(Frequency))
+    due_month = Column(Integer, nullable=True)
+    # Exactly one of: a family member (personal) or a split (common)
+    owner_id = Column(String, ForeignKey("users.id"), nullable=True)
+    split_id = Column(String, ForeignKey("splits.id"), nullable=True)
+    notes = Column(String, nullable=True)

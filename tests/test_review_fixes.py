@@ -21,7 +21,11 @@ from helpers import (
 
 class TestSetupAndAuth:
     def test_categories_seeded(self, client):
-        assert len(client.get(f"{BASE_URL}/categories").json()) == 15
+        assert len(client.get(f"{BASE_URL}/categories").json()) == 16
+        # "Settle up" is only booked by settling up in the common budget
+        headers = register(client, "p")
+        account = create_account(client, headers)
+        assert add_transaction(client, headers, account, category_id(client, "Settle up"), 5).status_code == 400
 
     def test_token_lasts_configured_time(self, client):
         register(client, "p")

@@ -76,9 +76,31 @@ def delete_user(db: Session, user_id: str):
         {models.Transaction.member_id: None}, synchronize_session=False
     )
 
+    db.query(models.Share).filter((models.Share.owner_id == user_id) | (models.Share.grantee_id == user_id)).delete(
+        synchronize_session=False
+    )
+    # The payments stay on the other parent's account; the settlement records go with the member
+    db.query(models.Settlement).filter(
+        (models.Settlement.from_user_id == user_id) | (models.Settlement.to_user_id == user_id)
+    ).delete(synchronize_session=False)
+    # Splits stop naming the member; parents edit them to add up to 100 again
+    for split in db.query(models.Split):
+        if user_id in (split.shares or {}):
+            split.shares = {k: v for k, v in split.shares.items() if k != user_id}
+
     db.delete(db_user)
     db.commit()
     return db_user
+
+
+def set_share(db: Session, owner: models.User, grantee_id: str, level: str):
+    db.query(models.Share).filter(models.Share.owner_id == owner.id, models.Share.grantee_id == grantee_id).delete(
+        synchronize_session=False
+    )
+    # No row means "none" for a parent's finances but "view" for a child's, so a child's NONE is stored
+    if level != "NONE" or owner.role == models.UserRole.CHILD:
+        db.add(models.Share(owner_id=owner.id, grantee_id=grantee_id, level=level))
+    db.commit()
 
 
 # Account CRUD
@@ -157,13 +179,17 @@ def get_category(db: Session, category_id: str):
 
 
 def signed_amount(amount: float, category: models.Category) -> float:
-    # The category decides the sign: income is positive, expenses are negative
+    # The category decides the sign: income is positive, expenses are negative; transfers keep their sign
+    if category.type == models.CategoryType.TRANSFER:
+        return to_cents(amount)
     if category.type == models.CategoryType.INCOME:
         return to_cents(abs(amount))
     return to_cents(-abs(amount))
 
 
-def create_transaction(db: Session, transaction: schemas.TransactionCreate, category: models.Category):
+def create_transaction(
+    db: Session, transaction: schemas.TransactionCreate, category: models.Category, split_shares=None
+):
     amount = signed_amount(transaction.amount, category)
     db_transaction = models.Transaction(
         account_id=transaction.account_id,
@@ -171,6 +197,9 @@ def create_transaction(db: Session, transaction: schemas.TransactionCreate, cate
         amount=amount,
         description=transaction.description,
         member_id=transaction.member_id,
+        split_id=transaction.split_id,
+        split_shares=split_shares,
+        asset_id=transaction.asset_id,
         date=to_naive_utc(transaction.date) if transaction.date else datetime.utcnow(),
     )
     db.add(db_transaction)
@@ -186,7 +215,11 @@ def create_transaction(db: Session, transaction: schemas.TransactionCreate, cate
 
 
 def update_transaction(
-    db: Session, db_transaction: models.Transaction, update: schemas.TransactionUpdate, category: models.Category
+    db: Session,
+    db_transaction: models.Transaction,
+    update: schemas.TransactionUpdate,
+    category: models.Category,
+    split_shares=None,
 ):
     old_amount = db_transaction.amount
     update_data = update.model_dump(exclude_unset=True)
@@ -198,6 +231,7 @@ def update_transaction(
 
     for key, value in update_data.items():
         setattr(db_transaction, key, value)
+    db_transaction.split_shares = split_shares
 
     account = get_account(db, db_transaction.account_id)
     if account:
@@ -226,10 +260,6 @@ def delete_transaction(db: Session, db_transaction: models.Transaction):
 # Budget CRUD
 def get_budgets(db: Session, user_id: str):
     return db.query(models.Budget).filter(models.Budget.user_id == user_id).all()
-
-
-def get_budgets_for_users(db: Session, user_ids: list[str]):
-    return db.query(models.Budget).filter(models.Budget.user_id.in_(user_ids)).all()
 
 
 def create_budget(db: Session, budget: schemas.BudgetCreate, user_id: str):

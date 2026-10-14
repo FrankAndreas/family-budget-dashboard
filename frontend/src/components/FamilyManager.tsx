@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import { useFamily } from '../useFamily';
 import type { FamilyUser } from '../family';
 import PinInput from './PinInput';
+import RemoveMember from './RemoveMember';
 import { isValidPin } from '../pin';
 
 type MemberType = 'PARENT' | 'ALLOWANCE_CHILD' | 'DEPENDENT_CHILD';
@@ -38,6 +39,9 @@ export default function FamilyManager() {
     const [pinMemberId, setPinMemberId] = useState<string | null>(null);
     const [pinAction, setPinAction] = useState<'reset' | 'allowance'>('reset');
     const [memberPin, setMemberPin] = useState('');
+
+    // Member being removed (form that decides where their items go)
+    const [removeMemberId, setRemoveMemberId] = useState<string | null>(null);
 
     // Member being renamed, and the new name
     const [renameMemberId, setRenameMemberId] = useState<string | null>(null);
@@ -80,8 +84,15 @@ export default function FamilyManager() {
         }
     };
 
+    const openRemoveForm = (member: FamilyUser) => {
+        closePinForm();
+        closeRenameForm();
+        setRemoveMemberId(member.id);
+    };
+
     const openRenameForm = (member: FamilyUser) => {
         closePinForm();
+        setRemoveMemberId(null);
         setRenameMemberId(member.id);
         setNewMemberName(member.username);
     };
@@ -113,6 +124,7 @@ export default function FamilyManager() {
 
     const openPinForm = (member: FamilyUser, action: 'reset' | 'allowance') => {
         closeRenameForm();
+        setRemoveMemberId(null);
         setPinMemberId(member.id);
         setPinAction(action);
         setMemberPin('');
@@ -184,7 +196,7 @@ export default function FamilyManager() {
                                 </h3>
                                 <p className="text-sm text-slate-400">{describe(member)}</p>
                             </div>
-                            {pinMemberId !== member.id && renameMemberId !== member.id && (
+                            {pinMemberId !== member.id && renameMemberId !== member.id && removeMemberId !== member.id && (
                                 <div className="flex gap-3 text-sm">
                                     <button onClick={() => openRenameForm(member)} className="text-slate-400 hover:text-white">
                                         Rename
@@ -204,9 +216,22 @@ export default function FamilyManager() {
                                             Give own allowance
                                         </button>
                                     )}
+                                    {member.id !== user?.id && (
+                                        <button onClick={() => openRemoveForm(member)} className="text-slate-400 hover:text-red-400">
+                                            Remove
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>
+
+                        {removeMemberId === member.id && (
+                            <RemoveMember
+                                member={member}
+                                onDone={(message) => { setRemoveMemberId(null); showResult(message); }}
+                                onCancel={() => setRemoveMemberId(null)}
+                            />
+                        )}
 
                         {renameMemberId === member.id && (
                             <form onSubmit={(e) => handleRename(e, member)} className="mt-3 flex flex-col gap-2 sm:flex-row">

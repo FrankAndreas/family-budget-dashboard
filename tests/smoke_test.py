@@ -70,6 +70,29 @@ def main(base_url, admin_pin):
     smoke = next(a for a in accounts if a["id"] == account["id"])
     check("balance updated", status == 200 and smoke["balance"] == -12.5)
 
+    # Common budget: a second parent, a split, and a shared expense
+    status, _ = call(base_url, "POST", "/users", {"username": f"{username}_b", "pin": "1234", "role": "PARENT"}, token)
+    check("add a second parent", status == 200)
+    status, users = call(base_url, "GET", "/users", token=token)
+    parent_ids = [u["id"] for u in users if u["role"] == "PARENT" and u["is_active"]]
+    # Divide 100 evenly; the first parent gets the remainder
+    even = 100 // len(parent_ids)
+    shares = {pid: even + (100 - even * len(parent_ids) if i == 0 else 0) for i, pid in enumerate(parent_ids)}
+    status, split = call(base_url, "POST", "/splits", {"name": f"Equal {username}", "shares": shares}, token)
+    check("create a split", status == 200)
+    status, _ = call(
+        base_url,
+        "POST",
+        "/transactions",
+        {"account_id": account["id"], "category_id": groceries, "amount": 30, "split_id": split["id"]},
+        token,
+    )
+    check("add a shared expense", status == 200)
+    status, balances = call(base_url, "GET", "/common/balance", token=token)
+    me = next(u["id"] for u in users if u["username"] == username)
+    owed = next(b["amount"] for b in balances if b["user_id"] == me)
+    check("common balance counts the shared expense", status == 200 and owed > 0)
+
     status, _ = call(base_url, "GET", "/me")
     check("unauthenticated request rejected", status == 401)
 

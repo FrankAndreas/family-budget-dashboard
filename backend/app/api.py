@@ -2,7 +2,10 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import timedelta
+from fastapi import Body
+
 from . import crud, schemas, auth, database, models, privacy
+from .common_api import apply_item_decisions, visible_owner
 
 router = APIRouter()
 
@@ -23,6 +26,30 @@ def check_member_tag(db: Session, member_id: Optional[str], account_id: str) -> 
     owner = db.query(crud.models.User).filter(crud.models.User.id == account.user_id).first()
     if not owner or owner.role != "PARENT":
         raise HTTPException(status_code=400, detail="Only household expenses can be tagged with a child")
+
+
+def check_shared(db: Session, split_id: Optional[str], account_id: str, category) -> Optional[dict]:
+    """A shared expense: an expense on a parent's account with an existing split. Returns the percents to keep."""
+    if split_id is None:
+        return None
+    if category.type != models.CategoryType.EXPENSE:
+        raise HTTPException(status_code=400, detail="Only expenses can be shared")
+    owner = db.query(models.User).filter(models.User.id == crud.get_account(db, account_id).user_id).first()
+    if not owner or owner.role != "PARENT":
+        raise HTTPException(status_code=400, detail="Only a parent's expenses can be shared")
+    split = db.query(models.Split).filter(models.Split.id == split_id).first()
+    if not split:
+        raise HTTPException(status_code=400, detail="Split not found")
+    return dict(split.shares)
+
+
+def check_asset(db: Session, current_user, asset_id: Optional[str]) -> None:
+    """An expense can belong to an investment the current user can see."""
+    if asset_id is None:
+        return
+    asset = db.query(models.Asset).filter(models.Asset.id == asset_id).first()
+    if not asset or not visible_owner(db, current_user, asset.owner_id, asset.split_id):
+        raise HTTPException(status_code=400, detail="Investment not found")
 
 
 # Auth Routes
@@ -62,10 +89,7 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
 def read_users(
     current_user: schemas.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
 ):
-    # Get all users and filter by privacy settings
-    all_users = db.query(crud.models.User).all()
-    accessible_users = privacy.filter_users_by_privacy(all_users, current_user)
-    return accessible_users
+    return [user for user in db.query(crud.models.User).all() if privacy.can_list_user(current_user, user)]
 
 
 @router.post("/members", response_model=schemas.User)
@@ -129,6 +153,7 @@ def update_user(
 @router.delete("/users/{user_id}", response_model=schemas.User)
 def delete_user(
     user_id: str,
+    removal: Optional[schemas.MemberRemoval] = Body(default=None),
     current_user: schemas.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
@@ -148,6 +173,8 @@ def delete_user(
         if user_to_delete.is_active and admin_count <= 1:
             raise HTTPException(status_code=400, detail="Cannot delete the last admin user")
 
+    # Their investments and yearly bills go where the parent decided (409 lists any without a decision)
+    apply_item_decisions(db, user_id, removal.items if removal else [])
     return crud.delete_user(db, user_id)
 
 
@@ -189,15 +216,17 @@ def create_account(
 ):
     if is_dependent(current_user):
         raise HTTPException(status_code=403, detail="Children without own allowance can't have accounts")
-    return crud.create_account(db, account=account, user_id=current_user.id)
+    owner = (
+        privacy.check_user_access(db, current_user, account.user_id, write=True) if account.user_id else current_user
+    )
+    if is_dependent(owner):
+        raise HTTPException(status_code=403, detail="Children without own allowance can't have accounts")
+    return crud.create_account(db, account=account, user_id=owner.id)
 
 
 def get_own_account(db: Session, current_user, account_id: str):
-    account = privacy.check_account_access(db, current_user, account_id)
-    # Only the owner can change or delete an account
-    if account.user_id != current_user.id:
-        raise HTTPException(status_code=403, detail="Only the account owner can change it")
-    return account
+    # The owner, or someone they shared their finances with as EDIT
+    return privacy.check_account_access(db, current_user, account_id, write=True)
 
 
 @router.put("/accounts/{account_id}", response_model=schemas.Account)
@@ -259,12 +288,16 @@ def create_transaction(
     db: Session = Depends(database.get_db),
 ):
     # Check if user has access to this account (with privacy enforcement)
-    privacy.check_account_access(db, current_user, transaction.account_id)
+    privacy.check_account_access(db, current_user, transaction.account_id, write=True)
     category = crud.get_category(db, transaction.category_id)
     if not category:
         raise HTTPException(status_code=400, detail="Category not found")
+    if category.type == models.CategoryType.TRANSFER:
+        raise HTTPException(status_code=400, detail="Transfers are booked with Settle up")
     check_member_tag(db, transaction.member_id, transaction.account_id)
-    return crud.create_transaction(db, transaction=transaction, category=category)
+    split_shares = check_shared(db, transaction.split_id, transaction.account_id, category)
+    check_asset(db, current_user, transaction.asset_id)
+    return crud.create_transaction(db, transaction=transaction, category=category, split_shares=split_shares)
 
 
 @router.put("/transactions/{transaction_id}", response_model=schemas.Transaction)
@@ -277,13 +310,26 @@ def update_transaction(
     db_transaction = crud.get_transaction(db, transaction_id)
     if not db_transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    privacy.check_account_access(db, current_user, db_transaction.account_id)
+    privacy.check_account_access(db, current_user, db_transaction.account_id, write=True)
 
     category = crud.get_category(db, transaction_update.category_id or db_transaction.category_id)
     if not category:
         raise HTTPException(status_code=400, detail="Category not found")
+    if category.type == models.CategoryType.TRANSFER:
+        raise HTTPException(status_code=400, detail="Transfers are booked with Settle up")
     check_member_tag(db, transaction_update.member_id, db_transaction.account_id)
-    return crud.update_transaction(db, db_transaction, transaction_update, category)
+    # The split's percents are read again only when the split itself changes; otherwise the
+    # booked copy stays (also when that split was deleted since)
+    fields = transaction_update.model_fields_set
+    if "asset_id" in fields:
+        check_asset(db, current_user, transaction_update.asset_id)
+    if "split_id" in fields and transaction_update.split_id != db_transaction.split_id:
+        split_shares = check_shared(db, transaction_update.split_id, db_transaction.account_id, category)
+    else:
+        split_shares = db_transaction.split_shares
+        if db_transaction.split_id and category.type != models.CategoryType.EXPENSE:
+            raise HTTPException(status_code=400, detail="Only expenses can be shared")
+    return crud.update_transaction(db, db_transaction, transaction_update, category, split_shares=split_shares)
 
 
 @router.delete("/transactions/{transaction_id}", response_model=schemas.Transaction)
@@ -295,28 +341,23 @@ def delete_transaction(
     db_transaction = crud.get_transaction(db, transaction_id)
     if not db_transaction:
         raise HTTPException(status_code=404, detail="Transaction not found")
-    # Same access rules as viewing or adding transactions on the account
-    privacy.check_account_access(db, current_user, db_transaction.account_id)
+    # Same access rules as adding transactions on the account
+    privacy.check_account_access(db, current_user, db_transaction.account_id, write=True)
+    if crud.get_category(db, db_transaction.category_id).type == models.CategoryType.TRANSFER:
+        raise HTTPException(status_code=400, detail="Undo the settlement in the Common tab instead")
     return crud.delete_transaction(db, db_transaction)
 
 
 # Budget Routes
-def budget_owner_ids(db: Session, owner) -> list[str]:
-    # Parents share household budgets; a child with own allowance has their own
-    if owner.role == "PARENT":
-        return privacy.get_household_user_ids(db)
-    return [owner.id]
-
-
 @router.get("/budgets", response_model=List[schemas.Budget])
 def get_budgets(
     user_id: Optional[str] = None,
     current_user: schemas.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
-    # Without user_id: the caller's own scope (household for parents). With user_id: inspect that user's budgets.
+    # Without user_id: the caller's own budgets. With user_id: someone else's they may view.
     owner = privacy.check_user_access(db, current_user, user_id) if user_id else current_user
-    return crud.get_budgets_for_users(db, budget_owner_ids(db, owner))
+    return crud.get_budgets(db, owner.id)
 
 
 @router.post("/budgets", response_model=schemas.Budget)
@@ -325,17 +366,19 @@ def create_budget(
     current_user: schemas.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
-    if is_dependent(current_user):
+    owner = privacy.check_user_access(db, current_user, budget.user_id, write=True) if budget.user_id else current_user
+    if is_dependent(owner):
         raise HTTPException(status_code=403, detail="Children without own allowance can't have budgets")
     if not crud.get_category(db, budget.category_id):
         raise HTTPException(status_code=400, detail="Category not found")
-    return crud.create_budget(db, budget=budget, user_id=current_user.id)
+    return crud.create_budget(db, budget=budget, user_id=owner.id)
 
 
 def get_manageable_budget(db: Session, current_user, budget_id: str):
     db_budget = crud.get_budget(db, budget_id)
-    # Own budgets, or any household budget for a parent
-    if not db_budget or db_budget.user_id not in budget_owner_ids(db, current_user):
+    owner = db.query(models.User).filter(models.User.id == db_budget.user_id).first() if db_budget else None
+    # Own budgets, or those of someone who shared with EDIT
+    if not owner or not privacy.can_write(privacy.access_level(db, current_user, owner)):
         raise HTTPException(status_code=404, detail="Budget not found")
     return db_budget
 
@@ -357,3 +400,32 @@ def delete_budget(
     db: Session = Depends(database.get_db),
 ):
     return crud.delete_budget(db, get_manageable_budget(db, current_user, budget_id))
+
+
+# Share Routes
+@router.get("/shares", response_model=List[schemas.Share])
+def get_shares(
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+):
+    # What the current user shared, and what was shared with them
+    return (
+        db.query(models.Share)
+        .filter((models.Share.owner_id == current_user.id) | (models.Share.grantee_id == current_user.id))
+        .all()
+    )
+
+
+@router.put("/shares/{grantee_id}")
+def set_share(
+    grantee_id: str,
+    share: schemas.ShareSet,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    if is_dependent(current_user):
+        raise HTTPException(status_code=403, detail="Children without own allowance have nothing to share")
+    grantee = db.query(models.User).filter(models.User.id == grantee_id).first()
+    if not grantee or grantee.role != "PARENT" or grantee.id == current_user.id:
+        raise HTTPException(status_code=400, detail="You can only share with a parent")
+    crud.set_share(db, current_user, grantee_id, share.level)
+    return {"level": share.level}
