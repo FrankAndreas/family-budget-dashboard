@@ -325,6 +325,8 @@ def delete_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found")
     # Same access rules as adding transactions on the account
     privacy.check_account_access(db, current_user, db_transaction.account_id, write=True)
+    if crud.get_category(db, db_transaction.category_id).type == models.CategoryType.TRANSFER:
+        raise HTTPException(status_code=400, detail="Undo the settlement in the Common tab instead")
     return crud.delete_transaction(db, db_transaction)
 
 

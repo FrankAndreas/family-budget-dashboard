@@ -1,11 +1,13 @@
 """Common budget, splits, settlements, planned costs (yearly bills) and assets (investments). Parents only."""
 
+from datetime import datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from . import auth, database, finance, models, privacy, schemas
+from . import auth, crud, database, finance, models, privacy, schemas
+from .seed import SETTLE_UP
 
 router = APIRouter()
 
@@ -95,8 +97,7 @@ def shared_expense_rows(db: Session) -> list[tuple[str, float, dict[str, int]]]:
 
 
 def settlement_rows(db: Session) -> list[tuple[str, str, float]]:
-    # Settlements are added in the next task; until then there are none
-    return []
+    return [(s.from_user_id, s.to_user_id, s.amount) for s in db.query(models.Settlement)]
 
 
 @router.get("/common/balance", response_model=List[schemas.Balance])
@@ -122,3 +123,71 @@ def common_expenses(_: models.User = Depends(require_parent), db: Session = Depe
         }
         for t, payer in shared_transactions(db)
     ]
+
+
+def parent_account(db: Session, account_id: str, user_id: str) -> models.Account:
+    account = crud.get_account(db, account_id)
+    if not account or account.user_id != user_id:
+        raise HTTPException(status_code=400, detail="Pick an account of each parent")
+    return account
+
+
+@router.get("/settlements", response_model=List[schemas.Settlement])
+def list_settlements(_: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
+    return db.query(models.Settlement).order_by(models.Settlement.date.desc()).all()
+
+
+@router.post("/settlements", response_model=schemas.Settlement)
+def create_settlement(
+    settlement: schemas.SettlementCreate,
+    _: models.User = Depends(require_parent),
+    db: Session = Depends(database.get_db),
+):
+    parent_ids = {p.id for p in privacy.active_parents(db)}
+    between = {settlement.from_user_id, settlement.to_user_id}
+    if settlement.from_user_id == settlement.to_user_id or not between <= parent_ids:
+        raise HTTPException(status_code=400, detail="Settling up is between two parents")
+    from_account = parent_account(db, settlement.from_account_id, settlement.from_user_id)
+    to_account = parent_account(db, settlement.to_account_id, settlement.to_user_id)
+    category = db.query(models.Category).filter(models.Category.name == SETTLE_UP).one()
+    amount = crud.to_cents(settlement.amount)
+    when = crud.to_naive_utc(settlement.date) if settlement.date else datetime.utcnow()
+
+    paid, received = (
+        models.Transaction(
+            account_id=account.id, category_id=category.id, amount=sign * amount, date=when, description="Settle up"
+        )
+        for account, sign in ((from_account, -1), (to_account, 1))
+    )
+    db.add_all([paid, received])
+    from_account.balance = crud.to_cents(from_account.balance - amount)
+    to_account.balance = crud.to_cents(to_account.balance + amount)
+    db.flush()
+    db_settlement = models.Settlement(
+        from_user_id=settlement.from_user_id,
+        to_user_id=settlement.to_user_id,
+        amount=amount,
+        date=when,
+        from_transaction_id=paid.id,
+        to_transaction_id=received.id,
+    )
+    db.add(db_settlement)
+    db.commit()
+    db.refresh(db_settlement)
+    return db_settlement
+
+
+@router.delete("/settlements/{settlement_id}", response_model=schemas.Settlement)
+def delete_settlement(
+    settlement_id: str, _: models.User = Depends(require_parent), db: Session = Depends(database.get_db)
+):
+    db_settlement = db.query(models.Settlement).filter(models.Settlement.id == settlement_id).first()
+    if not db_settlement:
+        raise HTTPException(status_code=404, detail="Settlement not found")
+    for transaction_id in (db_settlement.from_transaction_id, db_settlement.to_transaction_id):
+        transaction = crud.get_transaction(db, transaction_id)
+        if transaction:
+            crud.delete_transaction(db, transaction)
+    db.delete(db_settlement)
+    db.commit()
+    return db_settlement

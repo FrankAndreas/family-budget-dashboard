@@ -145,3 +145,17 @@ class Asset(Base):
     owner_id = Column(String, ForeignKey("users.id"), nullable=True)
     split_id = Column(String, ForeignKey("splits.id"), nullable=True)
     notes = Column(String, nullable=True)
+
+
+class Settlement(Base):
+    """One parent paid another to settle the common budget; booked as two transfer transactions."""
+
+    __tablename__ = "settlements"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    from_user_id = Column(String, ForeignKey("users.id"))
+    to_user_id = Column(String, ForeignKey("users.id"))
+    amount = Column(Float)
+    date = Column(DateTime, default=datetime.utcnow)
+    from_transaction_id = Column(String, ForeignKey("transactions.id"))
+    to_transaction_id = Column(String, ForeignKey("transactions.id"))

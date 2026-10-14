@@ -231,3 +231,23 @@ class SharedExpense(BaseModel):
     payer_id: str
     split_name: Optional[str]
     shares: dict[str, float]
+
+
+class SettlementCreate(BaseModel):
+    from_user_id: str
+    to_user_id: str
+    amount: float = Field(gt=0)
+    from_account_id: str
+    to_account_id: str
+    date: Optional[datetime] = None
+
+
+class Settlement(BaseModel):
+    id: str
+    from_user_id: str
+    to_user_id: str
+    amount: float
+    date: datetime
+
+    class Config:
+        from_attributes = True

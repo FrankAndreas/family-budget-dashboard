@@ -163,3 +163,58 @@ def test_deleted_split_keeps_balance(client, parents, setup):
         f"{BASE_URL}/transactions/{expense['id']}", json={"description": "Coop"}, headers=parents["mum"]
     )
     assert edited.status_code == 200
+
+
+def settle(client, headers, parents, setup, amount):
+    return client.post(
+        f"{BASE_URL}/settlements",
+        json={
+            "from_user_id": parents["dad_id"],
+            "to_user_id": parents["mum_id"],
+            "amount": amount,
+            "from_account_id": setup["dad_account"],
+            "to_account_id": setup["mum_account"],
+        },
+        headers=headers,
+    )
+
+
+def test_settle_up(client, parents, setup):
+    shared(client, parents, setup, 100)
+    assert settle(client, parents["dad"], parents, setup, 50).status_code == 200
+    assert balance_of(client, parents["mum"], parents["mum_id"]) == 0.0
+    assert client.get(f"{BASE_URL}/accounts", headers=parents["mum"]).json()[0]["balance"] == -50.0
+    assert client.get(f"{BASE_URL}/accounts", headers=parents["dad"]).json()[0]["balance"] == -50.0
+    assert [s["amount"] for s in client.get(f"{BASE_URL}/settlements", headers=parents["mum"]).json()] == [50.0]
+    # The transfer can't be deleted on its own (it would unbalance the settlement)
+    mum_transactions = client.get(f"{BASE_URL}/accounts/{setup['mum_account']}/transactions", headers=parents["mum"])
+    transfer = next(t for t in mum_transactions.json() if t["description"] == "Settle up")
+    assert client.delete(f"{BASE_URL}/transactions/{transfer['id']}", headers=parents["mum"]).status_code == 400
+
+
+def test_delete_settlement_undoes_it(client, parents, setup):
+    shared(client, parents, setup, 100)
+    settled = settle(client, parents["mum"], parents, setup, 50).json()
+    assert client.delete(f"{BASE_URL}/settlements/{settled['id']}", headers=parents["mum"]).status_code == 200
+    assert balance_of(client, parents["mum"], parents["mum_id"]) == 50.0
+    assert client.get(f"{BASE_URL}/accounts", headers=parents["dad"]).json()[0]["balance"] == 0.0
+
+
+def test_settlement_rules(client, parents, setup):
+    assert settle(client, parents["dad"], parents, setup, 0).status_code == 422
+    wrong_account = settle(client, parents["dad"], parents, setup | {"dad_account": setup["mum_account"]}, 10)
+    assert wrong_account.status_code == 400
+    teen = register(client, "teen", role="CHILD", by=parents["mum"])
+    assert settle(client, teen, parents, setup, 10).status_code == 403
+    same = client.post(
+        f"{BASE_URL}/settlements",
+        json={
+            "from_user_id": parents["mum_id"],
+            "to_user_id": parents["mum_id"],
+            "amount": 5,
+            "from_account_id": setup["mum_account"],
+            "to_account_id": setup["mum_account"],
+        },
+        headers=parents["mum"],
+    )
+    assert same.status_code == 400
