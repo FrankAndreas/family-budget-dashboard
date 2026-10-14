@@ -1,6 +1,6 @@
 # Separate parent finances, common budget, investments and yearly bills
 
-Date: 2026-10-14. Status: draft for review.
+Date: 2026-10-14. Status: approved.
 
 ## Goal
 
@@ -86,10 +86,9 @@ All amounts rounded to cents.
 - **Asset:** age, replacement due = purchase_date + lifespan, "due" once past; total cost =
   price + linked expenses; cost per year = total cost / max(age in years, 1).
 
-**Decision to confirm:** budgets and analytics of a parent count the **full** amount of a shared
-expense they paid (it's what left their account); their share appears only in the Common tab.
-Alternative: count only the parent's share there. Full amount is simpler and matches the account
-balance.
+**Shared expenses in budgets and analytics** (confirmed by the user): a parent's budgets and
+analytics count the **full** amount of a shared expense they paid, since that is what left their
+account. Their share appears only in the Common tab.
 
 ## Screens
 
