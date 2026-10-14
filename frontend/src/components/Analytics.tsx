@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api, { fetchTransactionsForUsers } from '../api';
 import { useFamily } from '../useFamily';
-import { HOUSEHOLD_SCOPE, dependents } from '../family';
+import { dependents } from '../family';
 import ScopeSelector from './ScopeSelector';
 import { format, startOfMonth, startOfYear, endOfMonth, eachDayOfInterval, subMonths } from 'date-fns';
 
@@ -43,19 +43,23 @@ export default function Analytics() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [timeRange, setTimeRange] = useState<TimeRange>('month');
     const { users, scopes } = useFamily();
-    const [scopeKey, setScopeKey] = useState(HOUSEHOLD_SCOPE);
+    const [scopeKey, setScopeKey] = useState('');
     const activeScope = scopes.find(s => s.key === scopeKey) ?? scopes[0];
 
     useEffect(() => {
         if (!activeScope) return;
-        // Only the scope's accounts count (e.g. a child's own allowance stays out of the household)
+        // Only the scope's accounts count
         Promise.all([
             api.get('/api/v1/categories'),
             fetchTransactionsForUsers<Transaction>(activeScope.userIds)
         ])
             .then(([categoriesRes, scopeTransactions]) => {
                 setCategories(categoriesRes.data);
-                setTransactions(scopeTransactions);
+                const transferIds = new Set(
+                    (categoriesRes.data as Category[]).filter(c => c.type === 'TRANSFER').map(c => c.id)
+                );
+                // Settling up between parents moves money but is neither income nor spending
+                setTransactions(scopeTransactions.filter(t => !transferIds.has(t.category_id)));
             })
             .catch(error => console.error('Failed to load analytics data', error));
     }, [activeScope]);
@@ -153,7 +157,7 @@ export default function Analytics() {
     const rangeLabel = TIME_RANGE_LABELS[timeRange];
     const netSavings = totalIncome - totalExpenses;
 
-    // Household expenses tagged with a dependent child, per child
+    // Expenses tagged with a dependent child, per child
     const childCosts = dependents(users)
         .map(child => ({
             name: child.username,
@@ -239,10 +243,10 @@ export default function Analytics() {
             </div>
 
             {/* Costs per dependent child */}
-            {activeScope?.key === HOUSEHOLD_SCOPE && childCosts.length > 0 && (
+            {users.find(u => u.id === activeScope?.userIds[0])?.role === 'PARENT' && childCosts.length > 0 && (
                 <div className="glass-card p-6">
                     <h2 className="text-xl font-bold mb-1">Costs per Child ({rangeLabel})</h2>
-                    <p className="text-sm text-slate-400 mb-4">Household expenses tagged with a child. They're included in the totals above.</p>
+                    <p className="text-sm text-slate-400 mb-4">Expenses tagged with a child. They're included in the totals above.</p>
                     <div className="space-y-2">
                         {childCosts.map(child => (
                             <div key={child.name} className="flex items-center justify-between p-2 bg-slate-800/30 rounded">

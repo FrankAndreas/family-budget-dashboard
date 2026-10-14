@@ -5,8 +5,9 @@ import BudgetManager from '../../components/BudgetManager';
 import Analytics from '../../components/Analytics';
 import DataManager from '../../components/DataManager';
 import FamilyManager from '../../components/FamilyManager';
+import ShareSettings from '../../components/ShareSettings';
 import { useFamily } from '../../useFamily';
-import { dependents } from '../../family';
+import { accessTo, canWrite, dependents } from '../../family';
 
 interface Account {
     id: string;
@@ -34,7 +35,7 @@ interface Category {
 
 export default function Dashboard() {
     const { user, logout } = useAuth();
-    const { users } = useFamily();
+    const { users, shares } = useFamily();
     const [activeTab, setActiveTab] = useState('overview');
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -199,15 +200,16 @@ export default function Dashboard() {
     };
 
     const ownerOf = (account: Account) => users.find(u => u.id === account.user_id);
-    const isHouseholdAccount = (account: Account) => ownerOf(account)?.role === 'PARENT';
-    // Parents see the household total; children with own allowance stay out of it
-    const balanceAccounts = user?.role === 'PARENT' ? accounts.filter(isHouseholdAccount) : accounts;
-    const totalBalance = balanceAccounts.reduce((sum, acc) => sum + acc.balance, 0);
+    const isParentAccount = (account: Account) => ownerOf(account)?.role === 'PARENT';
+    const canEdit = (account: Account) => !!user && canWrite(accessTo(user, account.user_id, users, shares));
+    // Your own money; accounts others shared with you are listed but not added up
+    const totalBalance = accounts.filter(a => a.user_id === user?.id).reduce((sum, acc) => sum + acc.balance, 0);
     const children = dependents(users);
     const memberName = (memberId?: string | null) => children.find(c => c.id === memberId)?.username;
-    // Household expenses can be tagged with a child without own allowance
+    // A parent's expenses can be tagged with a child without own allowance
     const selectedAccountObj = accounts.find(a => a.id === selectedAccount);
-    const canTagChild = !!selectedAccountObj && isHouseholdAccount(selectedAccountObj) && children.length > 0;
+    const canTagChild = !!selectedAccountObj && isParentAccount(selectedAccountObj) && children.length > 0;
+    const canEditSelected = !!selectedAccountObj && canEdit(selectedAccountObj);
     const incomeCategories = categories.filter(c => c.type === 'INCOME');
     const expenseCategories = categories.filter(c => c.type === 'EXPENSE');
 
@@ -266,7 +268,7 @@ export default function Dashboard() {
                     {/* Summary Cards */}
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="glass-card p-6">
-                            <h3 className="text-emerald-400 text-lg font-semibold mb-2">{user?.role === 'PARENT' ? 'Household Balance' : 'My Balance'}</h3>
+                            <h3 className="text-emerald-400 text-lg font-semibold mb-2">My Balance</h3>
                             <p className="text-3xl font-bold">${totalBalance.toFixed(2)}</p>
                         </div>
                         <div className="glass-card p-6">
@@ -365,7 +367,7 @@ export default function Dashboard() {
                                     <p className="text-sm text-slate-400">{account.type}</p>
                                     <div className="flex justify-between items-end mt-2">
                                         <p className="text-2xl font-bold">${account.balance.toFixed(2)}</p>
-                                        {account.user_id === user?.id && (
+                                        {canEdit(account) && (
                                             <div className="flex gap-3">
                                                 <button
                                                     onClick={(e) => {
@@ -401,15 +403,23 @@ export default function Dashboard() {
                         <div className="glass-card p-6">
                             <div className="flex justify-between items-center mb-4">
                                 <h2 className="text-xl font-bold">Transactions</h2>
+                                {canEditSelected && (
                                 <button
                                     onClick={() => showAddTransaction ? closeTransactionForm() : setShowAddTransaction(true)}
                                     className="btn-primary text-sm"
                                 >
                                     + Add Transaction
                                 </button>
+                                )}
                             </div>
 
-                            {showAddTransaction && (
+                            {!canEditSelected && selectedAccountObj && (
+                                <p className="text-sm text-slate-400 mb-3">
+                                    Read only: {ownerOf(selectedAccountObj)?.username ?? 'the owner'} shared this account with you to view.
+                                </p>
+                            )}
+
+                            {showAddTransaction && canEditSelected && (
                                 <form onSubmit={handleSubmitTransaction} className="mb-4 p-4 bg-slate-800/30 rounded-lg">
                                     <input
                                         type="number"
@@ -453,7 +463,7 @@ export default function Dashboard() {
                                             className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
                                             aria-label="For child"
                                         >
-                                            <option value="">For: whole household</option>
+                                            <option value="">For: no child</option>
                                             {children.map(child => (
                                                 <option key={child.id} value={child.id}>For: {child.username}</option>
                                             ))}
@@ -493,6 +503,7 @@ export default function Dashboard() {
                                                 <p className={`text-xl font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                                     {transaction.amount >= 0 ? '+' : ''} ${transaction.amount.toFixed(2)}
                                                 </p>
+                                                {canEditSelected && (<>
                                                 <button
                                                     onClick={() => handleEditTransaction(transaction)}
                                                     className="text-slate-500 hover:text-blue-400 transition-colors"
@@ -509,6 +520,7 @@ export default function Dashboard() {
                                                 >
                                                     ✕
                                                 </button>
+                                                </>)}
                                             </div>
                                         </div>
                                     ))
@@ -524,6 +536,7 @@ export default function Dashboard() {
             {activeTab === 'settings' && (
                 <div className="space-y-6">
                     {user?.role === 'PARENT' && <FamilyManager />}
+                    <ShareSettings />
                     <DataManager />
                 </div>
             )}

@@ -357,8 +357,9 @@ export default function DataManager() {
                     <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
                         <h4 className="font-semibold mb-2 text-blue-400">🔒 Privacy Rules</h4>
                         <ul className="text-sm text-slate-400 space-y-1">
-                            <li>• Parents share one household: they see each other's accounts and household budgets</li>
-                            <li>• Parents can view children's own-allowance data (if privacy is off)</li>
+                            <li>• Each parent's accounts and budgets are private unless shared in Settings → Sharing (view or manage)</li>
+                            <li>• The Common tab (shared costs, investments, yearly bills) is visible to both parents</li>
+                            <li>• Parents can view children's own-allowance data (if privacy is off); a child can let a parent manage it</li>
                             <li>• Children can only view their own data</li>
                             <li>• Privacy mode hides all account and transaction data from parents</li>
                         </ul>
