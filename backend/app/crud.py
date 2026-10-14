@@ -76,9 +76,23 @@ def delete_user(db: Session, user_id: str):
         {models.Transaction.member_id: None}, synchronize_session=False
     )
 
+    db.query(models.Share).filter((models.Share.owner_id == user_id) | (models.Share.grantee_id == user_id)).delete(
+        synchronize_session=False
+    )
+
     db.delete(db_user)
     db.commit()
     return db_user
+
+
+def set_share(db: Session, owner: models.User, grantee_id: str, level: str):
+    db.query(models.Share).filter(models.Share.owner_id == owner.id, models.Share.grantee_id == grantee_id).delete(
+        synchronize_session=False
+    )
+    # No row means "none" for a parent's finances but "view" for a child's, so a child's NONE is stored
+    if level != "NONE" or owner.role == models.UserRole.CHILD:
+        db.add(models.Share(owner_id=owner.id, grantee_id=grantee_id, level=level))
+    db.commit()
 
 
 # Account CRUD
@@ -226,10 +240,6 @@ def delete_transaction(db: Session, db_transaction: models.Transaction):
 # Budget CRUD
 def get_budgets(db: Session, user_id: str):
     return db.query(models.Budget).filter(models.Budget.user_id == user_id).all()
-
-
-def get_budgets_for_users(db: Session, user_ids: list[str]):
-    return db.query(models.Budget).filter(models.Budget.user_id.in_(user_ids)).all()
 
 
 def create_budget(db: Session, budget: schemas.BudgetCreate, user_id: str):

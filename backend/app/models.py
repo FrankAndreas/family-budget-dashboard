@@ -22,6 +22,13 @@ class CategoryType(str, enum.Enum):
     EXPENSE = "EXPENSE"
 
 
+class ShareLevel(str, enum.Enum):
+    # NONE is only stored for children, whose finances parents may view by default
+    NONE = "NONE"
+    VIEW = "VIEW"
+    EDIT = "EDIT"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -92,3 +99,14 @@ class Budget(Base):
 
     user = relationship("User", back_populates="budgets")
     category = relationship("Category")
+
+
+class Share(Base):
+    """Someone shares their own finances with a parent: read only (VIEW) or managing them (EDIT)."""
+
+    __tablename__ = "shares"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    owner_id = Column(String, ForeignKey("users.id"))
+    grantee_id = Column(String, ForeignKey("users.id"))
+    level = Column(Enum(ShareLevel))

@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field, StringConstraints, field_validator
 from typing import Annotated, Optional, Literal
 from datetime import datetime, timezone
-from .models import UserRole, AccountType, CategoryType
+from .models import UserRole, AccountType, CategoryType, ShareLevel
 
 # PINs are exactly 4 digits (same rule as the family-chore app)
 Pin = Annotated[str, Field(pattern=r"^\d{4}$")]
@@ -68,7 +68,8 @@ class AccountBase(BaseModel):
 
 
 class AccountCreate(AccountBase):
-    pass
+    # Set to create the account for someone who shared their finances with EDIT
+    user_id: Optional[str] = None
 
 
 class AccountUpdate(BaseModel):
@@ -163,6 +164,8 @@ class BudgetBase(BaseModel):
 class BudgetCreate(BudgetBase):
     limit: float = Field(gt=0)
     period: Literal["MONTHLY", "YEARLY"] = "MONTHLY"
+    # Set to create the budget for someone who shared their finances with EDIT
+    user_id: Optional[str] = None
 
 
 class BudgetUpdate(BaseModel):
@@ -173,6 +176,20 @@ class BudgetUpdate(BaseModel):
 class Budget(BudgetBase):
     id: str
     user_id: str
+
+    class Config:
+        from_attributes = True
+
+
+# Share Schemas
+class ShareSet(BaseModel):
+    level: Literal["NONE", "VIEW", "EDIT"]
+
+
+class Share(BaseModel):
+    owner_id: str
+    grantee_id: str
+    level: ShareLevel
 
     class Config:
         from_attributes = True
