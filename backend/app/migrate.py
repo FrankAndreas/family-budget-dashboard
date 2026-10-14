@@ -10,6 +10,7 @@ NEW_COLUMNS = {
         "split_id": "VARCHAR REFERENCES splits(id)",
         "split_shares": "JSON",
         "asset_id": "VARCHAR REFERENCES assets(id)",
+        "reference": "VARCHAR",
     },
 }
 

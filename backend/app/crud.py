@@ -188,7 +188,7 @@ def signed_amount(amount: float, category: models.Category) -> float:
 
 
 def create_transaction(
-    db: Session, transaction: schemas.TransactionCreate, category: models.Category, split_shares=None
+    db: Session, transaction: schemas.TransactionCreate, category: models.Category, split_shares=None, commit=True
 ):
     amount = signed_amount(transaction.amount, category)
     db_transaction = models.Transaction(
@@ -200,6 +200,7 @@ def create_transaction(
         split_id=transaction.split_id,
         split_shares=split_shares,
         asset_id=transaction.asset_id,
+        reference=transaction.reference,
         date=to_naive_utc(transaction.date) if transaction.date else datetime.utcnow(),
     )
     db.add(db_transaction)
@@ -209,6 +210,10 @@ def create_transaction(
     if account:
         account.balance = to_cents(account.balance + amount)
 
+    # Without commit (bulk import) the caller commits all rows at once
+    if not commit:
+        db.flush()
+        return db_transaction
     db.commit()
     db.refresh(db_transaction)
     return db_transaction

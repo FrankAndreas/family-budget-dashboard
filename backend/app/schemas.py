@@ -113,6 +113,7 @@ class TransactionBase(BaseModel):
     member_id: Optional[str] = None
     split_id: Optional[str] = None
     asset_id: Optional[str] = None
+    reference: Optional[str] = Field(default=None, max_length=200)
 
 
 def _reject_zero(value: Optional[float]) -> Optional[float]:
