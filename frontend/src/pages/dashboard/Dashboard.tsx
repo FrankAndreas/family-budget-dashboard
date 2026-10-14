@@ -229,6 +229,8 @@ export default function Dashboard() {
     const isExpense = (categoryId: string) => expenseCategories.some(c => c.id === categoryId);
     const isTransfer = (transaction: Transaction) =>
         categories.find(c => c.id === transaction.category_id)?.type === 'TRANSFER';
+    const isSettleUp = (transaction: Transaction) =>
+        categories.find(c => c.id === transaction.category_id)?.name === 'Settle up';
     const isParent = user?.role === 'PARENT';
     // Shared costs: a parent's expense divided with a split
     const canShare = isParent && !!selectedAccountObj && isParentAccount(selectedAccountObj) && splits.length > 0
@@ -576,7 +578,7 @@ export default function Dashboard() {
                                                 <p className={`text-xl font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                                     {transaction.amount >= 0 ? '+' : ''} ${transaction.amount.toFixed(2)}
                                                 </p>
-                                                {canEditSelected && !isTransfer(transaction) && (<>
+                                                {canEditSelected && !isTransfer(transaction) && (
                                                 <button
                                                     onClick={() => handleEditTransaction(transaction)}
                                                     className="text-slate-500 hover:text-blue-400 transition-colors"
@@ -585,6 +587,9 @@ export default function Dashboard() {
                                                 >
                                                     ✎
                                                 </button>
+                                                )}
+                                                {/* Settle up is undone in the Common tab; imported transfers can be deleted here */}
+                                                {canEditSelected && !isSettleUp(transaction) && (
                                                 <button
                                                     onClick={() => handleDeleteTransaction(transaction)}
                                                     className="text-slate-500 hover:text-red-400 transition-colors"
@@ -593,7 +598,7 @@ export default function Dashboard() {
                                                 >
                                                     ✕
                                                 </button>
-                                                </>)}
+                                                )}
                                             </div>
                                         </div>
                                     ))
