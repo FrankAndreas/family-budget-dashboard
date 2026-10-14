@@ -2,6 +2,8 @@ import { useState } from 'react';
 import api, { errorMessage, fetchAllTransactions } from '../api';
 import { useAuth } from '../AuthContext';
 import type { FamilyUser } from '../family';
+import { downloadBlob } from '../download';
+import ImportTransactions from './ImportTransactions';
 
 interface ExportAccount {
     id: string;
@@ -27,6 +29,7 @@ interface ExportTransaction {
     description?: string | null;
     date: string;
     member_id?: string | null;
+    reference?: string | null;
     account_name?: string;
 }
 
@@ -35,23 +38,11 @@ interface Status {
     text: string;
 }
 
-// Quote a CSV field so commas, quotes and line breaks in names don't break the columns
-const csvField = (value: string) => `"${value.replace(/"/g, '""')}"`;
-
-const download = (content: string, type: string, extension: string) => {
-    const blob = new Blob([content], { type });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `budget-export-${new Date().toISOString().split('T')[0]}.${extension}`;
-    a.click();
-    URL.revokeObjectURL(url);
-};
+const today = () => new Date().toISOString().split('T')[0];
 
 export default function DataManager() {
     const { user, refreshUser } = useAuth();
     const [importing, setImporting] = useState(false);
-    const [exportFormat, setExportFormat] = useState('json');
     const [privacyEnabled, setPrivacyEnabled] = useState(user?.privacy_enabled || false);
     const [savingPrivacy, setSavingPrivacy] = useState(false);
     const [status, setStatus] = useState<Status | null>(null);
@@ -83,39 +74,30 @@ export default function DataManager() {
                 }
             }
 
-            if (exportFormat === 'json') {
-                const exportData = {
-                    exported_at: new Date().toISOString(),
-                    accounts,
-                    categories,
-                    budgets: budgetsRes.data,
-                    transactions: allTransactions,
-                    // Needed to restore which child a household expense was for
-                    family: family.map(({ id, username, role, has_allowance }) => ({ id, username, role, has_allowance }))
-                };
-                download(JSON.stringify(exportData, null, 2), 'application/json', 'json');
-            } else {
-                const nameOf = (id: string | null | undefined, list: { id: string; name?: string; username?: string }[]) => {
-                    const item = list.find(x => x.id === id);
-                    return item?.name ?? item?.username ?? '';
-                };
-                const csvLines = [
-                    'Date,Account,Category,Description,Amount,Type,For',
-                    ...allTransactions.map(t => [
-                        t.date,
-                        csvField(t.account_name ?? ''),
-                        csvField(nameOf(t.category_id, categories) || 'Unknown'),
-                        csvField(t.description ?? ''),
-                        Math.abs(t.amount),
-                        t.amount >= 0 ? 'Income' : 'Expense',
-                        csvField(nameOf(t.member_id, family))
-                    ].join(','))
-                ];
-                download(csvLines.join('\n'), 'text/csv', 'csv');
-            }
+            const exportData = {
+                exported_at: new Date().toISOString(),
+                accounts,
+                categories,
+                budgets: budgetsRes.data,
+                transactions: allTransactions,
+                // Needed to restore which child a household expense was for
+                family: family.map(({ id, username, role, has_allowance }) => ({ id, username, role, has_allowance }))
+            };
+            downloadBlob(new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' }), `budget-export-${today()}.json`);
             setStatus({ kind: 'success', text: `Exported ${allTransactions.length} transactions.` });
         } catch (error) {
             console.error('Failed to export data', error);
+            setStatus({ kind: 'error', text: errorMessage(error, 'Failed to export data') });
+        }
+    };
+
+    const handleAnalysisExport = async () => {
+        try {
+            const res = await api.get('/api/v1/export/analysis.zip', { responseType: 'blob' });
+            downloadBlob(res.data, `budget-analysis-${today()}.zip`);
+            setStatus({ kind: 'success', text: 'Exported the data for analysis.' });
+        } catch (error) {
+            console.error('Failed to export data for analysis', error);
             setStatus({ kind: 'error', text: errorMessage(error, 'Failed to export data') });
         }
     };
@@ -211,7 +193,8 @@ export default function DataManager() {
                         description: transaction.description,
                         date: transaction.date,
                         // An unknown child just loses the tag; the expense itself is still imported
-                        member_id: (transaction.member_id && memberMap.get(transaction.member_id)) || null
+                        member_id: (transaction.member_id && memberMap.get(transaction.member_id)) || null,
+                        reference: transaction.reference ?? null
                     });
                     imported++;
                 } catch {
@@ -271,32 +254,32 @@ export default function DataManager() {
             <div className="mb-8">
                 <h3 className="text-lg font-semibold mb-4">Export Data</h3>
                 <p className="text-slate-400 mb-4">
-                    Download all your budget data including accounts, transactions, and budgets.
+                    <strong>For analysis:</strong> a ZIP of CSV files (transactions, shared costs, investments, bills, ...) with a
+                    README explaining every column, for pandas, Jupyter or a local AI.
+                    <br />
+                    <strong>Backup:</strong> your accounts, budgets and transactions as JSON, to restore below.
                 </p>
-                <div className="flex gap-4 items-center">
-                    <select
-                        value={exportFormat}
-                        onChange={(e) => setExportFormat(e.target.value)}
-                        className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                    >
-                        <option value="json">JSON Format</option>
-                        <option value="csv">CSV Format</option>
-                    </select>
+                <div className="flex flex-wrap gap-4 items-center">
+                    <button onClick={handleAnalysisExport} className="btn-primary">
+                        📊 Export for analysis (.zip)
+                    </button>
                     <button onClick={handleExport} className="btn-primary">
-                        📥 Export Data
+                        📥 Backup (JSON)
                     </button>
                 </div>
             </div>
 
-            {/* Import Section */}
+            <ImportTransactions />
+
+            {/* Restore Section */}
             <div className="mb-8">
-                <h3 className="text-lg font-semibold mb-4">Import Data</h3>
+                <h3 className="text-lg font-semibold mb-4">Restore Backup</h3>
                 <p className="text-slate-400 mb-4">
-                    Import budget data from a previously exported JSON file.
+                    Restore accounts, budgets and transactions from a JSON backup made above.
                 </p>
                 <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg mb-4">
                     <p className="text-yellow-400 text-sm">
-                        ⚠️ Warning: Importing will add new accounts and transactions. Duplicate data may be created if you import the same file multiple times.
+                        ⚠️ Warning: Restoring adds new accounts and transactions. Restoring the same backup twice creates everything twice.
                     </p>
                 </div>
                 <input
