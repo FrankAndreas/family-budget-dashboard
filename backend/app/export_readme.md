@@ -43,14 +43,15 @@ other family members share with them, and (for parents) the common budget, inves
 import pandas as pd
 
 t = pd.read_csv("transactions.csv", parse_dates=["date"])
+# t holds every account you can see; for only your own: t = t[t.owner == "{user}"]
 
 # Spending per month and category, without settle-up transfers
-spending = t[t.category_type == "EXPENSE"].assign(month=t.date.dt.to_period("M"))
+spending = t[t.category_type == "EXPENSE"].assign(month=t.date.dt.strftime("%Y-%m"))
 print(spending.pivot_table(index="month", columns="category", values="amount", aggfunc="sum").abs())
 
 # Each parent's share of the shared expenses per month
 s = pd.read_csv("shared_expense_shares.csv", parse_dates=["date"])
-print(s.assign(month=s.date.dt.to_period("M")).groupby(["month", "member"]).share.sum().unstack())
+print(s.assign(month=s.date.dt.strftime("%Y-%m")).groupby(["month", "member"]).share.sum().unstack())
 
 # Investments due for replacement within the next two years
 i = pd.read_csv("investments.csv", parse_dates=["replacement_due"])
