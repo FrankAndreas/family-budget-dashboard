@@ -19,13 +19,27 @@ from sqlalchemy.orm import Session
 from . import auth, crud, database, models, privacy, schemas
 from .api import check_asset, check_member_tag, check_shared, is_dependent
 from .common_api import visible_owner
+from .seed import SETTLE_UP
 
 router = APIRouter()
 
 MAX_BYTES = 1024 * 1024
 MAX_ROWS = 1000
 MAX_TEXT = 200
-FIELDS = ("date", "account", "owner", "category", "amount", "description", "for", "shared", "item", "reference")
+FIELDS = (
+    "date",
+    "account",
+    "owner",
+    "category",
+    "amount",
+    "direction",
+    "description",
+    "for",
+    "shared",
+    "item",
+    "reference",
+)
+DIRECTIONS = {"in": 1, "out": -1}
 DATE_ONLY = re.compile(r"\d{4}-\d{2}-\d{2}")
 
 TEMPLATE = (
@@ -181,9 +195,21 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
         errors.append("category is required")
     elif not category:
         errors.append(f"Unknown category '{row['category']}'")
-    elif category.type == models.CategoryType.TRANSFER:
-        errors.append("Transfers can't be imported; use Settle up")
+    elif category.name == SETTLE_UP:
+        errors.append("Settle up can't be imported; use the Common tab")
         category = None
+
+    # A transfer has no income/expense type to take the sign from, so the row says which way the money went
+    is_transfer = category is not None and category.type == models.CategoryType.TRANSFER
+    direction = key(row["direction"])
+    if is_transfer and not direction:
+        errors.append("direction is required for a transfer (in or out)")
+    elif direction and direction not in DIRECTIONS:
+        errors.append(f"direction '{row['direction']}': use in or out")
+    elif direction and category is not None and not is_transfer:
+        errors.append("direction is only for transfers")
+    if is_transfer and (row["for"] or row["shared"] or row["item"]):
+        errors.append("A transfer can't be for a child, shared or linked to an investment")
 
     member = split = asset = None
     if row["for"]:
@@ -215,6 +241,8 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
         out["status"] = "error"
         return out
 
+    if is_transfer:
+        amount = amount * DIRECTIONS[direction]
     signed = crud.signed_amount(amount, category)
     reference = row["reference"] or None
     if reference and reference in lookups.references:
@@ -301,6 +329,7 @@ def import_schema(
 ):
     """A JSON Schema of the import file for this user, listing the names that are valid for them."""
     lookups = Lookups(db, current_user)
+    importable = [c for c in lookups.categories.values() if c.name != SETTLE_UP]
 
     def unique(names) -> list[str]:
         return sorted(set(names), key=str.casefold)
@@ -323,10 +352,15 @@ def import_schema(
         },
         "category": {
             "type": "string",
-            "enum": unique(c.name for c in lookups.categories.values() if c.type != models.CategoryType.TRANSFER),
-            "description": "Category; it decides whether this is income or an expense",
+            "enum": unique(c.name for c in importable),
+            "description": "Category; it decides whether this is income or an expense (Transfer: see direction)",
         },
         "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Amount in CHF, always positive"},
+        "direction": {
+            "type": "string",
+            "enum": ["in", "out"],
+            "description": "Only for the category Transfer: out = money leaves this account, in = it arrives",
+        },
         "description": {"type": "string", "maxLength": MAX_TEXT, "description": "Shop or what was bought"},
         "for": {
             "type": "string",
@@ -357,6 +391,8 @@ def import_schema(
         "type": "object",
         "required": ["transactions"],
         "additionalProperties": False,
+        # Lets a tool check that a credit doesn't land in an expense category
+        "x-category-types": {c.name: c.type.value for c in sorted(importable, key=lambda c: c.name.casefold())},
         "properties": {
             "transactions": {
                 "type": "array",

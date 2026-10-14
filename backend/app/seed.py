@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from . import auth, models
 
 SETTLE_UP = "Settle up"
+TRANSFER = "Transfer"
 
 DEFAULT_CATEGORIES = [
     # Income categories
@@ -26,8 +27,13 @@ DEFAULT_CATEGORIES = [
     {"name": "Clothing", "type": "EXPENSE", "icon": "👕"},
     {"name": "Dining Out", "type": "EXPENSE", "icon": "🍽️"},
     {"name": "Other Expense", "type": "EXPENSE", "icon": "💸"},
+    # Fallbacks for imported bookings no rule recognised, and money paid back by others
+    {"name": "Unsorted", "type": "EXPENSE", "icon": "❓"},
+    {"name": "Reimbursements", "type": "INCOME", "icon": "↩️"},
     # Booked only by settling up in the common budget
     {"name": SETTLE_UP, "type": "TRANSFER", "icon": "🔁"},
+    # Money moved between the family's own accounts (imported); counts as neither income nor expense
+    {"name": TRANSFER, "type": "TRANSFER", "icon": "↔️"},
 ]
 
 
