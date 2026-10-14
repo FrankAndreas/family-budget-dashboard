@@ -6,6 +6,8 @@ import Analytics from '../../components/Analytics';
 import DataManager from '../../components/DataManager';
 import FamilyManager from '../../components/FamilyManager';
 import ShareSettings from '../../components/ShareSettings';
+import CommonBudget from '../../components/CommonBudget';
+import { useSplits } from '../../finance';
 import { useFamily } from '../../useFamily';
 import { accessTo, canWrite, dependents } from '../../family';
 
@@ -24,6 +26,7 @@ interface Transaction {
     date: string;
     category_id: string;
     member_id?: string | null;
+    split_id?: string | null;
 }
 
 interface Category {
@@ -36,6 +39,7 @@ interface Category {
 export default function Dashboard() {
     const { user, logout } = useAuth();
     const { users, shares } = useFamily();
+    const { splits } = useSplits();
     const [activeTab, setActiveTab] = useState('overview');
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -49,7 +53,8 @@ export default function Dashboard() {
         amount: '',
         description: '',
         category_id: '',
-        member_id: ''
+        member_id: '',
+        split_id: ''
     });
     // Set while the transaction form is editing an existing transaction instead of adding one
     const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
@@ -145,7 +150,7 @@ export default function Dashboard() {
     };
 
     const closeTransactionForm = () => {
-        setNewTransaction({ amount: '', description: '', category_id: '', member_id: '' });
+        setNewTransaction({ amount: '', description: '', category_id: '', member_id: '', split_id: '' });
         setEditingTransactionId(null);
         setShowAddTransaction(false);
     };
@@ -155,7 +160,8 @@ export default function Dashboard() {
             amount: Math.abs(transaction.amount).toString(),
             description: transaction.description || '',
             category_id: transaction.category_id,
-            member_id: transaction.member_id || ''
+            member_id: transaction.member_id || '',
+            split_id: transaction.split_id || ''
         });
         setEditingTransactionId(transaction.id);
         setShowAddTransaction(true);
@@ -170,7 +176,8 @@ export default function Dashboard() {
             amount: parseFloat(newTransaction.amount),
             description: newTransaction.description,
             // null removes a tag when editing
-            member_id: newTransaction.member_id || null
+            member_id: newTransaction.member_id || null,
+            split_id: newTransaction.split_id || null
         };
         try {
             if (editingTransactionId) {
@@ -212,10 +219,18 @@ export default function Dashboard() {
     const canEditSelected = !!selectedAccountObj && canEdit(selectedAccountObj);
     const incomeCategories = categories.filter(c => c.type === 'INCOME');
     const expenseCategories = categories.filter(c => c.type === 'EXPENSE');
+    const isExpense = (categoryId: string) => expenseCategories.some(c => c.id === categoryId);
+    const isTransfer = (transaction: Transaction) =>
+        categories.find(c => c.id === transaction.category_id)?.type === 'TRANSFER';
+    const isParent = user?.role === 'PARENT';
+    // Shared costs: a parent's expense divided with a split
+    const canShare = isParent && !!selectedAccountObj && isParentAccount(selectedAccountObj) && splits.length > 0
+        && isExpense(newTransaction.category_id);
 
     const tabs = [
         { id: 'overview', label: '📊 Overview' },
         { id: 'budgets', label: '💰 Budgets' },
+        ...(isParent ? [{ id: 'common', label: '🤝 Common' }] : []),
         { id: 'analytics', label: '📈 Analytics' },
         { id: 'settings', label: '⚙️ Settings' }
     ];
@@ -246,12 +261,12 @@ export default function Dashboard() {
 
             {/* Tab Navigation */}
             <div className="glass-card p-2 mb-6">
-                <div className="flex gap-2">
+                <div className="flex gap-2 overflow-x-auto">
                     {tabs.map(tab => (
                         <button
                             key={tab.id}
                             onClick={() => setActiveTab(tab.id)}
-                            className={`flex-1 py-3 px-4 rounded-lg font-semibold transition-all ${activeTab === tab.id
+                            className={`flex-1 whitespace-nowrap py-3 px-4 rounded-lg font-semibold transition-all ${activeTab === tab.id
                                 ? 'bg-blue-500/20 text-blue-400 border-2 border-blue-400'
                                 : 'text-slate-400 hover:bg-slate-800/30'
                                 }`}
@@ -440,7 +455,12 @@ export default function Dashboard() {
                                     />
                                     <select
                                         value={newTransaction.category_id}
-                                        onChange={(e) => setNewTransaction({ ...newTransaction, category_id: e.target.value })}
+                                        onChange={(e) => setNewTransaction({
+                                            ...newTransaction,
+                                            category_id: e.target.value,
+                                            // Only expenses can be shared
+                                            split_id: isExpense(e.target.value) ? newTransaction.split_id : ''
+                                        })}
                                         className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
                                         required
                                     >
@@ -466,6 +486,19 @@ export default function Dashboard() {
                                             <option value="">For: no child</option>
                                             {children.map(child => (
                                                 <option key={child.id} value={child.id}>For: {child.username}</option>
+                                            ))}
+                                        </select>
+                                    )}
+                                    {canShare && (
+                                        <select
+                                            value={newTransaction.split_id}
+                                            onChange={(e) => setNewTransaction({ ...newTransaction, split_id: e.target.value })}
+                                            className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                                            aria-label="Shared"
+                                        >
+                                            <option value="">Shared: not shared</option>
+                                            {splits.map(split => (
+                                                <option key={split.id} value={split.id}>Shared: {split.name}</option>
                                             ))}
                                         </select>
                                     )}
@@ -496,6 +529,11 @@ export default function Dashboard() {
                                                             for {memberName(transaction.member_id)}
                                                         </span>
                                                     )}
+                                                    {transaction.split_id && (
+                                                        <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300">
+                                                            shared
+                                                        </span>
+                                                    )}
                                                 </p>
                                                 <p className="text-sm text-slate-400">{new Date(transaction.date).toLocaleDateString()}</p>
                                             </div>
@@ -503,7 +541,7 @@ export default function Dashboard() {
                                                 <p className={`text-xl font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                                     {transaction.amount >= 0 ? '+' : ''} ${transaction.amount.toFixed(2)}
                                                 </p>
-                                                {canEditSelected && (<>
+                                                {canEditSelected && !isTransfer(transaction) && (<>
                                                 <button
                                                     onClick={() => handleEditTransaction(transaction)}
                                                     className="text-slate-500 hover:text-blue-400 transition-colors"
@@ -532,6 +570,7 @@ export default function Dashboard() {
             )}
 
             {activeTab === 'budgets' && <BudgetManager />}
+            {activeTab === 'common' && <CommonBudget />}
             {activeTab === 'analytics' && <Analytics />}
             {activeTab === 'settings' && (
                 <div className="space-y-6">
