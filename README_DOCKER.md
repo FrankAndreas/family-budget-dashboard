@@ -64,7 +64,10 @@ sudo docker logs budget-backend 2>&1 | grep "INITIAL PIN"
 ```
 
 Log in as `Admin` with that PIN, change it, and rename Admin in **Settings → Family**. Add the
-other family members there too: there is no sign-up page. To choose the first PIN yourself, set
+other family members there too: there is no sign-up page. Each parent's money is private; to let the other parent
+see or manage it, use **Settings → Sharing** (children with own allowance can share with their parents
+the same way). Costs the parents share, investments and yearly bills are in the **Common**,
+**Investments** and **Yearly bills** tabs. To choose the first PIN yourself, set
 `INITIAL_ADMIN_PIN=1234` in `.env` before the first start.
 
 If you lose the PIN before anyone uses the app, stop it, delete `data/budget.db` and start again.
