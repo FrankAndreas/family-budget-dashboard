@@ -58,3 +58,9 @@ def add_transaction(client, headers, account_id, category, amount, **extra):
 def create_split(client, headers, name, shares):
     """shares: {user_id: percent}"""
     return client.post(f"{BASE_URL}/splits", json={"name": name, "shares": shares}, headers=headers)
+
+
+def balance_of(client, headers, uid):
+    """What the parent is owed (positive) or owes (negative) in the common budget."""
+    rows = client.get(f"{BASE_URL}/common/balance", headers=headers).json()
+    return next((row["amount"] for row in rows if row["user_id"] == uid), 0.0)

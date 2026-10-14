@@ -179,7 +179,9 @@ def signed_amount(amount: float, category: models.Category) -> float:
     return to_cents(-abs(amount))
 
 
-def create_transaction(db: Session, transaction: schemas.TransactionCreate, category: models.Category):
+def create_transaction(
+    db: Session, transaction: schemas.TransactionCreate, category: models.Category, split_shares=None
+):
     amount = signed_amount(transaction.amount, category)
     db_transaction = models.Transaction(
         account_id=transaction.account_id,
@@ -187,6 +189,9 @@ def create_transaction(db: Session, transaction: schemas.TransactionCreate, cate
         amount=amount,
         description=transaction.description,
         member_id=transaction.member_id,
+        split_id=transaction.split_id,
+        split_shares=split_shares,
+        asset_id=transaction.asset_id,
         date=to_naive_utc(transaction.date) if transaction.date else datetime.utcnow(),
     )
     db.add(db_transaction)
@@ -202,7 +207,11 @@ def create_transaction(db: Session, transaction: schemas.TransactionCreate, cate
 
 
 def update_transaction(
-    db: Session, db_transaction: models.Transaction, update: schemas.TransactionUpdate, category: models.Category
+    db: Session,
+    db_transaction: models.Transaction,
+    update: schemas.TransactionUpdate,
+    category: models.Category,
+    split_shares=None,
 ):
     old_amount = db_transaction.amount
     update_data = update.model_dump(exclude_unset=True)
@@ -214,6 +223,7 @@ def update_transaction(
 
     for key, value in update_data.items():
         setattr(db_transaction, key, value)
+    db_transaction.split_shares = split_shares
 
     account = get_account(db, db_transaction.account_id)
     if account:

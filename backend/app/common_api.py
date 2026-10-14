@@ -5,7 +5,7 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
-from . import auth, database, models, privacy, schemas
+from . import auth, database, finance, models, privacy, schemas
 
 router = APIRouter()
 
@@ -76,3 +76,49 @@ def delete_split(split_id: str, _: models.User = Depends(require_parent), db: Se
     db.delete(db_split)
     db.commit()
     return db_split
+
+
+def shared_transactions(db: Session) -> list[tuple[models.Transaction, str]]:
+    """Every shared expense with its payer's user id, newest first."""
+    rows = (
+        db.query(models.Transaction, models.Account.user_id)
+        .join(models.Account, models.Transaction.account_id == models.Account.id)
+        .filter(models.Transaction.split_id.isnot(None))
+        .order_by(models.Transaction.date.desc())
+        .all()
+    )
+    return [(transaction, payer) for transaction, payer in rows]
+
+
+def shared_expense_rows(db: Session) -> list[tuple[str, float, dict[str, int]]]:
+    return [(payer, abs(t.amount), t.split_shares or {}) for t, payer in shared_transactions(db)]
+
+
+def settlement_rows(db: Session) -> list[tuple[str, str, float]]:
+    # Settlements are added in the next task; until then there are none
+    return []
+
+
+@router.get("/common/balance", response_model=List[schemas.Balance])
+def common_balance(_: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
+    net = finance.balances(shared_expense_rows(db), settlement_rows(db))
+    for parent in privacy.active_parents(db):
+        net.setdefault(parent.id, 0.0)
+    return [{"user_id": user_id, "amount": amount} for user_id, amount in net.items()]
+
+
+@router.get("/common/expenses", response_model=List[schemas.SharedExpense])
+def common_expenses(_: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
+    split_names = {s.id: s.name for s in db.query(models.Split)}
+    return [
+        {
+            "transaction_id": t.id,
+            "date": t.date,
+            "description": t.description,
+            "amount": abs(t.amount),
+            "payer_id": payer,
+            "split_name": split_names.get(t.split_id),
+            "shares": finance.split_amount(abs(t.amount), t.split_shares or {}),
+        }
+        for t, payer in shared_transactions(db)
+    ]

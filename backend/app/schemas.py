@@ -111,6 +111,8 @@ class TransactionBase(BaseModel):
     description: Optional[str] = None
     date: Optional[datetime] = None
     member_id: Optional[str] = None
+    split_id: Optional[str] = None
+    asset_id: Optional[str] = None
 
 
 def _reject_zero(value: Optional[float]) -> Optional[float]:
@@ -134,6 +136,9 @@ class TransactionUpdate(BaseModel):
     category_id: Optional[str] = None
     # Send null to remove the tag
     member_id: Optional[str] = None
+    # Send null to stop sharing / unlink
+    split_id: Optional[str] = None
+    asset_id: Optional[str] = None
 
     _amount_not_zero = field_validator("amount")(_reject_zero)
 
@@ -143,6 +148,7 @@ class Transaction(TransactionBase):
     account_id: str
     category_id: str
     date: datetime
+    split_shares: Optional[dict[str, int]] = None
 
     # Dates are stored as naive UTC; mark them as UTC so clients convert to local time correctly
     @field_validator("date")
@@ -209,3 +215,19 @@ class Split(SplitIn):
 
     class Config:
         from_attributes = True
+
+
+class Balance(BaseModel):
+    user_id: str
+    # Positive: the other parents owe this parent; negative: this parent owes
+    amount: float
+
+
+class SharedExpense(BaseModel):
+    transaction_id: str
+    date: datetime
+    description: Optional[str]
+    amount: float
+    payer_id: str
+    split_name: Optional[str]
+    shares: dict[str, float]

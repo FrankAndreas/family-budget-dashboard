@@ -5,7 +5,12 @@ from sqlalchemy.engine import Engine
 # first release are listed here and added to existing databases on startup.
 NEW_COLUMNS = {
     "users": {"has_allowance": "BOOLEAN NOT NULL DEFAULT 1"},
-    "transactions": {"member_id": "VARCHAR REFERENCES users(id)"},
+    "transactions": {
+        "member_id": "VARCHAR REFERENCES users(id)",
+        "split_id": "VARCHAR REFERENCES splits(id)",
+        "split_shares": "JSON",
+        "asset_id": "VARCHAR REFERENCES assets(id)",
+    },
 }
 
 

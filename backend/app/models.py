@@ -1,6 +1,6 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Boolean, Float, ForeignKey, DateTime, Enum, JSON
+from sqlalchemy import Column, String, Boolean, Float, ForeignKey, DateTime, Date, Enum, Integer, JSON
 from sqlalchemy.orm import relationship
 from .database import Base
 from datetime import datetime
@@ -85,6 +85,12 @@ class Transaction(Base):
     description = Column(String, nullable=True)
     # Optional tag: the dependent child this household expense was for
     member_id = Column(String, ForeignKey("users.id"), nullable=True)
+    # Shared with the other parent(s): the split used, and its percents at booking time
+    # (so editing the split later doesn't change past balances)
+    split_id = Column(String, ForeignKey("splits.id"), nullable=True)
+    split_shares = Column(JSON, nullable=True)
+    # The investment this follow-up cost belongs to (repair, service, ...)
+    asset_id = Column(String, ForeignKey("assets.id"), nullable=True)
 
     account = relationship("Account", back_populates="transactions")
     category = relationship("Category")
@@ -123,3 +129,19 @@ class Split(Base):
     name = Column(String, unique=True)
     # {parent user id: whole percent}; sums to 100
     shares = Column(JSON, default={})
+
+
+class Asset(Base):
+    """A long-lived purchase (TV, fridge, car, bike): planned for replacement, with its follow-up costs."""
+
+    __tablename__ = "assets"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String)
+    price = Column(Float)
+    purchase_date = Column(Date)
+    lifespan_years = Column(Integer)
+    # Exactly one of: a family member (personal) or a split (common)
+    owner_id = Column(String, ForeignKey("users.id"), nullable=True)
+    split_id = Column(String, ForeignKey("splits.id"), nullable=True)
+    notes = Column(String, nullable=True)

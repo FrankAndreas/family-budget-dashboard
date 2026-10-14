@@ -25,6 +25,21 @@ def check_member_tag(db: Session, member_id: Optional[str], account_id: str) -> 
         raise HTTPException(status_code=400, detail="Only household expenses can be tagged with a child")
 
 
+def check_shared(db: Session, split_id: Optional[str], account_id: str, category) -> Optional[dict]:
+    """A shared expense: an expense on a parent's account with an existing split. Returns the percents to keep."""
+    if split_id is None:
+        return None
+    if category.type != models.CategoryType.EXPENSE:
+        raise HTTPException(status_code=400, detail="Only expenses can be shared")
+    owner = db.query(models.User).filter(models.User.id == crud.get_account(db, account_id).user_id).first()
+    if not owner or owner.role != "PARENT":
+        raise HTTPException(status_code=400, detail="Only a parent's expenses can be shared")
+    split = db.query(models.Split).filter(models.Split.id == split_id).first()
+    if not split:
+        raise HTTPException(status_code=400, detail="Split not found")
+    return dict(split.shares)
+
+
 # Auth Routes
 @router.post("/users", response_model=schemas.User)
 def create_user(
@@ -265,7 +280,8 @@ def create_transaction(
     if category.type == models.CategoryType.TRANSFER:
         raise HTTPException(status_code=400, detail="Transfers are booked with Settle up")
     check_member_tag(db, transaction.member_id, transaction.account_id)
-    return crud.create_transaction(db, transaction=transaction, category=category)
+    split_shares = check_shared(db, transaction.split_id, transaction.account_id, category)
+    return crud.create_transaction(db, transaction=transaction, category=category, split_shares=split_shares)
 
 
 @router.put("/transactions/{transaction_id}", response_model=schemas.Transaction)
@@ -286,7 +302,16 @@ def update_transaction(
     if category.type == models.CategoryType.TRANSFER:
         raise HTTPException(status_code=400, detail="Transfers are booked with Settle up")
     check_member_tag(db, transaction_update.member_id, db_transaction.account_id)
-    return crud.update_transaction(db, db_transaction, transaction_update, category)
+    # The split's percents are read again only when the split itself changes; otherwise the
+    # booked copy stays (also when that split was deleted since)
+    fields = transaction_update.model_fields_set
+    if "split_id" in fields and transaction_update.split_id != db_transaction.split_id:
+        split_shares = check_shared(db, transaction_update.split_id, db_transaction.account_id, category)
+    else:
+        split_shares = db_transaction.split_shares
+        if db_transaction.split_id and category.type != models.CategoryType.EXPENSE:
+            raise HTTPException(status_code=400, detail="Only expenses can be shared")
+    return crud.update_transaction(db, db_transaction, transaction_update, category, split_shares=split_shares)
 
 
 @router.delete("/transactions/{transaction_id}", response_model=schemas.Transaction)
