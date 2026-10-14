@@ -91,6 +91,8 @@ class Transaction(Base):
     split_shares = Column(JSON, nullable=True)
     # The investment this follow-up cost belongs to (repair, service, ...)
     asset_id = Column(String, ForeignKey("assets.id"), nullable=True)
+    # The importing tool's own ID for the source (receipt file, hash, ...); recognises repeated imports
+    reference = Column(String, nullable=True)
 
     account = relationship("Account", back_populates="transactions")
     category = relationship("Category")

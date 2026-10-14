@@ -1,0 +1,381 @@
+"""Bulk import of transactions from a CSV or JSON file written by an external tool (e.g. a receipt reader).
+
+Rows name accounts, categories, children, splits and investments; they are resolved like the form would,
+checked row by row for a preview, and booked together or not at all.
+"""
+
+import csv
+import io
+import json
+import math
+import re
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi.responses import Response
+from sqlalchemy.orm import Session
+
+from . import auth, crud, database, models, privacy, schemas
+from .api import check_asset, check_member_tag, check_shared, is_dependent
+from .common_api import visible_owner
+
+router = APIRouter()
+
+MAX_BYTES = 1024 * 1024
+MAX_ROWS = 1000
+MAX_TEXT = 200
+FIELDS = ("date", "account", "owner", "category", "amount", "description", "for", "shared", "item", "reference")
+DATE_ONLY = re.compile(r"\d{4}-\d{2}-\d{2}")
+
+TEMPLATE = (
+    "date,account,category,amount,description,for,shared,item,reference\n"
+    "2026-10-12,Bank,Groceries,84.30,Migros,,Equal 50/50,,receipt-0001.jpg\n"
+    "2026-10-13,Bank,Healthcare,120.00,Dentist,Timmy,,,receipt-0002.jpg\n"
+)
+
+
+def key(name: str) -> str:
+    """Names match ignoring upper/lower case and surrounding spaces."""
+    return name.strip().casefold()
+
+
+def text_value(value) -> str:
+    if value is None:
+        return ""
+    return str(value).strip()
+
+
+def parse_file(filename: str, content: bytes) -> list[dict[str, str]]:
+    """The file's rows as {field: text}, each with its "_line" (CSV line, or position in the JSON list)."""
+    if len(content) > MAX_BYTES:
+        raise HTTPException(status_code=400, detail="The file is larger than 1 MB")
+    try:
+        text = content.decode("utf-8-sig")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="The file must be UTF-8 text (CSV or JSON)")
+
+    if filename.lower().endswith(".json") or text.lstrip().startswith(("{", "[")):
+        rows = parse_json(text)
+    else:
+        rows = parse_csv(text)
+    if not rows:
+        raise HTTPException(status_code=400, detail="The file has no transactions")
+    if len(rows) > MAX_ROWS:
+        raise HTTPException(status_code=400, detail=f"At most {MAX_ROWS} transactions per file")
+    return rows
+
+
+def parse_json(text: str) -> list[dict[str, str]]:
+    try:
+        data = json.loads(text)
+    except json.JSONDecodeError as error:
+        raise HTTPException(status_code=400, detail=f"Not valid JSON: {error.msg} (line {error.lineno})")
+    items = data.get("transactions") if isinstance(data, dict) else data
+    if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
+        raise HTTPException(status_code=400, detail='JSON must look like {"transactions": [{...}, ...]}')
+    return [
+        {"_line": index, **{field: text_value(item.get(field)) for field in FIELDS}}
+        for index, item in enumerate(items, start=1)
+    ]
+
+
+def parse_csv(text: str) -> list[dict[str, str]]:
+    header = text.split("\n", 1)[0]
+    delimiter = ";" if header.count(";") > header.count(",") else ","
+    reader = csv.reader(io.StringIO(text), delimiter=delimiter)
+    try:
+        columns = [key(column) for column in next(reader)]
+    except StopIteration:
+        return []
+    rows = []
+    for values in reader:
+        if not any(value.strip() for value in values):
+            continue
+        row = dict(zip(columns, values))
+        rows.append({"_line": reader.line_num, **{field: text_value(row.get(field)) for field in FIELDS}})
+    return rows
+
+
+def parse_date(value: str) -> datetime:
+    # A date alone is booked at noon UTC, so it stays on that day in Switzerland
+    if DATE_ONLY.fullmatch(value):
+        return datetime.fromisoformat(value).replace(hour=12)
+    return crud.to_naive_utc(datetime.fromisoformat(value))
+
+
+class Lookups:
+    """Everything a row's names can refer to, for the current user."""
+
+    def __init__(self, db: Session, user: models.User):
+        users = db.query(models.User).all()
+        self.names = {u.id: u.username for u in users}
+        levels = {u.id: privacy.access_level(db, user, u) for u in users}
+        accounts = db.query(models.Account).all()
+        self.user_id = user.id
+        self.writable = [a for a in accounts if privacy.can_write(levels.get(a.user_id))]
+        self.view_only = [a for a in accounts if levels.get(a.user_id) == "VIEW"]
+        self.categories = {key(c.name): c for c in db.query(models.Category)}
+        self.children = {key(u.username): u for u in users if is_dependent(u) and levels.get(u.id)}
+        is_parent = user.role == models.UserRole.PARENT
+        self.splits = {key(s.name): s for s in db.query(models.Split)} if is_parent else {}
+        self.assets = {
+            key(a.name): a
+            for a in db.query(models.Asset)
+            if is_parent and visible_owner(db, user, a.owner_id, a.split_id)
+        }
+
+        visible = [a.id for a in accounts if levels.get(a.user_id)]
+        existing = db.query(models.Transaction).filter(models.Transaction.account_id.in_(visible)).all()
+        self.references = {t.reference: t for t in existing if t.reference}
+        self.bookings = {(t.account_id, t.date.date(), t.amount, t.category_id): t for t in existing}
+
+    def account(self, name: str, owner: str) -> tuple[Optional[models.Account], Optional[str]]:
+        matches = [a for a in self.writable if key(a.name or "") == key(name)]
+        if owner:
+            matches = [a for a in matches if key(self.names.get(a.user_id, "")) == key(owner)]
+        elif len(matches) > 1:
+            matches = [a for a in matches if a.user_id == self.user_id] or matches
+        if len(matches) == 1:
+            return matches[0], None
+        if len(matches) > 1:
+            return None, f"Several accounts are called '{name}'; add the owner"
+        if any(key(a.name or "") == key(name) for a in self.view_only):
+            return None, f"'{name}' is shared with you for viewing only"
+        return None, f"Unknown account '{name}'" + (f" of {owner}" if owner else "")
+
+
+def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen: dict[str, int]) -> dict:
+    errors: list[str] = []
+    row = {field: raw[field] for field in FIELDS}
+    out = {"line": raw["_line"], "status": "ok", "errors": errors, "duplicate_of": None, "note": None, **row}
+
+    date = None
+    if not row["date"]:
+        errors.append("date is required")
+    else:
+        try:
+            date = parse_date(row["date"])
+        except ValueError:
+            errors.append(f"date '{row['date']}': use YYYY-MM-DD")
+
+    amount = None
+    try:
+        amount = float(row["amount"])
+    except ValueError:
+        errors.append(
+            "amount is required" if not row["amount"] else f"amount '{row['amount']}': use a number like 84.30"
+        )
+    if amount is not None and (not math.isfinite(amount) or amount <= 0):
+        errors.append("amount must be more than 0")
+        amount = None
+
+    account, problem = (
+        (None, "account is required") if not row["account"] else lookups.account(row["account"], row["owner"])
+    )
+    if problem:
+        errors.append(problem)
+
+    category = lookups.categories.get(key(row["category"]))
+    if not row["category"]:
+        errors.append("category is required")
+    elif not category:
+        errors.append(f"Unknown category '{row['category']}'")
+    elif category.type == models.CategoryType.TRANSFER:
+        errors.append("Transfers can't be imported; use Settle up")
+        category = None
+
+    member = split = asset = None
+    if row["for"]:
+        member = lookups.children.get(key(row["for"]))
+        if not member:
+            errors.append(f"Unknown child '{row['for']}' (only children without own allowance)")
+    if row["shared"]:
+        split = lookups.splits.get(key(row["shared"]))
+        if not split:
+            errors.append(f"Unknown split '{row['shared']}'")
+    if row["item"]:
+        asset = lookups.assets.get(key(row["item"]))
+        if not asset:
+            errors.append(f"Unknown investment '{row['item']}'")
+    for field in ("description", "reference"):
+        if len(row[field]) > MAX_TEXT:
+            errors.append(f"{field}: at most {MAX_TEXT} characters")
+
+    split_shares = None
+    if account and category:
+        try:
+            check_member_tag(db, member.id if member else None, account.id)
+            split_shares = check_shared(db, split.id if split else None, account.id, category)
+            check_asset(db, user, asset.id if asset else None)
+        except HTTPException as error:
+            errors.append(str(error.detail))
+
+    if errors:
+        out["status"] = "error"
+        return out
+
+    signed = crud.signed_amount(amount, category)
+    reference = row["reference"] or None
+    if reference and reference in lookups.references:
+        twin = lookups.references[reference]
+        out.update(status="duplicate", duplicate_of=twin.id, note=f"Same reference, booked on {twin.date.date()}")
+    elif reference and reference in seen:
+        out.update(status="duplicate", note=f"Same reference as line {seen[reference]}")
+    elif (account.id, date.date(), signed, category.id) in lookups.bookings:
+        twin = lookups.bookings[(account.id, date.date(), signed, category.id)]
+        out.update(status="duplicate", duplicate_of=twin.id, note=f"Already booked on {twin.date.date()}")
+    if reference:
+        seen.setdefault(reference, raw["_line"])
+
+    out["_create"] = (
+        schemas.TransactionCreate(
+            account_id=account.id,
+            category_id=category.id,
+            amount=amount,
+            description=row["description"] or None,
+            date=date,
+            member_id=member.id if member else None,
+            split_id=split.id if split else None,
+            asset_id=asset.id if asset else None,
+            reference=reference,
+        ),
+        category,
+        split_shares,
+    )
+    return out
+
+
+def check_file(db: Session, user: models.User, file: UploadFile) -> list[dict]:
+    raw_rows = parse_file(file.filename or "", file.file.read(MAX_BYTES + 1))
+    lookups = Lookups(db, user)
+    seen: dict[str, int] = {}
+    return [check_row(db, user, lookups, raw, seen) for raw in raw_rows]
+
+
+def public(rows: list[dict]) -> dict:
+    counts = {status: sum(r["status"] == status for r in rows) for status in ("ok", "duplicate", "error")}
+    return {
+        "rows": [{k: v for k, v in row.items() if not k.startswith("_")} for row in rows],
+        "ok": counts["ok"],
+        "duplicates": counts["duplicate"],
+        "errors": counts["error"],
+    }
+
+
+@router.post("/import/preview")
+def preview_import(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    return public(check_file(db, current_user, file))
+
+
+@router.post("/import")
+def run_import(
+    file: UploadFile = File(...),
+    include_duplicates: str = Form(""),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    rows = check_file(db, current_user, file)
+    if any(row["status"] == "error" for row in rows):
+        raise HTTPException(status_code=400, detail={"message": "The file has errors", **public(rows)})
+    included = {int(line) for line in include_duplicates.split(",") if line.strip().isdigit()}
+    chosen = [row for row in rows if row["status"] == "ok" or row["line"] in included]
+    try:
+        for row in chosen:
+            transaction, category, split_shares = row["_create"]
+            crud.create_transaction(db, transaction, category, split_shares=split_shares, commit=False)
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
+    return {"imported": len(chosen), "skipped": len(rows) - len(chosen)}
+
+
+@router.get("/import/schema")
+def import_schema(
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+):
+    """A JSON Schema of the import file for this user, listing the names that are valid for them."""
+    lookups = Lookups(db, current_user)
+
+    def unique(names) -> list[str]:
+        return sorted(set(names), key=str.casefold)
+
+    properties: dict[str, dict] = {
+        "date": {
+            "type": "string",
+            "pattern": r"^\d{4}-\d{2}-\d{2}(T.+)?$",
+            "description": "Date of the purchase, YYYY-MM-DD (or ISO 8601 with time and offset)",
+        },
+        "account": {
+            "type": "string",
+            "enum": unique(a.name for a in lookups.writable),
+            "description": "The account the money left (or arrived on)",
+        },
+        "owner": {
+            "type": "string",
+            "enum": unique(lookups.names[a.user_id] for a in lookups.writable),
+            "description": "Whose account it is; only needed when two accounts have the same name",
+        },
+        "category": {
+            "type": "string",
+            "enum": unique(c.name for c in lookups.categories.values() if c.type != models.CategoryType.TRANSFER),
+            "description": "Category; it decides whether this is income or an expense",
+        },
+        "amount": {"type": "number", "exclusiveMinimum": 0, "description": "Amount in CHF, always positive"},
+        "description": {"type": "string", "maxLength": MAX_TEXT, "description": "Shop or what was bought"},
+        "for": {
+            "type": "string",
+            "enum": unique(u.username for u in lookups.children.values()),
+            "description": "The child this expense was for",
+        },
+        "shared": {
+            "type": "string",
+            "enum": unique(s.name for s in lookups.splits.values()),
+            "description": "Split, if the cost is shared between the parents",
+        },
+        "item": {
+            "type": "string",
+            "enum": unique(a.name for a in lookups.assets.values()),
+            "description": "The investment this expense belongs to (purchase, repair, service)",
+        },
+        "reference": {
+            "type": "string",
+            "maxLength": MAX_TEXT,
+            "description": "Your own ID for the source, e.g. the receipt's file name; recognises repeated imports",
+        },
+    }
+    # A field with nothing to choose from can't be used at all
+    properties = {name: prop for name, prop in properties.items() if prop.get("enum", True)}
+    return {
+        "$schema": "https://json-schema.org/draft/2020-12/schema",
+        "title": "Family Budget transaction import",
+        "type": "object",
+        "required": ["transactions"],
+        "additionalProperties": False,
+        "properties": {
+            "transactions": {
+                "type": "array",
+                "maxItems": MAX_ROWS,
+                "items": {
+                    "type": "object",
+                    "required": ["date", "account", "category", "amount"],
+                    "additionalProperties": False,
+                    "properties": properties,
+                },
+            }
+        },
+    }
+
+
+@router.get("/import/template.csv")
+def import_template(_: models.User = Depends(auth.get_current_user_from_token)):
+    return Response(
+        TEMPLATE,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="budget-import-template.csv"'},
+    )

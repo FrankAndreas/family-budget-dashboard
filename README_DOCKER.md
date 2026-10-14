@@ -75,6 +75,11 @@ If you lose the PIN before anyone uses the app, stop it, delete `data/budget.db`
 
 `data/` holds everything worth keeping: the database `budget.db`.
 
+**Settings → Data Management** exports your data as a ZIP of CSV files for analysis (pandas, Jupyter, a
+local LLM; a README inside explains the columns) and imports transactions in bulk from a CSV or JSON file,
+for example one written by a receipt-reading tool. The import format is described in
+[`docs/import-format.md`](docs/import-format.md).
+
 ## Updates
 New images are published as `latest` whenever a change is pushed to `main` and CI passes.
 Set up [Automatic Updates](#automatic-updates) to install them nightly, or update by hand:

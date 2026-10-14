@@ -613,7 +613,7 @@ export default function Dashboard() {
                 <div className="space-y-6">
                     {user?.role === 'PARENT' && <FamilyManager />}
                     <ShareSettings />
-                    <DataManager />
+                    <DataManager onDataChanged={refresh} />
                 </div>
             )}
         </div>
