@@ -2,7 +2,7 @@
 
 from sqlalchemy import create_engine, inspect, text
 
-from helpers import BASE_URL, add_transaction, category_id, create_account, register
+from helpers import add_transaction, category_id, create_account, register
 
 
 class TestReference:
@@ -11,7 +11,9 @@ class TestReference:
         account = create_account(client, headers)
         t = add_transaction(client, headers, account, category_id(client, "Groceries"), 5, reference="r1").json()
         assert t["reference"] == "r1"
-        assert add_transaction(client, headers, account, category_id(client, "Groceries"), 5).json()["reference"] is None
+        assert (
+            add_transaction(client, headers, account, category_id(client, "Groceries"), 5).json()["reference"] is None
+        )
 
     def test_reference_length_limited(self, client):
         headers = register(client, "p")
