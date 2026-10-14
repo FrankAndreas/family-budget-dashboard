@@ -22,7 +22,9 @@ income = "Other Income"
 # ignoring case. Card purchases are matched as "Einkauf <merchant>" (date, time and card number removed).
 #
 #   action = "book" (default)  needs category; optional item, for, shared, description
-#   action = "transfer"        money to/from another of the family's accounts (category Transfer)
+#   action = "transfer"        money to/from another of the family's accounts (category Transfer). The other
+#                              account's side comes from its own export; for an account without one (a clearing
+#                              account like Migros) add to_account (and to_owner if needed) to book that side too.
 #   action = "ignore"          not written at all (e.g. a credit card bill when the card has its own export)
 #   sign   = "debit"/"credit"  only lines going out / coming in. A booking rule matches only lines that fit its
 #                              category anyway: an expense category only debits, an income category only credits.
@@ -30,11 +32,13 @@ income = "Other Income"
 [[bank.rules]]
 match = '^Einkauf (TWINT )?MIGROS\b'
 action = "transfer"               # spending is booked from the receipts, on the Migros account
+to_account = "Migros"             # it has no export of its own, so book its side here
 description = "Migros"
 
 [[bank.rules]]
 match = '^LSV Viseca'
 action = "transfer"               # credit card bill; the purchases come from the card's own export
+# to_account = "Viseca"           # only if the card's export doesn't contain the payment itself
 
 [[bank.rules]]
 match = '^Übertrag (von|auf) '

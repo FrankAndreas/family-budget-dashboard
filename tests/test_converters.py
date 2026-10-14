@@ -1,6 +1,7 @@
 """The bank and Migros converters in tools/converters (all data invented)."""
 
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -67,7 +68,7 @@ BANK_CONFIG = {
         "accounts": {"CH93 0076 2011 6238 5295 7": {"account": "Household", "owner": "Alex"}},
         "fallback": {"expense": "Unsorted", "income": "Other Income"},
         "rules": [
-            {"match": r"^Einkauf .*\bMIGROS\b", "action": "transfer", "description": "Migros"},
+            {"match": r"^Einkauf .*\bMIGROS\b", "action": "transfer", "description": "Migros", "to_account": "Migros"},
             {"match": "^LSV Viseca", "action": "transfer"},
             {"match": "^Übertrag (von|auf) ", "action": "transfer"},
             {"match": r"^Dauerauftrag Alex und Sam", "action": "transfer"},
@@ -96,7 +97,11 @@ def schema():
 
 
 def by_ref(result):
-    return {row["description"]: row for row in result.rows}
+    """Rows by description; the first one wins (a transfer's other side follows it)."""
+    rows: dict = {}
+    for row in result.rows:
+        rows.setdefault(row["description"], row)
+    return rows
 
 
 class TestBank:
@@ -125,6 +130,16 @@ class TestBank:
         assert rows["LSV Viseca Payment Services SA"]["category"] == "Transfer"
         assert result.transfers == 4
 
+    def test_transfer_to_a_clearing_account_books_both_sides(self, result):
+        migros = [row for row in result.rows if row["description"] == "Migros"]
+        assert [(r["account"], r["direction"], r["amount"]) for r in migros] == [
+            ("Household", "out", "84.30"),
+            ("Migros", "in", "84.30"),
+        ]
+        assert migros[0]["owner"] == "Alex" and migros[1]["owner"] == ""
+        assert migros[1]["reference"] == migros[0]["reference"] + ":to"
+        assert migros[1]["date"] == migros[0]["date"]
+
     def test_booked(self, result):
         rows = by_ref(result)
         assert rows["Gutschrift ACME AG"]["category"] == "Salary"
@@ -144,7 +159,7 @@ class TestBank:
     def test_reference(self, tmp_path, schema, result):
         refs = [row["reference"] for row in result.rows]
         assert len(set(refs)) == len(refs)
-        assert all(ref.startswith("bank:") and len(ref) == 21 for ref in refs)
+        assert all(re.fullmatch(r"bank:[0-9a-f]{16}(:to)?", ref) for ref in refs)
         again = bank.convert(bank_rows(EXPORT, tmp_path=tmp_path), BANK_CONFIG, schema)
         assert [row["reference"] for row in again.rows] == refs
 
@@ -235,6 +250,15 @@ class TestBankConfig:
             ({"match": "x", "category": "Groceries", "item": "Boat"}, "rule 1: unknown item 'Boat'"),
             ({"match": "x", "category": "Groceries", "for": "Nobody"}, "rule 1: unknown child 'Nobody'"),
             ({"match": "x", "action": "move"}, "rule 1: action must be book, transfer or ignore"),
+            ({"match": "x", "action": "transfer", "to_account": "Nope"}, "rule 1: unknown account 'Nope'"),
+            (
+                {"match": "x", "category": "Groceries", "to_account": "Migros"},
+                "rule 1: to_account is only for transfers",
+            ),
+            (
+                {"match": "x", "action": "transfer", "to_account": "Household"},
+                "rule 1: to_account is the account of the export",
+            ),
         ],
     )
     def test_rule_problems(self, tmp_path, schema, rule, problem):
@@ -414,3 +438,59 @@ class TestCommandLine:
         lines = (tmp_path / "kassenbeleg-import.csv").read_text(encoding="utf-8").splitlines()
         assert lines[0] == ",".join(common.OUTPUT_FIELDS)
         assert "2026-09-01: 34.25" in capsys.readouterr().out
+
+
+class TestEndToEnd:
+    def test_bank_and_migros_balance_out(self, tmp_path, client):
+        """Bank and receipts imported: the bank account matches the bank, the Migros account is at 0."""
+        from helpers import BASE_URL, balance, create_account, register
+
+        headers = register(client, "Alex")
+        household, clearing = create_account(client, headers, "Household"), create_account(client, headers, "Migros")
+        schema_path = tmp_path / "schema.json"
+        schema_path.write_text(json.dumps(client.get(f"{BASE_URL}/import/schema", headers=headers).json()))
+        config_path = tmp_path / "converter.toml"
+        config_path.write_text(
+            f'[bank.accounts]\n"{IBAN}" = {{ account = "Household" }}\n'
+            '[[bank.rules]]\nmatch = \'^Einkauf (TWINT )?MIGROS\'\naction = "transfer"\nto_account = "Migros"\n'
+            "[[bank.rules]]\nmatch = '^Gutschrift ACME'\ncategory = \"Salary\"\n"
+            '[migros]\naccount = "Migros"\n',
+            encoding="utf-8",
+        )
+        export = tmp_path / "bank.csv"
+        export.write_text(
+            "\n".join(
+                [
+                    HEADER,
+                    line("2026-09-01", "Gutschrift ACME AG", 100.0, 100.0),
+                    line("2026-09-01", "Einkauf TWINT MIGROS MM BEISPIEL", -34.25, 65.75),
+                    line(
+                        "2026-09-02",
+                        "Einkauf MIGROS MM BEISPIEL 02.09.2026, 09:00, Debit Mastercard-Nr. 1x",
+                        -1.7,
+                        64.05,
+                    ),
+                    line("2026-09-03", "Zahlung Telco AG", -14.05, 50.0),
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        receipts = tmp_path / "kassenbeleg.csv"
+        receipts.write_text("\n".join([MIGROS_HEADER, *RECEIPTS]) + "\n", encoding="utf-8")
+        args = ["--config", str(config_path), "--schema", str(schema_path)]
+        assert bank.main([str(export), *args]) == 0
+        assert migros.main([str(receipts), *args]) == 0
+
+        for output in ("bank-import.csv", "kassenbeleg-import.csv"):
+            content = (tmp_path / output).read_bytes()
+            response = client.post(f"{BASE_URL}/import", files={"file": (output, content)}, headers=headers)
+            assert response.status_code == 200, response.text
+        assert balance(client, headers, household) == 50.0
+        assert balance(client, headers, clearing) == 0.0
+
+        # Converting and importing the bank export again books nothing new
+        assert bank.main([str(export), *args]) == 0
+        content = (tmp_path / "bank-import.csv").read_bytes()
+        response = client.post(f"{BASE_URL}/import", files={"file": ("again.csv", content)}, headers=headers)
+        assert response.json() == {"imported": 0, "skipped": 6}

@@ -45,6 +45,9 @@ class Rule:
     item: str = ""
     member: str = ""
     shared: str = ""
+    # A transfer to an account without its own export (e.g. a clearing account): the converter books its side too
+    to_account: str = ""
+    to_owner: str = ""
 
     def applies(self, debit: bool) -> bool:
         return not self.sign or self.sign == ("debit" if debit else "credit")
@@ -65,7 +68,7 @@ def compact_iban(value: str) -> str:
     return value.replace(" ", "").upper()
 
 
-def read_rules(config: dict, schema: common.Schema, problems: list[str]) -> list[Rule]:
+def read_rules(config: dict, schema: common.Schema, problems: list[str], exported: set[str]) -> list[Rule]:
     rules = []
     for number, raw in enumerate(config.get("rules", []), start=1):
         where = f"rule {number}"
@@ -78,6 +81,13 @@ def read_rules(config: dict, schema: common.Schema, problems: list[str]) -> list
         if sign not in ("", "debit", "credit"):
             problems.append(f"{where}: sign must be debit or credit")
         rule = Rule(number, match, action, sign=sign, description=str(raw.get("description") or ""))
+        if raw.get("to_account") and action != "transfer":
+            problems.append(f"{where}: to_account is only for transfers")
+        elif raw.get("to_account"):
+            rule.to_account = schema.name("account", raw["to_account"], where, problems)
+            rule.to_owner = schema.name("owner", raw.get("to_owner"), where, problems)
+            if key(rule.to_account) in exported:
+                problems.append(f"{where}: to_account is the account of the export")
         if action == "book":
             if not raw.get("category"):
                 problems.append(f"{where}: category is required (or action = transfer / ignore)")
@@ -151,7 +161,7 @@ def convert(rows: list[dict], config: dict, schema: common.Schema) -> Result:
         fallback.get("income", "Other Income"), "[bank.fallback] income", problems, "INCOME"
     )
     transfer = schema.category(TRANSFER, "Transfer", problems)
-    rules = read_rules(config, schema, problems)
+    rules = read_rules(config, schema, problems, {key(account) for account, _ in accounts.values()})
     if problems:
         raise Problems(problems)
 
@@ -200,6 +210,14 @@ def convert(rows: list[dict], config: dict, schema: common.Schema) -> Result:
         if rule and rule.action == "transfer":
             values.update(category=transfer, direction="out" if debit else "in")
             result.transfers += 1
+            if rule.to_account:
+                result.rows.append(common.output_row(**values))
+                values.update(
+                    account=rule.to_account,
+                    owner=rule.to_owner,
+                    direction="in" if debit else "out",
+                    reference=values["reference"] + ":to",
+                )
         elif rule:
             values.update(category=rule.category, item=rule.item, shared=rule.shared, **{"for": rule.member})
             result.booked += 1

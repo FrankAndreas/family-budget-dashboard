@@ -133,7 +133,14 @@ action = "ignore"
 
 Rule fields: `match` (required), `action` = `book` (default), `transfer` or `ignore`, `category` (required
 for `book`), optional `sign` = `debit` or `credit` (the rule applies only to that direction), `description`
-(replaces the cleaned text), `item`, `for`, `shared`.
+(replaces the cleaned text), `item`, `for`, `shared`. A booking rule only matches lines whose sign fits its
+category (expense → debit, income → credit).
+
+Transfer rules may name `to_account` (and `to_owner`): the account on the other side when it has no export
+of its own, such as the Migros clearing account. The converter then writes that side too (opposite
+direction, same date and amount, reference `<reference>:to`). Without `to_account` the other side is
+expected from that account's own export. (Added during implementation: the end-to-end check showed the
+Migros account would otherwise never receive the money.)
 
 ### Per line
 

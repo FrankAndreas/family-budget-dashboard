@@ -39,8 +39,11 @@ converter lists every problem and writes nothing.
   category only debits, an income category only credits.
 - **Card purchases** (`Einkauf <merchant> 06.09.2026, 08:45, Debit Mastercard-Nr. …`) get the purchase date
   and time from the text, and the merchant as their description. Card numbers and IBANs are never written.
-- **Transfers** (`action = "transfer"`) are booked with the category Transfer and `direction` `out`/`in`. The
-  other account's side comes from that account's own export: the joint account, or the Migros receipts.
+- **Transfers** (`action = "transfer"`) are booked with the category Transfer and `direction` `out`/`in`.
+  - If the other account has its own export (the joint account, the savings account), its side comes from
+    that export.
+  - If it has none (the Migros clearing account), add `to_account = "Migros"` to the rule. The converter then
+    writes the other side too, with the reference `<reference>:to`.
 - **Unrecognised lines** get `[bank.fallback]` (default: Unsorted / Other Income) and are listed in the report.
   Correct them in the app after importing, and add a rule so the next export is recognised.
 - **References** are a hash of the line, so importing an overlapping export again only shows duplicates.
