@@ -262,6 +262,8 @@ def create_transaction(
     category = crud.get_category(db, transaction.category_id)
     if not category:
         raise HTTPException(status_code=400, detail="Category not found")
+    if category.type == models.CategoryType.TRANSFER:
+        raise HTTPException(status_code=400, detail="Transfers are booked with Settle up")
     check_member_tag(db, transaction.member_id, transaction.account_id)
     return crud.create_transaction(db, transaction=transaction, category=category)
 
@@ -281,6 +283,8 @@ def update_transaction(
     category = crud.get_category(db, transaction_update.category_id or db_transaction.category_id)
     if not category:
         raise HTTPException(status_code=400, detail="Category not found")
+    if category.type == models.CategoryType.TRANSFER:
+        raise HTTPException(status_code=400, detail="Transfers are booked with Settle up")
     check_member_tag(db, transaction_update.member_id, db_transaction.account_id)
     return crud.update_transaction(db, db_transaction, transaction_update, category)
 

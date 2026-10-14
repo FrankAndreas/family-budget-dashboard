@@ -20,6 +20,8 @@ class AccountType(str, enum.Enum):
 class CategoryType(str, enum.Enum):
     INCOME = "INCOME"
     EXPENSE = "EXPENSE"
+    # Money moved between parents (settling up): changes balances, counts in neither income nor expenses
+    TRANSFER = "TRANSFER"
 
 
 class ShareLevel(str, enum.Enum):

@@ -171,7 +171,9 @@ def get_category(db: Session, category_id: str):
 
 
 def signed_amount(amount: float, category: models.Category) -> float:
-    # The category decides the sign: income is positive, expenses are negative
+    # The category decides the sign: income is positive, expenses are negative; transfers keep their sign
+    if category.type == models.CategoryType.TRANSFER:
+        return to_cents(amount)
     if category.type == models.CategoryType.INCOME:
         return to_cents(abs(amount))
     return to_cents(-abs(amount))
