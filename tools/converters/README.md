@@ -11,8 +11,8 @@ or on the NAS.
 
 ## Set-up (once)
 
-1. In the app, create the accounts the converters book on, e.g. "Household" and "Migros" (a plain account
-   that works as a clearing account).
+1. In the app (Accounts tab), create the accounts the converters book on, e.g. "Household" (type Bank) and
+   "Migros" (type **Clearing**: money comes in by transfer from the bank and goes out by receipts).
 2. In **Settings → Data Management**, download **JSON Schema (for AI tools)** and save it, e.g. as
    `import-schema.json`. Download it again after adding accounts, children or investments.
 3. Copy `converter.example.toml` to `converter.toml`, then fill in your IBANs, account names and rules.
@@ -61,7 +61,8 @@ converter lists every problem and writes nothing.
 - A receipt and category with a negative total (returns, deposit) is booked as income in `refund_category`.
   A total of 0 is skipped.
 - **Totals per day** in the report can be compared with the Migros transfers from the bank. The Migros
-  account should end near 0. A lost receipt, a purchase without the Cumulus card, or a gift card leaves a
-  difference: book it by hand on the Migros account (e.g. Groceries for a missing receipt).
+  account should end each month at 0. A lost receipt, a purchase without the Cumulus card, or a gift card leaves a
+  difference. The **month check** on the Accounts tab lists those months and books each gap with one click: as
+  "Unknown expense", or as "Other Income" when the receipts exceed the money.
 - Changing the rules and converting the same receipts again gives them new references. The preview then
   doesn't recognise them as already imported, so convert only new receipts.

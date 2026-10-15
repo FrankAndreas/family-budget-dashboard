@@ -85,7 +85,7 @@ action = "ignore"
 # ---------------------------------------------------------------- migros.py
 
 [migros]
-account = "Migros"                    # clearing account: transfers in from the bank, receipts out
+account = "Migros"                    # account of type Clearing: transfers in from the bank, receipts out
 default_category = "Groceries"
 refund_category = "Reimbursements"    # a receipt whose total is negative (returns, deposit)
 

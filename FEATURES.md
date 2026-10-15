@@ -39,7 +39,7 @@
   - Budget exceeded alerts
 
 - ✅ **Dashboard**
-  - Tabbed interface (Overview, Budgets, Analytics, Settings)
+  - Tabbed interface (Accounts, Budgets, Analytics, Settings)
   - Summary cards (Total Balance, Accounts, Transactions)
   - Quick actions (Add Account, Add Transaction)
   - Real-time data updates

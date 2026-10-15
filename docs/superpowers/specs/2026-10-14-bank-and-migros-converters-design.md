@@ -22,8 +22,8 @@ Decided with the user:
   side of it is a Transfer to the Migros account. The same applies later to the credit card: the Viseca
   bill is a Transfer, and the card's own export books the purchases.
 - Clearing accounts (Migros, credit card) won't always end at 0: lost receipts, purchases without the
-  Cumulus card, or untracked gift cards and bonuses. For now the difference is booked by hand; a
-  "Reconcile" helper is issue #21.
+  Cumulus card, or untracked gift cards and bonuses. The difference is booked by the month check
+  (`2026-10-15-budget-and-accounts-design.md`), which replaced issue #21.
 - Unrecognised lines get a fallback category and are corrected in the app after the import. A category
   dropdown in the preview is issue #16.
 - TWINT credits ("money back from a person") are booked as income, "Reimbursements". The match with the
@@ -207,7 +207,7 @@ for = "Kim"
 ### Totals check
 
 The report lists the receipt totals per day, so they can be compared with the Migros transfers from the
-bank converter. The Migros account in the app should end near 0; the rest is reconciled by hand (#21).
+bank converter. The Migros account in the app should end near 0; the rest is booked by the month check.
 
 ## Error handling
 
@@ -237,7 +237,7 @@ bank converter. The Migros account in the app should end near 0; the rest is rec
 ## Out of scope
 
 - The Viseca card converter (needs a sample of its export first).
-- A category dropdown and "remember as rule" in the import preview (#16), reconcile (#21).
+- A category dropdown and "remember as rule" in the import preview (#16).
 - Booking a transfer by hand in the app, creating categories in the app (no UI for it yet).
 - Matching Migros receipts to bank payments automatically.
 - Running the converters on a schedule on the NAS.
