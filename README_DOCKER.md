@@ -93,7 +93,8 @@ sudo docker-compose up -d
 
 `scripts/nas-update.sh` checks for new app images and installs them. Run nightly by DSM's Task Scheduler, it:
 
-1. pulls the backend and frontend images and stops if nothing is new,
+1. pulls the backend and frontend images; if nothing is new, it only checks that the backend is healthy
+   and stops,
 2. backs up the database to `db-backups/` with SQLite's online-backup API (a consistent copy while
    the app runs; keeps at least the newest 5 and everything from the last 7 days),
 3. keeps the running images tagged as `:previous` for [rolling back](#rolling-back-an-update),
@@ -179,7 +180,8 @@ frontend with `npm run dev` in `frontend/` (http://localhost:3000) instead.
 
 | Symptom | Cause | Fix |
 |---|---|---|
-| `budget-backend` restarts with *unable to open database file* | `data/` doesn't belong to `PUID:PGID` | `sudo chown -R <PUID>:<PGID> data`, then `sudo docker-compose up -d` |
+| `budget-backend` restarts with *unable to open database file* | `data/` doesn't belong to `PUID:PGID`, or the IDs in `.env` are wrong (check with `id <user>`) | Fix `.env` or `sudo chown -R <PUID>:<PGID> data`, then `sudo docker-compose up -d` and `sudo docker restart budget-frontend` |
 | Everyone is logged out after each update | `SECRET_KEY` not set in `.env` | Add one (see [Installation](#installation), step 3) |
 | *Bind for 0.0.0.0:8081 failed: port is already allocated* | Another app uses the port | Set another `PORT` in `.env` |
+| Email from Task Scheduler: *up to date, but the backend is not healthy* | The backend keeps crashing without an update, e.g. after a change to `.env` (wrong `PUID`/`PGID`) | Check `logs/update.log`, fix the cause, then `sudo docker-compose up -d` and `sudo docker restart budget-frontend` |
 | Email from Task Scheduler: *backend not healthy* | A new version fails to start | Check `logs/update.log` (it ends with the backend's log), then [roll back](#rolling-back-an-update) |

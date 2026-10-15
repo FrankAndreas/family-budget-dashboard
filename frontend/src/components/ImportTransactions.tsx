@@ -13,6 +13,7 @@ interface PreviewRow {
     owner: string;
     category: string;
     amount: string;
+    direction: string;
     description: string;
     shared: string;
 }
@@ -193,7 +194,12 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                         <td className="p-2 whitespace-nowrap">{row.date}</td>
                                         <td className="p-2">{row.account}{row.owner && ` (${row.owner})`}</td>
                                         <td className="p-2">{row.category}{row.shared && <span className="text-slate-400"> · {row.shared}</span>}</td>
-                                        <td className="p-2 text-right whitespace-nowrap">{row.amount}</td>
+                                        <td className="p-2 text-right whitespace-nowrap">
+                                            {row.direction && (
+                                                <span className="mr-1 text-xs text-slate-400">{row.direction.trim().toLowerCase() === 'in' ? '→ in' : '← out'}</span>
+                                            )}
+                                            {row.amount}
+                                        </td>
                                         <td className="p-2">{row.description}</td>
                                         <td className={`p-2 ${STATUS_STYLE[row.status]}`}>
                                             {row.status === 'ok' && 'Ready'}

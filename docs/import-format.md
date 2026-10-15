@@ -13,8 +13,9 @@ The file is **CSV or JSON**, UTF-8, at most 1 MB and 1000 transactions.
 | `date` | yes | `2026-10-12`, or ISO 8601 with time and offset (`2026-10-12T08:30:00+02:00`). A date alone is booked at 12:00 UTC so it stays on that day. Without an offset the time is UTC. |
 | `account` | yes | Name of an account you can book on: your own, or one shared with you as "view and manage" |
 | `owner` | no | Name of the account's owner. Only needed when two of those accounts have the same name; without it your own account is used |
-| `category` | yes | Category name, e.g. `Groceries`. It decides whether the row is income or an expense. "Settle up" can't be imported |
+| `category` | yes | Category name, e.g. `Groceries`. It decides whether the row is income or an expense. `Transfer` moves money between your own accounts (see below). "Settle up" can't be imported |
 | `amount` | yes | Positive number with `.` as decimal point, e.g. `84.30` |
+| `direction` | for `Transfer` | `out` (money leaves this account) or `in` (money arrives). Only for the category `Transfer` |
 | `description` | no | e.g. the shop; at most 200 characters |
 | `for` | no | Name of a child without own allowance the expense was for (parents' accounts only) |
 | `shared` | no | Name of a split, e.g. `Equal 50/50`, if the parents share the cost (expenses on a parent's account only) |
@@ -50,6 +51,28 @@ Leave out fields you don't use. In the app, **JSON Schema (for AI tools)** downl
 format that lists the account, category, child, split and investment names valid for you. Tools that
 support structured output (for example Ollama's `format` or llama.cpp's `--json-schema`) can use it so the
 model can only produce a valid file. Download it again after adding accounts, splits or investments.
+
+## Transfers between your own accounts
+
+Money moved from one of the family's accounts to another (to the savings account, the joint account, a
+credit card or a clearing account such as "Migros") is booked with the category **Transfer** on both
+accounts: `out` on the account the money left, `in` on the one it arrived at. Each side usually comes from
+that account's own export. Transfers count as neither spending nor income, so the purchases made with the
+money aren't counted twice.
+
+```csv
+date,account,category,amount,direction,description,reference
+2026-09-01,Household,Transfer,84.30,out,Migros,bank:3f2a91c07d5e8b14
+2026-09-01,Migros,Transfer,84.30,in,From the household account,
+```
+
+A transfer can't be for a child, shared or linked to an investment. In the app, an imported transfer can be
+deleted (and its date and description changed through the API), but not edited into something else.
+
+## Converters
+
+`tools/converters/` contains converters for a bank account's CSV export and for the Migros receipt export;
+they write this format. See [their guide](../tools/converters/README.md).
 
 ## Duplicates
 

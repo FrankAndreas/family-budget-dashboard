@@ -21,7 +21,7 @@ from helpers import (
 
 class TestSetupAndAuth:
     def test_categories_seeded(self, client):
-        assert len(client.get(f"{BASE_URL}/categories").json()) == 16
+        assert len(client.get(f"{BASE_URL}/categories").json()) == 20
         # "Settle up" is only booked by settling up in the common budget
         headers = register(client, "p")
         account = create_account(client, headers)

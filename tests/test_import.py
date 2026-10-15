@@ -149,7 +149,7 @@ class TestValidation:
                 "amount",
                 "Unknown account",
                 "Unknown category",
-                "Transfers",
+                "Settle up",
                 "Unknown child",
                 "Unknown split",
                 "Unknown investment",

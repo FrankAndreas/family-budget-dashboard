@@ -9,6 +9,7 @@ import ShareSettings from '../../components/ShareSettings';
 import CommonBudget from '../../components/CommonBudget';
 import Investments from '../../components/Investments';
 import YearlyBills from '../../components/YearlyBills';
+import MonthCheck from '../../components/MonthCheck';
 import { useAssets, useSplits } from '../../finance';
 import { useFamily } from '../../useFamily';
 import { accessTo, canWrite, dependents } from '../../family';
@@ -229,6 +230,8 @@ export default function Dashboard() {
     const isExpense = (categoryId: string) => expenseCategories.some(c => c.id === categoryId);
     const isTransfer = (transaction: Transaction) =>
         categories.find(c => c.id === transaction.category_id)?.type === 'TRANSFER';
+    const isSettleUp = (transaction: Transaction) =>
+        categories.find(c => c.id === transaction.category_id)?.name === 'Settle up';
     const isParent = user?.role === 'PARENT';
     // Shared costs: a parent's expense divided with a split
     const canShare = isParent && !!selectedAccountObj && isParentAccount(selectedAccountObj) && splits.length > 0
@@ -238,7 +241,7 @@ export default function Dashboard() {
     const assetName = (id?: string | null) => assets.find(a => a.id === id)?.name;
 
     const tabs = [
-        { id: 'overview', label: '📊 Overview' },
+        { id: 'overview', label: '🏦 Accounts' },
         { id: 'budgets', label: '💰 Budgets' },
         ...(isParent ? [{ id: 'common', label: '🤝 Common' }, { id: 'investments', label: '📦 Investments' }, { id: 'bills', label: '🧾 Yearly bills' }] : []),
         { id: 'analytics', label: '📈 Analytics' },
@@ -342,6 +345,7 @@ export default function Dashboard() {
                                     <option value="BANK">Bank Account</option>
                                     <option value="CASH">Cash</option>
                                     <option value="SAVINGS">Savings</option>
+                                    <option value="CLEARING">Clearing (Migros, …)</option>
                                 </select>
                                 <button type="submit" className="btn-primary w-full">Create Account</button>
                             </form>
@@ -380,6 +384,7 @@ export default function Dashboard() {
                                                 <option value="BANK">Bank Account</option>
                                                 <option value="CASH">Cash</option>
                                                 <option value="SAVINGS">Savings</option>
+                                                <option value="CLEARING">Clearing (Migros, …)</option>
                                             </select>
                                             <div className="flex gap-2">
                                                 <button type="submit" className="btn-primary text-sm flex-1">Save</button>
@@ -428,6 +433,14 @@ export default function Dashboard() {
                             ))}
                         </div>
                     </div>
+
+                    {/* Clearing accounts (Migros, ...) should end every month at 0 */}
+                    <MonthCheck
+                        accounts={accounts.filter(a => a.type === 'CLEARING')}
+                        canBook={canEdit}
+                        version={dataVersion}
+                        onBooked={refresh}
+                    />
 
                     {/* Transactions Section */}
                     {selectedAccount && (
@@ -576,7 +589,7 @@ export default function Dashboard() {
                                                 <p className={`text-xl font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                                     {transaction.amount >= 0 ? '+' : ''} ${transaction.amount.toFixed(2)}
                                                 </p>
-                                                {canEditSelected && !isTransfer(transaction) && (<>
+                                                {canEditSelected && !isTransfer(transaction) && (
                                                 <button
                                                     onClick={() => handleEditTransaction(transaction)}
                                                     className="text-slate-500 hover:text-blue-400 transition-colors"
@@ -585,6 +598,9 @@ export default function Dashboard() {
                                                 >
                                                     ✎
                                                 </button>
+                                                )}
+                                                {/* Settle up is undone in the Common tab; imported transfers can be deleted here */}
+                                                {canEditSelected && !isSettleUp(transaction) && (
                                                 <button
                                                     onClick={() => handleDeleteTransaction(transaction)}
                                                     className="text-slate-500 hover:text-red-400 transition-colors"
@@ -593,7 +609,7 @@ export default function Dashboard() {
                                                 >
                                                     ✕
                                                 </button>
-                                                </>)}
+                                                )}
                                             </div>
                                         </div>
                                     ))

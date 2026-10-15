@@ -64,7 +64,7 @@ jobs:
       - name: Check code formatting (Black)
         run: |
           cd backend
-          black --check app/ || echo "::warning::Code formatting issues found. Run 'black app/' to fix."
+          black --check app/ ../tools/ || echo "::warning::Code formatting issues found. Run 'black app/' to fix."
       
       - name: Security check (Bandit)
         run: |

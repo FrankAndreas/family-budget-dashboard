@@ -3,7 +3,8 @@
 #
 # Pulls the app images (backend, frontend) and, only if a newer image was
 # published, backs up the SQLite database, recreates the app containers and waits
-# until the backend is healthy. The compose/.env configuration is never
+# until the backend is healthy. Without a new image it only checks that the
+# backend is healthy. The compose/.env configuration is never
 # changed by this script.
 #
 # Usage:   nas-update.sh [--force] [APP_DIR]
@@ -12,7 +13,8 @@
 #   --force  recreate the app containers even if no new image was pulled
 #            (e.g. after editing the compose file)
 #
-# Exit codes: 0 = up to date or updated successfully, 1 = failure.
+# Exit codes: 0 = up to date or updated successfully, 1 = failure (including a
+#             backend that isn't healthy).
 # See README_DOCKER.md ("Automatic Updates") for the Task Scheduler setup.
 
 set -uo pipefail
@@ -88,6 +90,19 @@ compose() { "${COMPOSE[@]}" "$@"; }
 container_of() { compose ps -a -q "$1" 2>/dev/null | head -n1; }
 running_container_of() { compose ps -q "$1" 2>/dev/null | head -n1; }
 
+# Wait up to $HEALTH_TIMEOUT seconds for the backend's Docker healthcheck;
+# leaves the last status in $status
+wait_healthy() {
+    local deadline=$(( $(date +%s) + HEALTH_TIMEOUT ))
+    status=""
+    while [ "$(date +%s)" -lt "$deadline" ]; do
+        status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$(container_of backend)" 2>/dev/null)
+        [ "$status" = "healthy" ] && return 0
+        sleep 10
+    done
+    return 1
+}
+
 # True if the service's container is missing or runs an older image than the local tag
 needs_update() {
     local service=$1 cid image running latest
@@ -108,6 +123,12 @@ for service in $APP_SERVICES; do
 done
 
 if [ -z "$changed" ] && [ "$FORCE" -eq 0 ]; then
+    # Nothing to install, but report a broken app (e.g. a backend crash-looping
+    # after a change to .env) instead of calling it up to date
+    if ! wait_healthy; then
+        compose logs --tail 50 backend >>"$LOG_FILE" 2>&1
+        fail "up to date, but the backend is not healthy (status: ${status:-unknown}); last logs in $LOG_FILE"
+    fi
     log "Up to date"
     exit 0
 fi
@@ -179,16 +200,7 @@ case "$changed" in
     *backend*) compose restart frontend >>"$LOG_FILE" 2>&1 || fail "restarting frontend failed" ;;
 esac
 
-# Wait for the backend's Docker healthcheck
-deadline=$(( $(date +%s) + HEALTH_TIMEOUT ))
-status=""
-while [ "$(date +%s)" -lt "$deadline" ]; do
-    cid=$(container_of backend)
-    status=$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}{{.State.Status}}{{end}}' "$cid" 2>/dev/null)
-    [ "$status" = "healthy" ] && break
-    sleep 10
-done
-if [ "$status" != "healthy" ]; then
+if ! wait_healthy; then
     compose logs --tail 50 backend >>"$LOG_FILE" 2>&1
     fail "backend not healthy after ${HEALTH_TIMEOUT}s (status: ${status:-unknown}); last logs in $LOG_FILE, backup in $BACKUP_DIR"
 fi

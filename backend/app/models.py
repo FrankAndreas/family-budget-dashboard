@@ -15,6 +15,8 @@ class AccountType(str, enum.Enum):
     CASH = "CASH"
     BANK = "BANK"
     SAVINGS = "SAVINGS"
+    # Money in by transfer, out by receipts; should be 0 at the end of each month (month check)
+    CLEARING = "CLEARING"
 
 
 class CategoryType(str, enum.Enum):

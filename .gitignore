@@ -26,3 +26,7 @@ dist/
 
 # Local NAS deploy settings (scripts/deploy-nas.sh)
 .deploy.env
+
+# Personal converter config (tools/converters; contains IBANs and names)
+converter.toml
+*-import.csv
