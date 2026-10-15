@@ -9,6 +9,7 @@ import ShareSettings from '../../components/ShareSettings';
 import CommonBudget from '../../components/CommonBudget';
 import Investments from '../../components/Investments';
 import YearlyBills from '../../components/YearlyBills';
+import MonthCheck from '../../components/MonthCheck';
 import { useAssets, useSplits } from '../../finance';
 import { useFamily } from '../../useFamily';
 import { accessTo, canWrite, dependents } from '../../family';
@@ -240,7 +241,7 @@ export default function Dashboard() {
     const assetName = (id?: string | null) => assets.find(a => a.id === id)?.name;
 
     const tabs = [
-        { id: 'overview', label: '📊 Overview' },
+        { id: 'overview', label: '🏦 Accounts' },
         { id: 'budgets', label: '💰 Budgets' },
         ...(isParent ? [{ id: 'common', label: '🤝 Common' }, { id: 'investments', label: '📦 Investments' }, { id: 'bills', label: '🧾 Yearly bills' }] : []),
         { id: 'analytics', label: '📈 Analytics' },
@@ -344,6 +345,7 @@ export default function Dashboard() {
                                     <option value="BANK">Bank Account</option>
                                     <option value="CASH">Cash</option>
                                     <option value="SAVINGS">Savings</option>
+                                    <option value="CLEARING">Clearing (Migros, …)</option>
                                 </select>
                                 <button type="submit" className="btn-primary w-full">Create Account</button>
                             </form>
@@ -382,6 +384,7 @@ export default function Dashboard() {
                                                 <option value="BANK">Bank Account</option>
                                                 <option value="CASH">Cash</option>
                                                 <option value="SAVINGS">Savings</option>
+                                                <option value="CLEARING">Clearing (Migros, …)</option>
                                             </select>
                                             <div className="flex gap-2">
                                                 <button type="submit" className="btn-primary text-sm flex-1">Save</button>
@@ -430,6 +433,14 @@ export default function Dashboard() {
                             ))}
                         </div>
                     </div>
+
+                    {/* Clearing accounts (Migros, ...) should end every month at 0 */}
+                    <MonthCheck
+                        accounts={accounts.filter(a => a.type === 'CLEARING')}
+                        canBook={canEdit}
+                        version={dataVersion}
+                        onBooked={refresh}
+                    />
 
                     {/* Transactions Section */}
                     {selectedAccount && (
