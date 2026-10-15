@@ -3,7 +3,7 @@ import logging
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from . import models, database, api, common_api, export_api, import_api
+from . import models, database, api, common_api, export_api, import_api, month_check
 from .seed import seed_admin, seed_categories
 from .migrate import add_missing_columns
 
@@ -29,6 +29,7 @@ app.include_router(api.router, prefix="/api/v1")
 app.include_router(common_api.router, prefix="/api/v1")
 app.include_router(export_api.router, prefix="/api/v1")
 app.include_router(import_api.router, prefix="/api/v1")
+app.include_router(month_check.router, prefix="/api/v1")
 
 # Configure CORS
 app.add_middleware(
