@@ -8,6 +8,7 @@ from . import auth, models
 
 SETTLE_UP = "Settle up"
 TRANSFER = "Transfer"
+UNKNOWN_EXPENSE = "Unknown expense"
 
 DEFAULT_CATEGORIES = [
     # Income categories
@@ -30,6 +31,8 @@ DEFAULT_CATEGORIES = [
     # Fallbacks for imported bookings no rule recognised, and money paid back by others
     {"name": "Unsorted", "type": "EXPENSE", "icon": "❓"},
     {"name": "Reimbursements", "type": "INCOME", "icon": "↩️"},
+    # The month check's booking for money on a clearing account without receipts
+    {"name": UNKNOWN_EXPENSE, "type": "EXPENSE", "icon": "🫥"},
     # Booked only by settling up in the common budget
     {"name": SETTLE_UP, "type": "TRANSFER", "icon": "🔁"},
     # Money moved between the family's own accounts (imported); counts as neither income nor expense
