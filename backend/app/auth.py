@@ -6,9 +6,9 @@ from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
 from fastapi.security import OAuth2PasswordBearer
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, status
 from sqlalchemy.orm import Session
-from . import schemas, database, models, i18n
+from . import schemas, database, models, i18n, messages
 
 logger = logging.getLogger(__name__)
 
@@ -61,10 +61,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
 
 
 async def get_current_user_from_token(token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)):
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+    # Built before the token is checked, so in the browser's language (right for an expired login)
+    credentials_exception = messages.api_error(
+        status.HTTP_401_UNAUTHORIZED, "not_logged_in", headers={"WWW-Authenticate": "Bearer"}
     )
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])

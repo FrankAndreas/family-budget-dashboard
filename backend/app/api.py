@@ -6,7 +6,7 @@ import math
 from datetime import timedelta
 from fastapi import Body
 
-from . import crud, schemas, auth, database, models, privacy, reports, i18n
+from . import crud, schemas, auth, database, models, privacy, reports, i18n, messages
 from .common_api import apply_item_decisions, visible_owner
 from .seed import SETTLE_UP
 
@@ -82,7 +82,7 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
         minutes = math.ceil((db_user.locked_until - now).total_seconds() / 60)
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=f"Too many wrong PINs. Try again in {minutes} minute{'' if minutes == 1 else 's'}.",
+            detail=messages.plural("login_locked", minutes),
         )
     if not db_user or not db_user.pin_hash or not auth.verify_pin(user.pin, db_user.pin_hash):
         # Unknown names aren't counted (nothing to protect, and it doesn't reveal which names exist)
@@ -98,11 +98,7 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
                     auth.MAX_WRONG_PINS,
                 )
             db.commit()
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect username or PIN",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
+        raise messages.api_error(status.HTTP_401_UNAUTHORIZED, "wrong_login", headers={"WWW-Authenticate": "Bearer"})
     if not db_user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account has been deactivated")
     if db_user.failed_logins or db_user.locked_until:

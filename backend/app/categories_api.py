@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import auth, database, models, schemas
+from . import auth, database, messages, models, schemas
 
 router = APIRouter()
 
@@ -57,7 +57,7 @@ def name_taken(db: Session, name: str, except_id: Optional[str] = None) -> bool:
 def get_category(db: Session, category_id: str) -> models.Category:
     category = db.query(models.Category).filter(models.Category.id == category_id).first()
     if not category:
-        raise HTTPException(status_code=404, detail="Category not found")
+        raise messages.api_error(404, "category_not_found")
     return category
 
 
