@@ -58,11 +58,14 @@ def add_years(day: date, years: int) -> date:
 
 
 def asset_stats(price: float, purchase_date: date, lifespan_years: int, follow_up_costs: float, today: date) -> dict:
-    age_years = round((today - purchase_date).days / 365.25, 1)
+    # A purchase date in the future means the investment is planned, not bought yet: age 0
+    planned = purchase_date > today
+    age_years = 0.0 if planned else round((today - purchase_date).days / 365.25, 1)
     replacement_due = add_years(purchase_date, lifespan_years)
     total_cost = cents(price + follow_up_costs)
     return {
         "age_years": age_years,
+        "planned": planned,
         "replacement_due": replacement_due,
         "is_due": today >= replacement_due,
         "monthly_set_aside": cents(price / (lifespan_years * 12)),
