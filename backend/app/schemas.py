@@ -183,6 +183,9 @@ class BudgetUpdate(BaseModel):
 class Budget(BudgetBase):
     id: str
     user_id: str
+    # Spent in the current Swiss month (MONTHLY) or year (YEARLY), and as a percentage of the limit
+    spent: float = 0.0
+    percentage: float = 0.0
 
     class Config:
         from_attributes = True

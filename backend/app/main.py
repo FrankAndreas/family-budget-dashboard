@@ -4,7 +4,18 @@ import os
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from . import database, database_setup, api, common_api, export_api, import_api, month_check, wishes_api, import_rules
+from . import (
+    database,
+    database_setup,
+    api,
+    common_api,
+    export_api,
+    import_api,
+    month_check,
+    wishes_api,
+    import_rules,
+    reports,
+)
 from .seed import seed_admin, seed_categories
 
 # Create or upgrade the schema (Alembic migrations in app/migrations)
@@ -32,6 +43,7 @@ app.include_router(import_api.router, prefix="/api/v1")
 app.include_router(month_check.router, prefix="/api/v1")
 app.include_router(wishes_api.router, prefix="/api/v1")
 app.include_router(import_rules.router, prefix="/api/v1")
+app.include_router(reports.router, prefix="/api/v1")
 
 # Configure CORS
 app.add_middleware(
