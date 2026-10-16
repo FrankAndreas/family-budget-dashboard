@@ -14,7 +14,7 @@ from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
 
-HEAD = "0003"
+HEAD = "0004"
 
 # Columns added before migrations existed; an old database may lack them (only used to catch it up)
 NEW_COLUMNS = {
@@ -36,10 +36,22 @@ def alembic_config(engine: Engine) -> Config:
 
 
 def run(engine: Engine, action, *args) -> None:
+    """Run an Alembic command. SQLite: with link checking off, so migrations can rebuild tables that others point to
+    (it can't be switched inside a transaction, so before it starts); log_broken_links checks afterwards."""
     config = alembic_config(engine)
-    with engine.begin() as connection:
-        config.attributes["connection"] = connection
-        action(config, *args)
+    sqlite = engine.dialect.name == "sqlite"
+    with engine.connect() as connection:
+        if sqlite:
+            connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
+            connection.commit()
+        try:
+            with connection.begin():
+                config.attributes["connection"] = connection
+                action(config, *args)
+        finally:
+            if sqlite:
+                connection.exec_driver_sql("PRAGMA foreign_keys=ON")
+                connection.commit()
 
 
 def catch_up(engine: Engine) -> None:

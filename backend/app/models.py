@@ -4,7 +4,6 @@ from sqlalchemy import (
     Column,
     String,
     Boolean,
-    Float,
     ForeignKey,
     DateTime,
     Date,
@@ -14,9 +13,11 @@ from sqlalchemy import (
     JSON,
     func,
     select,
+    type_coerce,
 )
 from sqlalchemy.orm import column_property, relationship
 from .database import Base
+from .money import Money
 from datetime import datetime
 
 
@@ -74,9 +75,6 @@ class Account(Base):
     user_id = Column(String, ForeignKey("users.id"))
     name = Column(String)
     type = Column(Enum(AccountType), default=AccountType.BANK)
-    # Unused since balances are calculated (Account.balance below); dropped with the move to cents
-    stored_balance = Column("balance", Float, default=0.0)
-
     user = relationship("User", back_populates="accounts")
     transactions = relationship("Transaction", back_populates="account")
 
@@ -101,7 +99,7 @@ class Transaction(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     account_id = Column(String, ForeignKey("accounts.id"))
     category_id = Column(String, ForeignKey("categories.id"))
-    amount = Column(Float)
+    amount = Column(Money)
     date = Column(DateTime, default=datetime.utcnow)
     description = Column(String, nullable=True)
     # Optional tag: the dependent child this household expense was for
@@ -121,7 +119,8 @@ class Transaction(Base):
 
 # An account's balance is the sum of its transactions, calculated on every read, so it can't drift
 Account.balance = column_property(
-    select(func.round(func.coalesce(func.sum(Transaction.amount), 0.0), 2))
+    # Summed in cents (exact); the Money type turns the result back into francs
+    select(type_coerce(func.coalesce(func.sum(Transaction.amount), 0), Money))
     .where(Transaction.account_id == Account.id)
     .correlate_except(Transaction)
     .scalar_subquery()
@@ -134,7 +133,7 @@ class Budget(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id = Column(String, ForeignKey("users.id"))
     category_id = Column(String, ForeignKey("categories.id"))
-    limit = Column(Float)
+    limit = Column(Money)
     period = Column(String, default="MONTHLY")
 
     user = relationship("User", back_populates="budgets")
@@ -170,7 +169,7 @@ class Asset(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String)
-    price = Column(Float)
+    price = Column(Money)
     purchase_date = Column(Date)
     lifespan_years = Column(Integer)
     # Exactly one of: a family member (personal) or a split (common)
@@ -187,7 +186,7 @@ class Settlement(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     from_user_id = Column(String, ForeignKey("users.id"))
     to_user_id = Column(String, ForeignKey("users.id"))
-    amount = Column(Float)
+    amount = Column(Money)
     date = Column(DateTime, default=datetime.utcnow)
     from_transaction_id = Column(String, ForeignKey("transactions.id"))
     to_transaction_id = Column(String, ForeignKey("transactions.id"))
@@ -206,7 +205,7 @@ class PlannedCost(Base):
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String)
     category_id = Column(String, ForeignKey("categories.id"))
-    amount = Column(Float)
+    amount = Column(Money)
     frequency = Column(Enum(Frequency))
     due_month = Column(Integer, nullable=True)
     # Exactly one of: a family member (personal) or a split (common)
@@ -222,13 +221,13 @@ class Wish(Base):
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     name = Column(String)
-    estimate = Column(Float, nullable=True)
+    estimate = Column(Money, nullable=True)
     notes = Column(String, nullable=True)
     # Exactly one of: a family member (personal) or a split (common)
     owner_id = Column(String, ForeignKey("users.id"), nullable=True)
     split_id = Column(String, ForeignKey("splits.id"), nullable=True)
     # The best offer found (typed in after using the search links)
-    best_price = Column(Float, nullable=True)
+    best_price = Column(Money, nullable=True)
     best_shop = Column(String, nullable=True)
     best_url = Column(String, nullable=True)
     best_checked = Column(Date, nullable=True)
