@@ -3,13 +3,14 @@
 Who sees and changes a wish follows the rules for its owner's money; common wishes belong to all parents.
 """
 
+from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import auth, database, models, privacy, schemas
+from . import auth, database, finance, models, privacy, schemas
 from .common_api import get_split
 
 router = APIRouter()
@@ -142,3 +143,118 @@ def delete_wish(
     db.delete(get_wish(db, current_user, wish_id, write=True))
     db.commit()
     return {"deleted": wish_id}
+
+
+def require_parent(user: models.User) -> None:
+    if not is_parent(user):
+        raise HTTPException(status_code=403, detail="Only parents have a family plan")
+
+
+@router.get("/wishes/family-plan", response_model=List[schemas.FamilyPlanRow])
+def family_plan(
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+):
+    require_parent(current_user)
+    rows, total = [], 0.0
+    planned = [w for w in visible_wishes(db, current_user) if w.family_position is not None and not w.bought_on]
+    for wish in sorted(planned, key=lambda w: w.family_position):
+        out = wish_out(db, current_user, wish)
+        total = finance.cents(total + (out["price"] or 0))
+        rows.append({**out, "running_total": total})
+    return rows
+
+
+@router.post("/wishes/{wish_id}/move", response_model=schemas.Wish)
+def move_wish(
+    wish_id: str,
+    move: schemas.WishMove,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    family = move.list == "family"
+    if family:
+        require_parent(current_user)
+    # The own list needs the right to change the owner's wishes; the family plan is decided by all parents
+    wish = get_wish(db, current_user, wish_id, write=not family)
+    if wish.bought_on:
+        raise HTTPException(status_code=400, detail="Bought wishes can't be moved")
+    key = "family_position" if family else "position"
+    if family and wish.family_position is None:
+        raise HTTPException(status_code=400, detail="Not in the family plan")
+    query = db.query(models.Wish).filter(models.Wish.id != wish.id, models.Wish.bought_on.is_(None))
+    if family:
+        query = query.filter(models.Wish.family_position.isnot(None))
+    else:
+        query = query.filter(same_owner(wish.owner_id, wish.split_id))
+    # Only wishes the user can see: hidden ones keep their place
+    others = [w for w in query if can_see(db, current_user, w.owner_id, w.split_id)]
+    mine = getattr(wish, key)
+    if move.direction == "up":
+        neighbour = max((w for w in others if getattr(w, key) < mine), key=lambda w: getattr(w, key), default=None)
+    else:
+        neighbour = min((w for w in others if getattr(w, key) > mine), key=lambda w: getattr(w, key), default=None)
+    if neighbour:
+        setattr(wish, key, getattr(neighbour, key))
+        setattr(neighbour, key, mine)
+        db.commit()
+        db.refresh(wish)
+    return wish_out(db, current_user, wish)
+
+
+@router.post("/wishes/{wish_id}/family-plan", response_model=schemas.Wish)
+def add_to_family_plan(
+    wish_id: str,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    require_parent(current_user)
+    wish = get_wish(db, current_user, wish_id, write=True)
+    if wish.family_position is None:
+        wish.family_position = next_position(db, models.Wish.family_position)
+        db.commit()
+        db.refresh(wish)
+    return wish_out(db, current_user, wish)
+
+
+@router.delete("/wishes/{wish_id}/family-plan", response_model=schemas.Wish)
+def remove_from_family_plan(
+    wish_id: str,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    require_parent(current_user)
+    wish = get_wish(db, current_user, wish_id, write=True)
+    if wish.split_id:
+        raise HTTPException(status_code=400, detail="Common wishes are always in the family plan")
+    wish.family_position = None
+    db.commit()
+    db.refresh(wish)
+    return wish_out(db, current_user, wish)
+
+
+@router.post("/wishes/{wish_id}/bought", response_model=schemas.Wish)
+def mark_bought(
+    wish_id: str,
+    bought: schemas.WishBought,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    wish = get_wish(db, current_user, wish_id, write=True)
+    # Positions are kept, so "back to open" returns the wish to its old place
+    wish.bought_on = bought.bought_on or date.today()
+    db.commit()
+    db.refresh(wish)
+    return wish_out(db, current_user, wish)
+
+
+@router.delete("/wishes/{wish_id}/bought", response_model=schemas.Wish)
+def mark_open(
+    wish_id: str,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    wish = get_wish(db, current_user, wish_id, write=True)
+    wish.bought_on = None
+    db.commit()
+    db.refresh(wish)
+    return wish_out(db, current_user, wish)
