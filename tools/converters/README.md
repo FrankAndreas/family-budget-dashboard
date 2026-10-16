@@ -46,6 +46,12 @@ converter lists every problem and writes nothing.
     writes the other side too, with the reference `<reference>:to`.
 - **Unrecognised lines** get `[bank.fallback]` (default: Unsorted / Other Income) and are listed in the report.
   Correct them in the app after importing, and add a rule so the next export is recognised.
+- **Rules from the app:** a category changed in the import preview with "remember" becomes an app rule
+  (Settings → Data Management → Import rules). The JSON Schema carries these rules (`x-rules`), and `bank.py`
+  applies them to lines none of its own rules recognise: the text must appear in the description, ignoring case,
+  and the category must fit the sign. The report counts them as "by app rule". Download the schema again to pick
+  up new rules. To keep a rule in `converter.toml` instead, use "Show for converter.toml" next to it in the app
+  and paste the block here; rules in this file always win.
 - **References** are a hash of the line, so importing an overlapping export again only shows duplicates.
 - **Balance check:** the report gives the bank's balance after the latest booking. Once everything is
   imported, the account in the app should show the same.

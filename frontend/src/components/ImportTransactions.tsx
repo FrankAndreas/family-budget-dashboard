@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import api, { errorMessage } from '../api';
+import { useAuth } from '../AuthContext';
 import { downloadBlob } from '../download';
 
 interface PreviewRow {
@@ -16,7 +17,16 @@ interface PreviewRow {
     direction: string;
     description: string;
     shared: string;
+    // The category as in the file; category is what will be booked (changed by the user or by a rule)
+    file_category: string;
+    // The import rule's text when a rule set the category
+    rule: string | null;
 }
+
+interface Category { id: string; name: string; type: string }
+
+// A category picked in the preview, and whether to remember it as a rule (parents only)
+interface Change { category: string; remember: boolean; text: string }
 
 interface Preview {
     rows: PreviewRow[];
@@ -36,11 +46,14 @@ const STATUS_STYLE: Record<PreviewRow['status'], string> = {
     error: 'text-red-300',
 };
 
-// The file plus the duplicates the user chose to book anyway, as the import endpoints expect them
-const formData = (file: File, include: number[] = []) => {
+// The file, the duplicates the user chose to book anyway and the changed categories, as the import endpoints expect them
+const formData = (file: File, include: number[] = [], changes: Record<number, Change> = {}) => {
     const data = new FormData();
     data.append('file', file);
     data.append('include_duplicates', include.join(','));
+    data.append('changes', JSON.stringify(Object.fromEntries(Object.entries(changes).map(
+        ([line, c]) => [line, { category: c.category, remember: c.remember ? c.text : '' }]
+    ))));
     return data;
 };
 
@@ -52,17 +65,61 @@ const previewFromError = (error: unknown): Preview | null => {
 
 // onImported: the booked rows changed balances and lists elsewhere in the app
 export default function ImportTransactions({ onImported }: { onImported?: () => void }) {
+    const { user } = useAuth();
     const [file, setFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<Preview | null>(null);
     const [included, setIncluded] = useState<Set<number>>(new Set());
+    const [changes, setChanges] = useState<Record<number, Change>>({});
+    const [categories, setCategories] = useState<Category[]>([]);
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState<Status | null>(null);
+    const isParent = user?.role === 'PARENT';
+
+    useEffect(() => {
+        api.get('/api/v1/categories')
+            .then(res => setCategories(res.data))
+            .catch(error => setStatus({ kind: 'error', text: errorMessage(error, 'Failed to load categories') }));
+    }, []);
 
     const reset = () => {
         setFile(null);
         setPreview(null);
         setIncluded(new Set());
+        setChanges({});
     };
+
+    const typeOf = (name: string) => categories.find(c => c.name.toLowerCase() === name.trim().toLowerCase())?.type;
+
+    // The sign stays: an expense row may become another expense or Transfer (out); income likewise
+    const choicesFor = (row: PreviewRow) => {
+        const type = typeOf(row.file_category);
+        if (type !== 'EXPENSE' && type !== 'INCOME') return null;
+        return [
+            ...categories.filter(c => c.type === type).map(c => ({ value: c.name, label: c.name })),
+            { value: 'Transfer', label: type === 'EXPENSE' ? 'Transfer (out)' : 'Transfer (in)' }
+        ];
+    };
+
+    // Check the file again with the changes, so duplicates and errors match what the import will book
+    const changeCategory = async (row: PreviewRow, category: string) => {
+        if (!file) return;
+        const next = { ...changes };
+        if (category.toLowerCase() === row.file_category.trim().toLowerCase()) delete next[row.line];
+        else next[row.line] = { category, remember: changes[row.line]?.remember ?? false, text: changes[row.line]?.text ?? row.description };
+        setChanges(next);
+        setBusy(true);
+        try {
+            const res = await api.post('/api/v1/import/preview', formData(file, [], next));
+            setPreview(res.data);
+        } catch (error) {
+            setStatus({ kind: 'error', text: errorMessage(error, 'Could not check the change') });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const setRemember = (line: number, update: Partial<Change>) =>
+        setChanges({ ...changes, [line]: { ...changes[line], ...update } });
 
     const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const input = e.target;
@@ -95,7 +152,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
         if (!file) return;
         setBusy(true);
         try {
-            const res = await api.post('/api/v1/import', formData(file, [...included]));
+            const res = await api.post('/api/v1/import', formData(file, [...included], changes));
             const { imported, skipped } = res.data;
             setStatus({
                 kind: 'success',
@@ -193,7 +250,45 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                         <td className="p-2 text-slate-500">{row.line}</td>
                                         <td className="p-2 whitespace-nowrap">{row.date}</td>
                                         <td className="p-2">{row.account}{row.owner && ` (${row.owner})`}</td>
-                                        <td className="p-2">{row.category}{row.shared && <span className="text-slate-400"> · {row.shared}</span>}</td>
+                                        <td className="p-2">
+                                            {choicesFor(row) ? (
+                                                <select
+                                                    value={choicesFor(row)!.find(c => c.value.toLowerCase() === row.category.trim().toLowerCase())?.value ?? row.category}
+                                                    onChange={(e) => changeCategory(row, e.target.value)}
+                                                    disabled={busy}
+                                                    aria-label={`Category of line ${row.line}`}
+                                                    className="p-1 rounded bg-slate-800/50 border border-slate-600 text-white"
+                                                >
+                                                    {choicesFor(row)!.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
+                                                </select>
+                                            ) : row.category}
+                                            {row.shared && <span className="text-slate-400"> · {row.shared}</span>}
+                                            {changes[row.line] && <div className="text-xs text-slate-500">was <s>{row.file_category}</s></div>}
+                                            {row.rule && <div className="text-xs text-emerald-400">by rule: {row.rule}</div>}
+                                            {isParent && changes[row.line] && (
+                                                <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
+                                                    <label className="flex items-center gap-1 cursor-pointer">
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={changes[row.line].remember}
+                                                            onChange={(e) => setRemember(row.line, { remember: e.target.checked })}
+                                                            aria-label={`Remember line ${row.line} as a rule`}
+                                                        />
+                                                        remember for
+                                                    </label>
+                                                    {changes[row.line].remember && (
+                                                        <input
+                                                            value={changes[row.line].text}
+                                                            onChange={(e) => setRemember(row.line, { text: e.target.value })}
+                                                            maxLength={120}
+                                                            aria-label={`Rule text for line ${row.line}`}
+                                                            title="Bookings whose description contains this text (ignoring case)"
+                                                            className="p-1 w-36 rounded bg-slate-800/50 border border-slate-600 text-white"
+                                                        />
+                                                    )}
+                                                </div>
+                                            )}
+                                        </td>
                                         <td className="p-2 text-right whitespace-nowrap">
                                             {row.direction && (
                                                 <span className="mr-1 text-xs text-slate-400">{row.direction.trim().toLowerCase() === 'in' ? '→ in' : '← out'}</span>

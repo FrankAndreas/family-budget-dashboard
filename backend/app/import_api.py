@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from . import auth, crud, database, models, privacy, schemas
+from . import auth, crud, database, import_rules, models, privacy, schemas
 from .api import check_asset, check_member_tag, check_shared, is_dependent
 from .common_api import visible_owner
 from .seed import SETTLE_UP
@@ -274,11 +274,31 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
     return out
 
 
-def check_file(db: Session, user: models.User, file: UploadFile) -> list[dict]:
+def check_file(db: Session, user: models.User, file: UploadFile, changes: Optional[dict] = None) -> list[dict]:
     raw_rows = parse_file(file.filename or "", file.file.read(MAX_BYTES + 1))
+    changes = changes or {}
+    unknown = set(changes) - {raw["_line"] for raw in raw_rows}
+    if unknown:
+        raise HTTPException(status_code=400, detail=f"changes name line {min(unknown)}, which isn't in the file")
+    if any(c.get("remember") for c in changes.values()):
+        import_rules.require_parent(user)
     lookups = Lookups(db, user)
+    rules = import_rules.load(db)
     seen: dict[str, int] = {}
-    return [check_row(db, user, lookups, raw, seen) for raw in raw_rows]
+    rows = []
+    for raw in raw_rows:
+        change = changes.get(raw["_line"])
+        adjusted, problem, rule = import_rules.adjust(raw, change, lookups, rules)
+        out = check_row(db, user, lookups, adjusted, seen)
+        # Any non-empty text is checked, so "   " is an error rather than silently ignored
+        remember = (change or {}).get("remember") or ""
+        problems = [problem, import_rules.remember_problem(remember) if remember else None]
+        for text in filter(None, problems):
+            out["errors"].append(text)
+            out["status"] = "error"
+        out.update(file_category=raw["category"], rule=rule)
+        rows.append(out)
+    return rows
 
 
 def public(rows: list[dict]) -> dict:
@@ -294,20 +314,23 @@ def public(rows: list[dict]) -> dict:
 @router.post("/import/preview")
 def preview_import(
     file: UploadFile = File(...),
+    changes: str = Form(""),
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
-    return public(check_file(db, current_user, file))
+    return public(check_file(db, current_user, file, import_rules.parse_changes(changes)))
 
 
 @router.post("/import")
 def run_import(
     file: UploadFile = File(...),
     include_duplicates: str = Form(""),
+    changes: str = Form(""),
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
-    rows = check_file(db, current_user, file)
+    changed = import_rules.parse_changes(changes)
+    rows = check_file(db, current_user, file, changed)
     if any(row["status"] == "error" for row in rows):
         raise HTTPException(status_code=400, detail={"message": "The file has errors", **public(rows)})
     included = {int(line) for line in include_duplicates.split(",") if line.strip().isdigit()}
@@ -316,6 +339,12 @@ def run_import(
         for row in chosen:
             transaction, category, split_shares = row["_create"]
             crud.create_transaction(db, transaction, category, split_shares=split_shares, commit=False)
+        # Remembered rules are saved with the bookings, so a failed import saves none
+        for row in rows:
+            text = changed.get(row["line"], {}).get("remember")
+            if text:
+                category = db.query(models.Category).filter(models.Category.name == row["category"]).one()
+                import_rules.remember(db, text, category)
         db.commit()
     except Exception:
         db.rollback()
@@ -393,6 +422,8 @@ def import_schema(
         "additionalProperties": False,
         # Lets a tool check that a credit doesn't land in an expense category
         "x-category-types": {c.name: c.type.value for c in sorted(importable, key=lambda c: c.name.casefold())},
+        # Rules learnt in the import preview; the bank converter applies them to lines its own rules miss
+        "x-rules": [{"contains": r.text, "category": r.category.name} for r in import_rules.load(db)],
         "properties": {
             "transactions": {
                 "type": "array",

@@ -109,6 +109,17 @@ class Schema:
         self.categories = {key(name): (name, kind) for name, kind in schema.get("x-category-types", {}).items()}
         if not self.categories:
             raise Problems(["The schema has no category types; download it again from the app (Data Management)"])
+        # Rules learnt in the app's import preview: (text to find, category, its type)
+        self.rules: list[tuple[str, str, str]] = []
+        problems = []
+        for rule in schema.get("x-rules", []):
+            found = self.categories.get(key(rule.get("category")))
+            if not found or not rule.get("contains"):
+                problems.append(f"x-rules: unknown category '{rule.get('category')}'")
+                continue
+            self.rules.append((key(rule["contains"]), *found))
+        if problems:
+            raise Problems(problems)
 
     @classmethod
     def load(cls, path: Path) -> "Schema":

@@ -494,3 +494,34 @@ class TestEndToEnd:
         content = (tmp_path / "bank-import.csv").read_bytes()
         response = client.post(f"{BASE_URL}/import", files={"file": ("again.csv", content)}, headers=headers)
         assert response.json() == {"imported": 0, "skipped": 6}
+
+
+class TestAppRules:
+    def schema_with(self, *rules):
+        return common.Schema({**SCHEMA, "x-rules": [{"contains": t, "category": c} for t, c in rules]})
+
+    def convert(self, tmp_path, schema, lines):
+        return bank.convert(bank_rows(lines, tmp_path=tmp_path), BANK_CONFIG, schema)
+
+    def test_unrecognised_line_gets_the_app_rule(self, tmp_path):
+        line = (
+            f"{IBAN};2026-09-10 00:00:00.0;Einkauf Velo Muster 09.09.2026, 10:00, Debit Mastercard-Nr. 1;-50.00;100.00;"
+        )
+        result = self.convert(tmp_path, self.schema_with(("velo muster", "Transportation")), [line])
+        assert result.rows[0]["category"] == "Transportation"
+        assert result.by_app_rule == 1 and result.unrecognised == []
+        assert "1 by app rule" in bank.report(result, tmp_path / "out.csv")
+
+    def test_own_rule_wins(self, tmp_path):
+        line = f"{IBAN};2026-09-10 00:00:00.0;Einkauf Bäckerei Muster 09.09.2026, 10:00;-5.00;100.00;"
+        result = self.convert(tmp_path, self.schema_with(("Bäckerei", "Healthcare")), [line])
+        assert result.rows[0]["category"] == "Groceries" and result.by_app_rule == 0
+
+    def test_sign_must_fit_and_transfer_direction(self, tmp_path):
+        credit = f"{IBAN};2026-09-10 00:00:00.0;Gutschrift Velo Muster;30.00;130.00;"
+        result = self.convert(tmp_path, self.schema_with(("velo", "Transportation"), ("velo", "Transfer")), [credit])
+        assert (result.rows[0]["category"], result.rows[0]["direction"]) == ("Transfer", "in")
+
+    def test_unknown_category_in_rules(self):
+        with pytest.raises(common.Problems):
+            self.schema_with(("x", "Nope"))

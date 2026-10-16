@@ -209,3 +209,17 @@ class Wish(Base):
     family_position = Column(Integer, nullable=True)
     bought_on = Column(Date, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ImportRule(Base):
+    """Text in an imported row's description → category; learnt in the import preview, also used by the converter."""
+
+    __tablename__ = "import_rules"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    # Matched ignoring case, anywhere in the description
+    text = Column(String)
+    category_id = Column(String, ForeignKey("categories.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    category = relationship("Category")

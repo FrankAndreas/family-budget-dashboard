@@ -4,6 +4,7 @@ import { useAuth } from '../AuthContext';
 import type { FamilyUser } from '../family';
 import { downloadBlob } from '../download';
 import ImportTransactions from './ImportTransactions';
+import ImportRules from './ImportRules';
 
 interface ExportAccount {
     id: string;
@@ -43,6 +44,8 @@ const today = () => new Date().toISOString().split('T')[0];
 // onDataChanged: an import or restore added accounts and transactions the rest of the app should reload
 export default function DataManager({ onDataChanged }: { onDataChanged?: () => void }) {
     const { user, refreshUser } = useAuth();
+    // Bumped after an import, which may have saved new import rules
+    const [rulesVersion, setRulesVersion] = useState(0);
     const [importing, setImporting] = useState(false);
     const [privacyEnabled, setPrivacyEnabled] = useState(user?.privacy_enabled || false);
     const [savingPrivacy, setSavingPrivacy] = useState(false);
@@ -271,7 +274,8 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
                 </div>
             </div>
 
-            <ImportTransactions onImported={onDataChanged} />
+            <ImportTransactions onImported={() => { onDataChanged?.(); setRulesVersion(v => v + 1); }} />
+            {user?.role === 'PARENT' && <ImportRules version={rulesVersion} />}
 
             {/* Restore Section */}
             <div className="mb-8">
