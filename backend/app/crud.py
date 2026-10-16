@@ -63,7 +63,12 @@ def delete_user(db: Session, user_id: str):
     if not db_user:
         return None
 
-    # SQLite doesn't enforce foreign keys here, so remove the user's data explicitly
+    # Remove the user's data explicitly, children before parents (SQLite enforces the links)
+    # The payments stay on the other parent's account; the settlement records go with the member, first,
+    # because they point to the transactions deleted below
+    db.query(models.Settlement).filter(
+        (models.Settlement.from_user_id == user_id) | (models.Settlement.to_user_id == user_id)
+    ).delete(synchronize_session=False)
     account_ids = [a.id for a in db.query(models.Account.id).filter(models.Account.user_id == user_id)]
     if account_ids:
         db.query(models.Transaction).filter(models.Transaction.account_id.in_(account_ids)).delete(
@@ -80,10 +85,6 @@ def delete_user(db: Session, user_id: str):
     db.query(models.Share).filter((models.Share.owner_id == user_id) | (models.Share.grantee_id == user_id)).delete(
         synchronize_session=False
     )
-    # The payments stay on the other parent's account; the settlement records go with the member
-    db.query(models.Settlement).filter(
-        (models.Settlement.from_user_id == user_id) | (models.Settlement.to_user_id == user_id)
-    ).delete(synchronize_session=False)
     # Splits stop naming the member; parents edit them to add up to 100 again
     for split in db.query(models.Split):
         if user_id in (split.shares or {}):
@@ -110,7 +111,7 @@ def get_accounts(db: Session, user_id: str):
 
 
 def create_account(db: Session, account: schemas.AccountCreate, user_id: str):
-    db_account = models.Account(user_id=user_id, name=account.name, type=account.type, balance=0.0)
+    db_account = models.Account(user_id=user_id, name=account.name, type=account.type)
     db.add(db_account)
     db.commit()
     db.refresh(db_account)
@@ -206,11 +207,6 @@ def create_transaction(
     )
     db.add(db_transaction)
 
-    # Update account balance
-    account = get_account(db, transaction.account_id)
-    if account:
-        account.balance = to_cents(account.balance + amount)
-
     # Without commit (bulk import) the caller commits all rows at once
     if not commit:
         db.flush()
@@ -239,10 +235,6 @@ def update_transaction(
         setattr(db_transaction, key, value)
     db_transaction.split_shares = split_shares
 
-    account = get_account(db, db_transaction.account_id)
-    if account:
-        account.balance = to_cents(account.balance + db_transaction.amount - old_amount)
-
     db.commit()
     db.refresh(db_transaction)
     return db_transaction
@@ -253,11 +245,6 @@ def get_transaction(db: Session, transaction_id: str):
 
 
 def delete_transaction(db: Session, db_transaction: models.Transaction):
-    # Undo the transaction's effect on the account balance
-    account = get_account(db, db_transaction.account_id)
-    if account:
-        account.balance = to_cents(account.balance - db_transaction.amount)
-
     db.delete(db_transaction)
     db.commit()
     return db_transaction

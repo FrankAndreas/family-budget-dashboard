@@ -1,7 +1,21 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Boolean, Float, ForeignKey, DateTime, Date, Enum, Integer, JSON
-from sqlalchemy.orm import relationship
+from sqlalchemy import (
+    Column,
+    String,
+    Boolean,
+    Float,
+    ForeignKey,
+    DateTime,
+    Date,
+    Enum,
+    Index,
+    Integer,
+    JSON,
+    func,
+    select,
+)
+from sqlalchemy.orm import column_property, relationship
 from .database import Base
 from datetime import datetime
 
@@ -60,7 +74,8 @@ class Account(Base):
     user_id = Column(String, ForeignKey("users.id"))
     name = Column(String)
     type = Column(Enum(AccountType), default=AccountType.BANK)
-    balance = Column(Float, default=0.0)
+    # Unused since balances are calculated (Account.balance below); dropped with the move to cents
+    stored_balance = Column("balance", Float, default=0.0)
 
     user = relationship("User", back_populates="accounts")
     transactions = relationship("Transaction", back_populates="account")
@@ -78,6 +93,10 @@ class Category(Base):
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        Index("ix_transactions_account_date", "account_id", "date"),
+        Index("ix_transactions_reference", "reference"),
+    )
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     account_id = Column(String, ForeignKey("accounts.id"))
@@ -98,6 +117,15 @@ class Transaction(Base):
 
     account = relationship("Account", back_populates="transactions")
     category = relationship("Category")
+
+
+# An account's balance is the sum of its transactions, calculated on every read, so it can't drift
+Account.balance = column_property(
+    select(func.round(func.coalesce(func.sum(Transaction.amount), 0.0), 2))
+    .where(Transaction.account_id == Account.id)
+    .correlate_except(Transaction)
+    .scalar_subquery()
+)
 
 
 class Budget(Base):

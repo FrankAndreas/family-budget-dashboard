@@ -4,6 +4,7 @@ from datetime import date, datetime
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import auth, crud, database, finance, models, privacy, schemas
@@ -83,6 +84,10 @@ def delete_split(split_id: str, _: models.User = Depends(require_parent), db: Se
         raise HTTPException(
             status_code=409, detail="In use by a planned cost, investment or wish; change or delete it first"
         )
+    # Shared expenses keep the percentages they were booked with (split_shares); only the link goes
+    db.query(models.Transaction).filter(models.Transaction.split_id == split_id).update(
+        {models.Transaction.split_id: None}, synchronize_session=False
+    )
     db.delete(db_split)
     db.commit()
     return db_split
@@ -93,7 +98,8 @@ def shared_transactions(db: Session) -> list[tuple[models.Transaction, str]]:
     rows = (
         db.query(models.Transaction, models.Account.user_id)
         .join(models.Account, models.Transaction.account_id == models.Account.id)
-        .filter(models.Transaction.split_id.isnot(None))
+        # Shared = booked with the split's percentages (the split itself may have been deleted since)
+        .filter(func.json_type(models.Transaction.split_shares) == "object")
         .order_by(models.Transaction.date.desc())
         .all()
     )
@@ -169,8 +175,6 @@ def create_settlement(
         for account, sign in ((from_account, -1), (to_account, 1))
     )
     db.add_all([paid, received])
-    from_account.balance = crud.to_cents(from_account.balance - amount)
-    to_account.balance = crud.to_cents(to_account.balance + amount)
     db.flush()
     db_settlement = models.Settlement(
         from_user_id=settlement.from_user_id,
@@ -193,11 +197,14 @@ def delete_settlement(
     db_settlement = db.query(models.Settlement).filter(models.Settlement.id == settlement_id).first()
     if not db_settlement:
         raise HTTPException(status_code=404, detail="Settlement not found")
-    for transaction_id in (db_settlement.from_transaction_id, db_settlement.to_transaction_id):
+    transaction_ids = (db_settlement.from_transaction_id, db_settlement.to_transaction_id)
+    # The record points to its two transactions, so it goes first
+    db.delete(db_settlement)
+    db.flush()
+    for transaction_id in transaction_ids:
         transaction = crud.get_transaction(db, transaction_id)
         if transaction:
             crud.delete_transaction(db, transaction)
-    db.delete(db_settlement)
     db.commit()
     return db_settlement
 

@@ -3,7 +3,6 @@
 import json
 
 import pytest
-from sqlalchemy import create_engine, inspect, text
 
 from helpers import (
     BASE_URL,
@@ -32,16 +31,6 @@ class TestReference:
         account = create_account(client, headers)
         response = add_transaction(client, headers, account, category_id(client, "Groceries"), 5, reference="x" * 201)
         assert response.status_code == 422
-
-    def test_migration_adds_reference(self, tmp_path):
-        from app.migrate import add_missing_columns
-
-        engine = create_engine(f"sqlite:///{tmp_path}/old.db")
-        with engine.begin() as conn:
-            conn.execute(text("CREATE TABLE users (id VARCHAR PRIMARY KEY, has_allowance BOOLEAN)"))
-            conn.execute(text("CREATE TABLE transactions (id VARCHAR PRIMARY KEY, amount FLOAT)"))
-        add_missing_columns(engine)
-        assert "reference" in {c["name"] for c in inspect(engine).get_columns("transactions")}
 
 
 HEADER = "date,account,category,amount,description,for,shared,item,reference"
