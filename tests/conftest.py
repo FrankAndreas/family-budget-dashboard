@@ -15,6 +15,10 @@ from app.main import app  # noqa: E402
 from app.seed import seed_categories  # noqa: E402
 from helpers import ADMIN, ADMIN_PIN  # noqa: E402
 
+# Cheap PIN hashes: at bcrypt's default cost, hashing took about 95% of the suite's time.
+# Verifying reads the cost from the hash, so logins in the tests are cheap too.
+auth.PIN_HASH_ROUNDS = 4
+
 
 @pytest.fixture(autouse=True)
 def fresh_db():
