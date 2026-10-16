@@ -61,6 +61,7 @@ class Result:
     ignored: list[tuple[int, str, float]] = field(default_factory=list)
     unrecognised: list[tuple[int, str, float]] = field(default_factory=list)
     skipped: list[tuple[int, str]] = field(default_factory=list)
+    by_app_rule: int = 0
     balance: Optional[tuple[str, float]] = None
 
 
@@ -194,7 +195,12 @@ def convert(rows: list[dict], config: dict, schema: common.Schema) -> Result:
         if rule and rule.action == "ignore":
             result.ignored.append((line, text, float(amount)))
             continue
+        # Rules from the app (x-rules in the schema) for lines none of the converter's own rules recognise
+        kinds = ("TRANSFER", "EXPENSE" if debit else "INCOME")
+        app_rule = None
         if not rule:
+            app_rule = next((r for r in schema.rules if r[0] in key(description) and r[2] in kinds), None)
+        if not rule and not app_rule:
             result.unrecognised.append((line, text, float(amount)))
 
         account, owner = accounts[iban]
@@ -221,6 +227,14 @@ def convert(rows: list[dict], config: dict, schema: common.Schema) -> Result:
         elif rule:
             values.update(category=rule.category, item=rule.item, shared=rule.shared, **{"for": rule.member})
             result.booked += 1
+        elif app_rule:
+            if app_rule[2] == "TRANSFER":
+                values.update(category=transfer, direction="out" if debit else "in")
+                result.transfers += 1
+            else:
+                values.update(category=app_rule[1])
+                result.booked += 1
+            result.by_app_rule += 1
         else:
             values.update(category=fallback_expense if debit else fallback_income)
             result.booked += 1
@@ -236,7 +250,8 @@ def convert(rows: list[dict], config: dict, schema: common.Schema) -> Result:
 def report(result: Result, output: Path) -> str:
     lines = [
         f"Wrote {len(result.rows)} rows to {output}: {result.booked} booked, {result.transfers} transfers;"
-        f" {len(result.ignored)} ignored, {len(result.skipped)} skipped (amount 0).",
+        f" {len(result.ignored)} ignored, {len(result.skipped)} skipped (amount 0)."
+        + (f" {result.by_app_rule} by app rule." if result.by_app_rule else ""),
     ]
     if result.unrecognised:
         lines.append(f"{len(result.unrecognised)} lines not recognised (fallback category; add a rule):")
