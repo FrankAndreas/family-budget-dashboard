@@ -167,7 +167,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "split_every_parent": "Gib jedem Elternteil einen Prozentsatz",
         "split_sum_100": "Die Prozentsätze müssen zusammen 100 ergeben",
         "split_name_taken": "Eine Aufteilung mit diesem Namen gibt es schon",
-        "split_in_use": "Wird von einer geplanten Ausgabe, Anschaffung oder einem Wunsch verwendet; ändere oder lösche diese zuerst",
+        "split_in_use": (
+            "Wird von einer geplanten Ausgabe, Anschaffung oder einem Wunsch verwendet; ändere oder lösche diese zuerst"
+        ),
         "settle_pick_accounts": "Wähle von beiden Elternteilen ein Konto",
         "settle_two_parents": "Ein Ausgleich geht immer zwischen zwei Elternteilen",
         "settlement_not_found": "Ausgleich nicht gefunden",
@@ -237,7 +239,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "direction_required": "direction fehlt; eine Umbuchung braucht in oder out",
         "direction_format": "direction «{direction}»: verwende in oder out",
         "direction_transfers_only": "direction gibt es nur bei Umbuchungen",
-        "transfer_plain_only": "Eine Umbuchung kann nicht einem Kind zugeordnet, aufgeteilt oder mit einer Anschaffung verknüpft werden",
+        "transfer_plain_only": (
+            "Eine Umbuchung kann nicht einem Kind zugeordnet, aufgeteilt oder mit einer Anschaffung verknüpft werden"
+        ),
         "unknown_child": "Unbekanntes Kind «{name}» (nur Kinder ohne Jugendlohn)",
         "unknown_split": "Unbekannte Aufteilung «{name}»",
         "unknown_investment": "Unbekannte Anschaffung «{name}»",

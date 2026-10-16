@@ -6,7 +6,7 @@ Who sees and changes a wish follows the rules for its owner's money; common wish
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 

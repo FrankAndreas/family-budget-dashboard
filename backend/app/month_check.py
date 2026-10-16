@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import List
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from . import auth, crud, database, models, privacy, schemas, messages
