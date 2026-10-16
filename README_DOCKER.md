@@ -204,3 +204,4 @@ Check the generated file in `app/migrations/versions/`, and add a test in `tests
 | *Bind for 0.0.0.0:8081 failed: port is already allocated* | Another app uses the port | Set another `PORT` in `.env` |
 | Email from Task Scheduler: *up to date, but the backend is not healthy* | The backend keeps crashing without an update, e.g. after a change to `.env` (wrong `PUID`/`PGID`) | Check `logs/update.log`, fix the cause, then `sudo docker-compose up -d` and `sudo docker restart budget-frontend` |
 | Email from Task Scheduler: *backend not healthy* | A new version fails to start | Check `logs/update.log` (it ends with the backend's log), then [roll back](#rolling-back-an-update) |
+| Login says *Too many wrong PINs. Try again in … minutes.* | 5 wrong PINs in a row lock that name for 15 minutes | Wait, or have another parent set a new PIN in Settings → Family (that unlocks it at once) |

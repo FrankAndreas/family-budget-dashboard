@@ -63,6 +63,9 @@ class User(Base):
     privacy_enabled = Column(Boolean, default=False)
     is_active = Column(Boolean, default=True)
     settings = Column(JSON, default={})
+    # Wrong PINs in a row, and until when logins are refused after too many (see auth.MAX_WRONG_PINS)
+    failed_logins = Column(Integer, default=0)
+    locked_until = Column(DateTime, nullable=True)
 
     accounts = relationship("Account", back_populates="user")
     budgets = relationship("Budget", back_populates="user")
