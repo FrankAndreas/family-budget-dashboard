@@ -29,7 +29,7 @@ test('month check books the gap of a clearing account', async ({ page, request }
     page.on('request', r => { if (r.url().includes('/month-check')) checks++; });
     await page.reload();
     await expect(page.getByText('August 2025')).toBeVisible();
-    await expect(page.getByText('not tracked $50.00')).toBeVisible();
+    await expect(page.getByText('not tracked CHF 50.00')).toBeVisible();
     const before = checks;
     await page.waitForTimeout(3000);
     expect(checks).toBe(before);

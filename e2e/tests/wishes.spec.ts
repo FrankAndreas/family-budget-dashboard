@@ -19,14 +19,14 @@ test('wish lists and the family plan', async ({ page, request }) => {
     expect(await names(page, '[data-wish-name]')).toEqual(['Bike', 'Lamp', 'Tent']);
     await page.getByRole('button', { name: 'Move Tent up' }).click();
     await expect.poll(() => names(page, '[data-wish-name]')).toEqual(['Bike', 'Tent', 'Lamp']);
-    await expect(page.getByText('Total $1220.00')).toBeVisible();
+    await expect(page.getByText("Total CHF 1'220.00")).toBeVisible();
 
     await page.getByRole('button', { name: 'Add Bike to the family plan' }).click();
     await page.getByRole('button', { name: 'Add Lamp to the family plan' }).click();
     await expect(page.getByRole('button', { name: 'Remove Lamp from the family plan' })).toBeVisible();
     await page.getByRole('button', { name: 'Family plan', exact: true }).click();
     await expect.poll(() => names(page, '[data-plan-name]')).toEqual(['Bike', 'Lamp']);
-    expect(await names(page, '[data-plan-total]')).toEqual(['$800.00', '$920.00']);
+    expect(await names(page, '[data-plan-total]')).toEqual(['CHF 800.00', 'CHF 920.00']);
     await page.getByRole('button', { name: 'Move Lamp up in the family plan' }).click();
     await expect.poll(() => names(page, '[data-plan-name]')).toEqual(['Lamp', 'Bike']);
 
@@ -48,6 +48,6 @@ test('wish lists and the family plan', async ({ page, request }) => {
     await page.getByLabel('Best price').fill('99.50');
     await page.getByLabel('Shop').fill('Shop A');
     await page.getByRole('button', { name: 'Save wish' }).click();
-    await expect(page.getByText('best $99.50 at Shop A')).toBeVisible();
+    await expect(page.getByText('best CHF 99.50 at Shop A')).toBeVisible();
     expect(errors).toEqual([]);
 });

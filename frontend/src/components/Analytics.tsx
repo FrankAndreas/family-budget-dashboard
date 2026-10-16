@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../api';
+import { money } from '../finance';
 import { useFamily } from '../useFamily';
 import ScopeSelector from './ScopeSelector';
 import { format, parseISO } from 'date-fns';
@@ -86,17 +87,17 @@ export default function Analytics() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="glass-card p-6">
                     <h3 className="text-emerald-400 text-sm font-semibold mb-2">Income ({rangeLabel})</h3>
-                    <p className="text-3xl font-bold">${totalIncome.toFixed(2)}</p>
+                    <p className="text-3xl font-bold">{money(totalIncome)}</p>
                 </div>
                 <div className="glass-card p-6">
                     <h3 className="text-red-400 text-sm font-semibold mb-2">Expenses ({rangeLabel})</h3>
-                    <p className="text-3xl font-bold">${totalExpenses.toFixed(2)}</p>
+                    <p className="text-3xl font-bold">{money(totalExpenses)}</p>
                 </div>
                 <div className="glass-card p-6">
                     <h3 className={`${netSavings >= 0 ? 'text-sky-400' : 'text-red-400'} text-sm font-semibold mb-2`}>
                         Net {netSavings >= 0 ? 'Savings' : 'Deficit'} ({rangeLabel})
                     </h3>
-                    <p className="text-3xl font-bold">${Math.abs(netSavings).toFixed(2)}</p>
+                    <p className="text-3xl font-bold">{money(Math.abs(netSavings))}</p>
                 </div>
             </div>
 
@@ -109,6 +110,7 @@ export default function Analytics() {
                         <XAxis dataKey="month" stroke="#94a3b8" />
                         <YAxis stroke="#94a3b8" />
                         <Tooltip
+                            formatter={(value) => money(Number(value))}
                             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
                             labelStyle={{ color: '#f8fafc' }}
                         />
@@ -129,6 +131,7 @@ export default function Analytics() {
                         <XAxis dataKey="date" stroke="#94a3b8" />
                         <YAxis stroke="#94a3b8" />
                         <Tooltip
+                            formatter={(value) => money(Number(value))}
                             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
                             labelStyle={{ color: '#f8fafc' }}
                         />
@@ -149,7 +152,7 @@ export default function Analytics() {
                         {childCosts.map(child => (
                             <div key={child.name} className="flex items-center justify-between p-2 bg-slate-800/30 rounded">
                                 <span>{child.name}</span>
-                                <span className="font-bold">${child.value.toFixed(2)}</span>
+                                <span className="font-bold">{money(child.value)}</span>
                             </div>
                         ))}
                     </div>
@@ -178,6 +181,7 @@ export default function Analytics() {
                                     ))}
                                 </Pie>
                                 <Tooltip
+                            formatter={(value) => money(Number(value))}
                                     contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
                                 />
                             </PieChart>
@@ -192,7 +196,7 @@ export default function Analytics() {
                                         />
                                         <span>{cat.name}</span>
                                     </div>
-                                    <span className="font-bold">${cat.value.toFixed(2)}</span>
+                                    <span className="font-bold">{money(cat.value)}</span>
                                 </div>
                             ))}
                         </div>

@@ -18,13 +18,13 @@ test('budget spending and analytics totals', async ({ page, request }) => {
 
     const errors = await login(page, parent);
     await page.getByRole('button', { name: 'Budgets' }).click();
-    await expect(page.getByText('$45.50 / $200.00')).toBeVisible();
+    await expect(page.getByText('CHF 45.50 / CHF 200.00')).toBeVisible();
     await expect(page.getByText('22.8%')).toBeVisible();
 
     await page.getByRole('button', { name: 'Analytics' }).click();
-    await expect(page.locator('.glass-card', { hasText: 'Income (This Month)' })).toContainText('$3000.00');
-    await expect(page.locator('.glass-card', { hasText: 'Expenses (This Month)' })).toContainText('$45.50');
-    await expect(page.locator('.glass-card', { hasText: 'Net Savings (This Month)' })).toContainText('$2954.50');
+    await expect(page.locator('.glass-card', { hasText: 'Income (This Month)' })).toContainText("CHF 3'000.00");
+    await expect(page.locator('.glass-card', { hasText: 'Expenses (This Month)' })).toContainText('CHF 45.50');
+    await expect(page.locator('.glass-card', { hasText: 'Net Savings (This Month)' })).toContainText("CHF 2'954.50");
     await expect(page.getByText('Groceries').last()).toBeVisible();
     expect(errors).toEqual([]);
 });
