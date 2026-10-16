@@ -90,8 +90,3 @@ export interface PlannedCost {
     // Monthly amount per person
     shares: Record<string, number>;
 }
-
-export const MONTHS = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December'
-];

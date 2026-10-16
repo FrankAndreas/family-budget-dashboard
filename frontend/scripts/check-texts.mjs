@@ -15,6 +15,9 @@ const CHECKED = [
     // Task 8
     'components/Transactions.tsx', 'components/BudgetManager.tsx', 'components/Analytics.tsx',
     'components/MonthCheck.tsx', 'components/CategoryManager.tsx',
+    // Task 9
+    'components/CommonBudget.tsx', 'components/SplitManager.tsx', 'components/YearlyBills.tsx',
+    'components/MonthlyCosts.tsx', 'components/Investments.tsx', 'components/Wishes.tsx',
 ];
 const ATTRIBUTES = new Set(['placeholder', 'aria-label', 'title', 'alt', 'label']);
 const CALLS = new Set(['confirm', 'alert', 'setError', 'errorMessage', 'setMessage']);

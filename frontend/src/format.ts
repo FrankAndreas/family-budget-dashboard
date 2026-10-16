@@ -21,3 +21,7 @@ export const formatDayShort = (value: string | Date) =>
 
 export const formatMonthShort = (value: string | Date) =>
     toDate(value).toLocaleDateString(locale(), { month: 'short' });
+
+// January … December (Januar … Dezember)
+export const monthNames = () =>
+    Array.from({ length: 12 }, (_, i) => new Date(2026, i, 15).toLocaleDateString(locale(), { month: 'long' }));
