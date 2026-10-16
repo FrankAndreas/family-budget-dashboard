@@ -8,7 +8,7 @@ import bcrypt
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from . import schemas, database, models
+from . import schemas, database, models, i18n
 
 logger = logging.getLogger(__name__)
 
@@ -81,4 +81,6 @@ async def get_current_user_from_token(token: str = Depends(oauth2_scheme), db: S
     user = db.query(models.User).filter(models.User.id == token_data.user_id).first()
     if user is None or not user.is_active or version != (user.token_version or 0):
         raise credentials_exception
+    # From here on, the request speaks the person's language
+    i18n.set_current(i18n.user_language(user))
     return user

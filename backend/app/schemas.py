@@ -38,9 +38,15 @@ class UserLogin(BaseModel):
 class User(UserBase):
     id: str
     is_active: bool = True
+    # Stored in users.settings; the default language if none was chosen (models.User.language)
+    language: str = "de"
 
     class Config:
         from_attributes = True
+
+
+class LanguageUpdate(BaseModel):
+    language: Literal["de", "en"]
 
 
 class UserUpdate(BaseModel):

@@ -5,6 +5,8 @@ from pathlib import Path
 
 # Point the app at a throwaway database before it is imported, so tests never touch data/budget.db
 os.environ["DATABASE_URL"] = f"sqlite:///{tempfile.mkdtemp()}/test.db"
+# The existing tests check English texts and English default categories; German tests set "de" themselves
+os.environ["DEFAULT_LANGUAGE"] = "en"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 
 import pytest  # noqa: E402

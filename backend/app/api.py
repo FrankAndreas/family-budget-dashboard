@@ -6,7 +6,7 @@ import math
 from datetime import timedelta
 from fastapi import Body
 
-from . import crud, schemas, auth, database, models, privacy, reports
+from . import crud, schemas, auth, database, models, privacy, reports, i18n
 from .common_api import apply_item_decisions, visible_owner
 from .seed import SETTLE_UP
 
@@ -216,6 +216,20 @@ def logout_everywhere(
     current_user.token_version = (current_user.token_version or 0) + 1
     db.commit()
     return {"logged_out": True}
+
+
+@router.patch("/me/language", response_model=schemas.User)
+def set_language(
+    change: schemas.LanguageUpdate,
+    db: Session = Depends(database.get_db),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+):
+    # A new dict, so SQLAlchemy sees the JSON column change
+    current_user.settings = {**(current_user.settings or {}), "language": change.language}
+    db.commit()
+    db.refresh(current_user)
+    i18n.set_current(change.language)
+    return current_user
 
 
 @router.patch("/me/privacy")
