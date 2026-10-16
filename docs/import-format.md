@@ -74,6 +74,20 @@ deleted (and its date and description changed through the API), but not edited i
 `tools/converters/` contains converters for a bank account's CSV export and for the Migros receipt export;
 they write this format. See [their guide](../tools/converters/README.md).
 
+## Changing categories in the preview, import rules
+
+- In the preview, each income or expense row has a category dropdown. The sign stays: an expense row can become
+  another expense category or **Transfer (out)**, an income row another income category or **Transfer (in)**.
+  Each change checks the file again, so duplicates and errors match what will be booked.
+- Parents can tick **remember** on a changed row and shorten the text (e.g. "Bäckerei"). The import then saves an
+  **import rule**: bookings whose description contains that text, ignoring case, get that category. Rules are only
+  saved when the import succeeds.
+- Rules apply to rows that arrive as **Unsorted** or **Other Income** (the bank converter's fallbacks), oldest rule
+  first, when the category fits the sign. Such rows show "by rule: <text>". A change in the dropdown wins.
+- **Settings → Data Management → Import rules** lists them, with Delete and the block to paste into
+  `converter.toml`. The JSON Schema lists them as `x-rules`, and the bank converter applies them to lines its own
+  rules don't recognise (see the [converters](../tools/converters/README.md)).
+
 ## Duplicates
 
 A row is marked as a duplicate, and skipped unless you tick it in the preview, when
