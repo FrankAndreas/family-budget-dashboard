@@ -29,13 +29,16 @@ export default function CommonBudget() {
     const [overview, setOverview] = useState<Overview>({ items: [], totals: {} });
     const [settlements, setSettlements] = useState<Settlement[]>([]);
     const [accounts, setAccounts] = useState<Account[]>([]);
-    const [settling, setSettling] = useState<{ amount: string; fromAccount: string; toAccount: string } | null>(null);
+    const [settling, setSettling] = useState<
+        { fromUser: string; toUser: string; amount: string; fromAccount: string; toAccount: string } | null
+    >(null);
     const [error, setError] = useState('');
     const [version, setVersion] = useState(0);
     const refresh = () => setVersion(v => v + 1);
 
     const parents = users.filter(u => u.role === 'PARENT' && u.is_active !== false);
     const nameOf = (id: string) => (id === user?.id ? 'You' : users.find(u => u.id === id)?.username ?? 'former parent');
+    const whose = (id: string) => (id === user?.id ? 'your' : `${nameOf(id)}'s`);
 
     useEffect(() => {
         Promise.all([
@@ -55,20 +58,53 @@ export default function CommonBudget() {
             .catch(err => setError(errorMessage(err, 'Failed to load the common budget')));
     }, [version, splits]);
 
-    // With two parents the balance is one number: who owes whom
-    const debtor = balances.find(b => b.amount < 0);
-    const creditor = balances.find(b => b.amount > 0);
-    const owed = creditor ? creditor.amount : 0;
+    // Who owes most pays who is owed most (with two parents that's the whole balance)
+    const byAmount = [...balances].sort((a, b) => a.amount - b.amount);
+    const debtor = byAmount[0]?.amount < 0 ? byAmount[0] : undefined;
+    const creditor = byAmount[byAmount.length - 1]?.amount > 0 ? byAmount[byAmount.length - 1] : undefined;
+    const owed = debtor && creditor ? Math.min(-debtor.amount, creditor.amount) : 0;
+    // Two parents: one sentence ("Dad owes you ..."); more: one line per parent
+    const perParent = balances.length > 2;
+    const lineFor = (b: Balance) => {
+        const you = b.user_id === user?.id;
+        if (Math.abs(b.amount) < 0.005) return `${nameOf(b.user_id)} ${you ? 'are' : 'is'} settled`;
+        if (b.amount > 0) return `${nameOf(b.user_id)} ${you ? 'are' : 'is'} owed ${money(b.amount)}`;
+        return `${nameOf(b.user_id)} ${you ? 'owe' : 'owes'} ${money(-b.amount)}`;
+    };
     // Each parent pays from / receives into their own accounts; only accounts you can see are offered
     const accountsOf = (userId?: string) => accounts.filter(a => a.user_id === userId);
+    const startSettling = () => {
+        if (!debtor || !creditor) return;
+        setSettling({
+            fromUser: debtor.user_id,
+            toUser: creditor.user_id,
+            amount: owed.toFixed(2),
+            fromAccount: accountsOf(debtor.user_id)[0]?.id ?? '',
+            toAccount: accountsOf(creditor.user_id)[0]?.id ?? ''
+        });
+    };
+    // Suggested amount for a chosen pair: what the payer owes, at most what the receiver is owed
+    const suggested = (fromUser: string, toUser: string) => {
+        const owes = -(balances.find(b => b.user_id === fromUser)?.amount ?? 0);
+        const isOwed = balances.find(b => b.user_id === toUser)?.amount ?? 0;
+        return Math.max(Math.min(owes, isOwed), 0).toFixed(2);
+    };
+    const choosePair = (fromUser: string, toUser: string) => settling && setSettling({
+        ...settling,
+        fromUser,
+        toUser,
+        amount: suggested(fromUser, toUser),
+        fromAccount: fromUser === settling.fromUser ? settling.fromAccount : accountsOf(fromUser)[0]?.id ?? '',
+        toAccount: toUser === settling.toUser ? settling.toAccount : accountsOf(toUser)[0]?.id ?? ''
+    });
 
     const settle = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!settling || !debtor || !creditor) return;
+        if (!settling) return;
         try {
             await api.post('/api/v1/settlements', {
-                from_user_id: debtor.user_id,
-                to_user_id: creditor.user_id,
+                from_user_id: settling.fromUser,
+                to_user_id: settling.toUser,
                 amount: parseFloat(settling.amount),
                 from_account_id: settling.fromAccount,
                 to_account_id: settling.toAccount
@@ -112,7 +148,19 @@ export default function CommonBudget() {
 
             <div className="glass-card p-6">
                 <h2 className="text-xl font-bold mb-2">Balance</h2>
-                {owed > 0 && debtor && creditor ? (
+                {perParent ? (
+                    owed > 0 ? (
+                        <ul className="space-y-1">
+                            {[...byAmount].reverse().map(b => (
+                                <li key={b.user_id} className={`text-lg font-semibold ${b.amount > 0.005 ? 'text-emerald-400' : b.amount < -0.005 ? 'text-red-300' : 'text-slate-400'}`}>
+                                    {lineFor(b)}
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-2xl font-bold text-emerald-400">All settled</p>
+                    )
+                ) : owed > 0 && debtor && creditor ? (
                     <p className="text-2xl font-bold">
                         {nameOf(debtor.user_id)} {debtor.user_id === user?.id ? 'owe' : 'owes'}{' '}
                         {creditor.user_id === user?.id ? 'you' : nameOf(creditor.user_id)} {money(owed)}
@@ -122,18 +170,32 @@ export default function CommonBudget() {
                 )}
                 {owed > 0 && !settling && (
                     <button
-                        onClick={() => setSettling({
-                            amount: owed.toFixed(2),
-                            fromAccount: accountsOf(debtor?.user_id)[0]?.id ?? '',
-                            toAccount: accountsOf(creditor?.user_id)[0]?.id ?? ''
-                        })}
+                        onClick={startSettling}
                         className="btn-primary text-sm mt-3"
                     >
                         Settle up
                     </button>
                 )}
-                {settling && debtor && creditor && (
+                {settling && (
                     <form onSubmit={settle} className="mt-4 p-4 bg-slate-800/30 rounded-lg space-y-2">
+                        {perParent && (['fromUser', 'toUser'] as const).map(key => (
+                            <select
+                                key={key}
+                                value={settling[key]}
+                                onChange={(e) => key === 'fromUser'
+                                    ? choosePair(e.target.value, settling.toUser)
+                                    : choosePair(settling.fromUser, e.target.value)}
+                                className={input}
+                                aria-label={key === 'fromUser' ? 'Who pays' : 'Who receives'}
+                                required
+                            >
+                                {balances.map(b => (
+                                    <option key={b.user_id} value={b.user_id}>
+                                        {key === 'fromUser' ? 'Pays: ' : 'Receives: '}{nameOf(b.user_id)}
+                                    </option>
+                                ))}
+                            </select>
+                        ))}
                         <input
                             type="number" step="0.01" min="0.01"
                             value={settling.amount}
@@ -143,8 +205,8 @@ export default function CommonBudget() {
                             required
                         />
                         {[
-                            { key: 'fromAccount' as const, owner: debtor.user_id, label: `From ${nameOf(debtor.user_id)}'s account` },
-                            { key: 'toAccount' as const, owner: creditor.user_id, label: `To ${nameOf(creditor.user_id)}'s account` }
+                            { key: 'fromAccount' as const, owner: settling.fromUser, label: `From ${whose(settling.fromUser)} account` },
+                            { key: 'toAccount' as const, owner: settling.toUser, label: `To ${whose(settling.toUser)} account` }
                         ].map(field => (
                             <select
                                 key={field.key}
@@ -154,7 +216,7 @@ export default function CommonBudget() {
                                 aria-label={field.label}
                                 required
                             >
-                                <option value="">{field.label.replace("You's", 'your')}</option>
+                                <option value="">{field.label}</option>
                                 {accountsOf(field.owner).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                         ))}
