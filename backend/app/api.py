@@ -1,12 +1,16 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
+import logging
+import math
 from datetime import timedelta
 from fastapi import Body
 
 from . import crud, schemas, auth, database, models, privacy, reports
 from .common_api import apply_item_decisions, visible_owner
 from .seed import SETTLE_UP
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -71,7 +75,28 @@ def create_user(
 @router.post("/login", response_model=schemas.Token)
 def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
     db_user = crud.get_user_by_username(db, username=user.username)
+    now = auth.now()
+    # Locked after too many wrong PINs: refused even with the right PIN, so guessing can't go on
+    if db_user and db_user.locked_until and db_user.locked_until > now:
+        minutes = math.ceil((db_user.locked_until - now).total_seconds() / 60)
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=f"Too many wrong PINs. Try again in {minutes} minute{'' if minutes == 1 else 's'}.",
+        )
     if not db_user or not db_user.pin_hash or not auth.verify_pin(user.pin, db_user.pin_hash):
+        # Unknown names aren't counted (nothing to protect, and it doesn't reveal which names exist)
+        if db_user and db_user.pin_hash:
+            db_user.failed_logins = (db_user.failed_logins or 0) + 1
+            if db_user.failed_logins >= auth.MAX_WRONG_PINS:
+                db_user.locked_until = now + timedelta(minutes=auth.LOCK_MINUTES)
+                db_user.failed_logins = 0
+                logger.warning(
+                    "Login for '%s' locked for %d minutes after %d wrong PINs",
+                    db_user.username,
+                    auth.LOCK_MINUTES,
+                    auth.MAX_WRONG_PINS,
+                )
+            db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or PIN",
@@ -79,6 +104,9 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
         )
     if not db_user.is_active:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account has been deactivated")
+    if db_user.failed_logins or db_user.locked_until:
+        db_user.failed_logins, db_user.locked_until = 0, None
+        db.commit()
     access_token = auth.create_access_token(
         data={"sub": db_user.id},
         expires_delta=timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES),

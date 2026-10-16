@@ -18,6 +18,9 @@ SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
 if not os.getenv("SECRET_KEY"):
     logger.warning("SECRET_KEY is not set; using a random key, so logins won't survive a restart")
 ALGORITHM = "HS256"
+# A PIN has only 4 digits: after this many wrong ones in a row, the username is locked for a while
+MAX_WRONG_PINS = 5
+LOCK_MINUTES = 15
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -39,6 +42,11 @@ PIN_HASH_ROUNDS = 12
 
 def get_pin_hash(pin: str) -> str:
     return bcrypt.hashpw(pin.encode(), bcrypt.gensalt(rounds=PIN_HASH_ROUNDS)).decode()
+
+
+def now() -> datetime:
+    """The current time as stored (naive UTC); tests replace it."""
+    return datetime.utcnow()
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):

@@ -37,7 +37,9 @@ export default function Login() {
             navigate('/');
         } catch (err) {
             // 403 means the account was deactivated; anything else is a wrong name or PIN
-            setError(errorStatus(err) === 403 ? errorMessage(err, 'This account has been deactivated') : 'Wrong name or PIN');
+            // 403: deactivated; 429: locked after too many wrong PINs (the server says for how long)
+            const status = errorStatus(err);
+            setError(status === 403 || status === 429 ? errorMessage(err, 'Login refused') : 'Wrong name or PIN');
             setPin('');
         } finally {
             setLoading(false);
