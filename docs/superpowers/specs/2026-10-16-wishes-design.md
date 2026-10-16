@@ -76,8 +76,8 @@ Built on the existing rules (`common_api.visible_owner`, `privacy.access_level`)
   common wishes: 400 "Common wishes are always in the family plan").
 - `POST /wishes/{id}/bought` with `{"bought_on": "YYYY-MM-DD"}` (default today) and `DELETE /wishes/{id}/bought`.
 
-Errors (400): name missing or too long; estimate or best price negative; link without `http(s)://`; neither or
-both of owner and split; split not found. A child can't create a common wish (403).
+Errors: name missing or too long, estimate or best price negative, link without `http(s)://` → 422 (field
+validation, as everywhere in the app); neither or both of owner and split, split not found → 400. A child can't create a common wish (403).
 
 ## 4. Screen: tab "🎁 Wishes"
 
