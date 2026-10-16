@@ -2,6 +2,7 @@
 
 import pytest
 
+from app import database, models
 from helpers import BASE_URL, create_split, register, user_id
 
 
@@ -254,3 +255,18 @@ class TestBought:
         a = wish(client, family["mum"], "Bike", family["mum_id"])
         client.post(f"{BASE_URL}/wishes/{a['id']}/bought", json={}, headers=family["mum"])
         assert move(client, family["mum"], a["id"], "up").status_code == 400
+
+
+class TestCleanup:
+    def test_wishes_go_with_their_owner(self, client, family):
+        kid = register(client, "kid", role="CHILD", by=family["mum"])
+        kid_id = user_id(client, family["mum"], "kid")
+        wish(client, kid, "Game", kid_id)
+        assert client.delete(f"{BASE_URL}/users/{kid_id}", headers=family["mum"]).status_code == 200
+        with database.SessionLocal() as db:
+            assert db.query(models.Wish).count() == 0
+
+    def test_split_in_use_by_a_wish(self, client, family):
+        wish(client, family["mum"], "Sofa", split_id=family["split"])
+        response = client.delete(f"{BASE_URL}/splits/{family['split']}", headers=family["mum"])
+        assert response.status_code == 409

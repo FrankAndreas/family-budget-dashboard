@@ -75,11 +75,14 @@ def update_split(
 @router.delete("/splits/{split_id}", response_model=schemas.Split)
 def delete_split(split_id: str, _: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
     db_split = get_split(db, split_id)
-    in_use = db.query(models.PlannedCost).filter(models.PlannedCost.split_id == split_id).first() or (
-        db.query(models.Asset).filter(models.Asset.split_id == split_id).first()
+    in_use = any(
+        db.query(model).filter(model.split_id == split_id).first()
+        for model in (models.PlannedCost, models.Asset, models.Wish)
     )
     if in_use:
-        raise HTTPException(status_code=409, detail="In use by a planned cost or investment; change or delete it first")
+        raise HTTPException(
+            status_code=409, detail="In use by a planned cost, investment or wish; change or delete it first"
+        )
     db.delete(db_split)
     db.commit()
     return db_split

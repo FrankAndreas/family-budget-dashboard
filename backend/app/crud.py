@@ -71,6 +71,7 @@ def delete_user(db: Session, user_id: str):
         )
     db.query(models.Account).filter(models.Account.user_id == user_id).delete(synchronize_session=False)
     db.query(models.Budget).filter(models.Budget.user_id == user_id).delete(synchronize_session=False)
+    db.query(models.Wish).filter(models.Wish.owner_id == user_id).delete(synchronize_session=False)
     # Expenses tagged with this child stay; only the tag goes
     db.query(models.Transaction).filter(models.Transaction.member_id == user_id).update(
         {models.Transaction.member_id: None}, synchronize_session=False
