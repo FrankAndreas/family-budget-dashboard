@@ -71,3 +71,12 @@ def test_seed_adds_missing_categories_to_existing_database():
         db.commit()
         assert seed_categories(db) == 1
         assert seed_categories(db) == 0
+
+
+def test_asset_bought_in_the_future_is_planned():
+    stats = finance.asset_stats(1200, date(2027, 3, 3), 4, 0, date(2026, 10, 16))
+    assert stats["age_years"] == 0 and stats["planned"] is True and stats["is_due"] is False
+    assert stats["replacement_due"] == date(2031, 3, 3)
+    assert stats["monthly_set_aside"] == 25.0
+    bought = finance.asset_stats(1200, date(2026, 10, 16), 4, 0, date(2026, 10, 16))
+    assert bought["planned"] is False and bought["age_years"] == 0

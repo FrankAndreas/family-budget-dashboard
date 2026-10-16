@@ -49,6 +49,8 @@ export interface Asset {
     split_id: string | null;
     notes: string | null;
     age_years: number;
+    // Purchase date in the future: not bought yet
+    planned: boolean;
     replacement_due: string;
     is_due: boolean;
     monthly_set_aside: number;

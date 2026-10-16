@@ -163,6 +163,9 @@ export default function Investments() {
                             <div key={asset.id} className="p-4 rounded-lg bg-slate-800/30 border border-slate-700">
                                 <div className="flex justify-between gap-2">
                                     <h3 className="font-semibold text-lg">{asset.name}</h3>
+                                    {asset.planned && (
+                                        <span className="text-xs px-2 py-0.5 h-fit rounded-full bg-sky-500/20 text-sky-300">Planned</span>
+                                    )}
                                     {asset.is_due && (
                                         <span className="text-xs px-2 py-0.5 h-fit rounded-full bg-amber-500/20 text-amber-300">Due</span>
                                     )}
@@ -174,7 +177,10 @@ export default function Investments() {
                                         style={{ width: `${used * 100}%` }} />
                                 </div>
                                 <p className="text-sm text-slate-400 mt-1">
-                                    {asset.age_years} of {asset.lifespan_years} years · replace {new Date(asset.replacement_due).getFullYear()}
+                                    {asset.planned
+                                        ? `planned for ${new Date(asset.purchase_date).toLocaleDateString('de-CH')}`
+                                        : `${asset.age_years} of ${asset.lifespan_years} years`}
+                                    {' · '}replace {new Date(asset.replacement_due).getFullYear()}
                                 </p>
                                 <p className="mt-2">Set aside <strong>{money(asset.monthly_set_aside)}</strong>/month</p>
                                 <div className="flex gap-3 mt-3 text-sm">

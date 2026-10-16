@@ -317,6 +317,8 @@ class AssetIn(BaseModel):
 class Asset(AssetIn):
     id: str
     age_years: float
+    # Purchase date in the future: not bought yet
+    planned: bool = False
     replacement_due: date
     is_due: bool
     monthly_set_aside: float
