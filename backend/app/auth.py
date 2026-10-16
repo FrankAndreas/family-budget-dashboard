@@ -33,8 +33,12 @@ def verify_pin(plain_pin: str, hashed_pin: str) -> bool:
         return False
 
 
+# bcrypt's default cost; the tests lower it, because hashing dominated their run time
+PIN_HASH_ROUNDS = 12
+
+
 def get_pin_hash(pin: str) -> str:
-    return bcrypt.hashpw(pin.encode(), bcrypt.gensalt()).decode()
+    return bcrypt.hashpw(pin.encode(), bcrypt.gensalt(rounds=PIN_HASH_ROUNDS)).decode()
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
