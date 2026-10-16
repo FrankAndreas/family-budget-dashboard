@@ -2,7 +2,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
-from . import models
+from . import models, messages
 
 # Access rules:
 # - Everyone has full access to their own money ("OWN")
@@ -44,12 +44,10 @@ def check_user_access(db: Session, current_user: models.User, target_user_id: st
     """The target user if the current user may view (or with write=True, manage) their money; 403/404 otherwise."""
     target_user = db.query(models.User).filter(models.User.id == target_user_id).first()
     if not target_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise messages.api_error(404, "user_not_found")
     level = access_level(db, current_user, target_user)
     if level is None or (write and not can_write(level)):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to access this user's data"
-        )
+        raise messages.api_error(status.HTTP_403_FORBIDDEN, "no_access_user")
     return target_user
 
 
@@ -59,13 +57,11 @@ def check_account_access(
     """The account if the current user may view (or with write=True, change) it; 403/404 otherwise."""
     account = db.query(models.Account).filter(models.Account.id == account_id).first()
     if not account:
-        raise HTTPException(status_code=404, detail="Account not found")
+        raise messages.api_error(404, "account_not_found")
     owner = db.query(models.User).filter(models.User.id == account.user_id).first()
     level = access_level(db, current_user, owner) if owner else None
     if level is None or (write and not can_write(level)):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="You do not have permission to access this account"
-        )
+        raise messages.api_error(status.HTTP_403_FORBIDDEN, "no_access_account")
     return account
 
 

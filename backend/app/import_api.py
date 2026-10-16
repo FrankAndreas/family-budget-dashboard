@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from . import auth, crud, database, import_rules, models, privacy, schemas
+from . import auth, crud, database, import_rules, models, privacy, schemas, messages
 from .api import check_asset, check_member_tag, check_shared, is_dependent
 from .common_api import visible_owner
 from .seed import SETTLE_UP
@@ -63,20 +63,20 @@ def text_value(value) -> str:
 def parse_file(filename: str, content: bytes) -> list[dict[str, Any]]:
     """The file's rows as {field: text}, each with its "_line" (CSV line, or position in the JSON list)."""
     if len(content) > MAX_BYTES:
-        raise HTTPException(status_code=400, detail="The file is larger than 1 MB")
+        raise messages.api_error(400, "file_too_large")
     try:
         text = content.decode("utf-8-sig")
     except UnicodeDecodeError:
-        raise HTTPException(status_code=400, detail="The file must be UTF-8 text (CSV or JSON)")
+        raise messages.api_error(400, "file_not_utf8")
 
     if filename.lower().endswith(".json") or text.lstrip().startswith(("{", "[")):
         rows = parse_json(text)
     else:
         rows = parse_csv(text)
     if not rows:
-        raise HTTPException(status_code=400, detail="The file has no transactions")
+        raise messages.api_error(400, "file_empty")
     if len(rows) > MAX_ROWS:
-        raise HTTPException(status_code=400, detail=f"At most {MAX_ROWS} transactions per file")
+        raise messages.api_error(400, "max_rows", count=MAX_ROWS)
     return rows
 
 
@@ -84,10 +84,10 @@ def parse_json(text: str) -> list[dict[str, Any]]:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as error:
-        raise HTTPException(status_code=400, detail=f"Not valid JSON: {error.msg} (line {error.lineno})")
+        raise messages.api_error(400, "json_invalid", error=error.msg, line=error.lineno)
     items = data.get("transactions") if isinstance(data, dict) else data
     if not isinstance(items, list) or not all(isinstance(item, dict) for item in items):
-        raise HTTPException(status_code=400, detail='JSON must look like {"transactions": [{...}, ...]}')
+        raise messages.api_error(400, "json_shape")
     return [
         {"_line": index, **{field: text_value(item.get(field)) for field in FIELDS}}
         for index, item in enumerate(items, start=1)
@@ -153,10 +153,14 @@ class Lookups:
         if len(matches) == 1:
             return matches[0], None
         if len(matches) > 1:
-            return None, f"Several accounts are called '{name}'; add the owner"
+            return None, messages.text("several_accounts", name=name)
         if any(key(a.name or "") == key(name) for a in self.view_only):
-            return None, f"'{name}' is shared with you for viewing only"
-        return None, f"Unknown account '{name}'" + (f" of {owner}" if owner else "")
+            return None, messages.text("account_view_only", name=name)
+        return None, (
+            messages.text("unknown_account_of", name=name, owner=owner)
+            if owner
+            else messages.text("unknown_account", name=name)
+        )
 
 
 def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen: dict[str, int]) -> dict:
@@ -166,67 +170,71 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
 
     date = None
     if not row["date"]:
-        errors.append("date is required")
+        errors.append(messages.text("date_required"))
     else:
         try:
             date = parse_date(row["date"])
         except ValueError:
-            errors.append(f"date '{row['date']}': use YYYY-MM-DD")
+            errors.append(messages.text("date_format", date=row["date"]))
 
     amount = None
     try:
         amount = float(row["amount"])
     except ValueError:
         errors.append(
-            "amount is required" if not row["amount"] else f"amount '{row['amount']}': use a number like 84.30"
+            messages.text("amount_required")
+            if not row["amount"]
+            else messages.text("amount_format", amount=row["amount"])
         )
     if amount is not None and (not math.isfinite(amount) or amount <= 0):
-        errors.append("amount must be more than 0")
+        errors.append(messages.text("amount_positive"))
         amount = None
 
     account, problem = (
-        (None, "account is required") if not row["account"] else lookups.account(row["account"], row["owner"])
+        (None, messages.text("account_required"))
+        if not row["account"]
+        else lookups.account(row["account"], row["owner"])
     )
     if problem:
         errors.append(problem)
 
     category = lookups.categories.get(key(row["category"]))
     if not row["category"]:
-        errors.append("category is required")
+        errors.append(messages.text("category_required"))
     elif not category:
-        errors.append(f"Unknown category '{row['category']}'")
+        errors.append(messages.text("unknown_category", name=row["category"]))
     elif category.system_key == SETTLE_UP:
-        errors.append("Settle up can't be imported; use the Common tab")
+        errors.append(messages.text("settle_up_not_importable"))
         category = None
 
     # A transfer has no income/expense type to take the sign from, so the row says which way the money went
     is_transfer = category is not None and category.type == models.CategoryType.TRANSFER
     direction = key(row["direction"])
     if is_transfer and not direction:
-        errors.append("direction is required for a transfer (in or out)")
+        errors.append(messages.text("direction_required"))
     elif direction and direction not in DIRECTIONS:
-        errors.append(f"direction '{row['direction']}': use in or out")
+        errors.append(messages.text("direction_format", direction=row["direction"]))
     elif direction and category is not None and not is_transfer:
-        errors.append("direction is only for transfers")
+        errors.append(messages.text("direction_transfers_only"))
     if is_transfer and (row["for"] or row["shared"] or row["item"]):
-        errors.append("A transfer can't be for a child, shared or linked to an investment")
+        errors.append(messages.text("transfer_plain_only"))
 
     member = split = asset = None
     if row["for"]:
         member = lookups.children.get(key(row["for"]))
         if not member:
-            errors.append(f"Unknown child '{row['for']}' (only children without own allowance)")
+            errors.append(messages.text("unknown_child", name=row["for"]))
     if row["shared"]:
         split = lookups.splits.get(key(row["shared"]))
         if not split:
-            errors.append(f"Unknown split '{row['shared']}'")
+            errors.append(messages.text("unknown_split", name=row["shared"]))
     if row["item"]:
         asset = lookups.assets.get(key(row["item"]))
         if not asset:
-            errors.append(f"Unknown investment '{row['item']}'")
+            errors.append(messages.text("unknown_investment", name=row["item"]))
     for field in ("description", "reference"):
         if len(row[field]) > MAX_TEXT:
-            errors.append(f"{field}: at most {MAX_TEXT} characters")
+            errors.append(messages.text("text_too_long", field=field, count=MAX_TEXT))
 
     split_shares = None
     if account and category:
@@ -249,12 +257,18 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
     reference = row["reference"] or None
     if reference and reference in lookups.references:
         twin = lookups.references[reference]
-        out.update(status="duplicate", duplicate_of=twin.id, note=f"Same reference, booked on {twin.date.date()}")
+        out.update(
+            status="duplicate",
+            duplicate_of=twin.id,
+            note=messages.text("duplicate_reference_booked", date=twin.date.date()),
+        )
     elif reference and reference in seen:
-        out.update(status="duplicate", note=f"Same reference as line {seen[reference]}")
+        out.update(status="duplicate", note=messages.text("duplicate_reference_line", line=seen[reference]))
     elif (account.id, date.date(), signed, category.id) in lookups.bookings:
         twin = lookups.bookings[(account.id, date.date(), signed, category.id)]
-        out.update(status="duplicate", duplicate_of=twin.id, note=f"Already booked on {twin.date.date()}")
+        out.update(
+            status="duplicate", duplicate_of=twin.id, note=messages.text("duplicate_booked", date=twin.date.date())
+        )
     if reference:
         seen.setdefault(reference, raw["_line"])
 
@@ -281,7 +295,7 @@ def check_file(db: Session, user: models.User, file: UploadFile, changes: Option
     changes = changes or {}
     unknown = set(changes) - {raw["_line"] for raw in raw_rows}
     if unknown:
-        raise HTTPException(status_code=400, detail=f"changes name line {min(unknown)}, which isn't in the file")
+        raise messages.api_error(400, "changes_unknown_line", line=min(unknown))
     if any(c.get("remember") for c in changes.values()):
         import_rules.require_parent(user)
     lookups = Lookups(db, user)
@@ -334,7 +348,7 @@ def run_import(
     changed = import_rules.parse_changes(changes)
     rows = check_file(db, current_user, file, changed)
     if any(row["status"] == "error" for row in rows):
-        raise HTTPException(status_code=400, detail={"message": "The file has errors", **public(rows)})
+        raise HTTPException(status_code=400, detail={"message": messages.text("file_has_errors"), **public(rows)})
     included = {int(line) for line in include_duplicates.split(",") if line.strip().isdigit()}
     chosen = [row for row in rows if row["status"] == "ok" or row["line"] in included]
     try:

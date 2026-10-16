@@ -26,11 +26,11 @@ def check_member_tag(db: Session, member_id: Optional[str], account_id: str) -> 
         return
     member = db.query(crud.models.User).filter(crud.models.User.id == member_id).first()
     if not member or not is_dependent(member):
-        raise HTTPException(status_code=400, detail="Expenses can only be tagged with a child without own allowance")
+        raise messages.api_error(400, "tag_child_without_allowance")
     account = crud.get_account(db, account_id)
     owner = account.user if account else None
     if not owner or owner.role != "PARENT":
-        raise HTTPException(status_code=400, detail="Only household expenses can be tagged with a child")
+        raise messages.api_error(400, "tag_household_only")
 
 
 def check_shared(db: Session, split_id: Optional[str], account_id: str, category) -> Optional[dict]:
@@ -38,14 +38,14 @@ def check_shared(db: Session, split_id: Optional[str], account_id: str, category
     if split_id is None:
         return None
     if category.type != models.CategoryType.EXPENSE:
-        raise HTTPException(status_code=400, detail="Only expenses can be shared")
+        raise messages.api_error(400, "share_expenses_only")
     account = crud.get_account(db, account_id)
     owner = account.user if account else None
     if not owner or owner.role != "PARENT":
-        raise HTTPException(status_code=400, detail="Only a parent's expenses can be shared")
+        raise messages.api_error(400, "share_parent_only")
     split = db.query(models.Split).filter(models.Split.id == split_id).first()
     if not split:
-        raise HTTPException(status_code=400, detail="Split not found")
+        raise messages.api_error(400, "split_not_found")
     return dict(split.shares)
 
 
@@ -55,7 +55,7 @@ def check_asset(db: Session, current_user, asset_id: Optional[str]) -> None:
         return
     asset = db.query(models.Asset).filter(models.Asset.id == asset_id).first()
     if not asset or not visible_owner(db, current_user, asset.owner_id, asset.split_id):
-        raise HTTPException(status_code=400, detail="Investment not found")
+        raise messages.api_error(400, "investment_not_found")
 
 
 # Auth Routes
@@ -67,9 +67,9 @@ def create_user(
 ):
     # No public sign-up: parents add family members (the first parent is created on startup)
     if current_user.role != "PARENT":
-        raise HTTPException(status_code=403, detail="Only parents can add family members")
+        raise messages.api_error(403, "only_parents_add_members")
     if crud.get_user_by_username(db, username=user.username):
-        raise HTTPException(status_code=400, detail="Username already registered")
+        raise messages.api_error(400, "username_taken")
     return crud.create_user(db=db, user=user)
 
 
@@ -100,7 +100,7 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
             db.commit()
         raise messages.api_error(status.HTTP_401_UNAUTHORIZED, "wrong_login", headers={"WWW-Authenticate": "Bearer"})
     if not db_user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="This account has been deactivated")
+        raise messages.api_error(status.HTTP_403_FORBIDDEN, "login_deactivated")
     if db_user.failed_logins or db_user.locked_until:
         db_user.failed_logins, db_user.locked_until = 0, None
         db.commit()
@@ -126,9 +126,9 @@ def create_member(
 ):
     # A parent adds a younger child who has no own money and no login
     if current_user.role != "PARENT":
-        raise HTTPException(status_code=403, detail="Only parents can add family members")
+        raise messages.api_error(403, "only_parents_add_members")
     if crud.get_user_by_username(db, username=member.username):
-        raise HTTPException(status_code=400, detail="Username already registered")
+        raise messages.api_error(400, "username_taken")
     return crud.create_member(db, username=member.username)
 
 
@@ -147,31 +147,31 @@ def update_user(
     # Only PARENT can update other users (or themselves)
     # CHILD can update themselves? Maybe just Parents for now based on requirements "Admin user... edit a user"
     if current_user.role != "PARENT":
-        raise HTTPException(status_code=403, detail="Only parents can update users")
+        raise messages.api_error(403, "only_parents_update_users")
 
     target_user = db.query(crud.models.User).filter(crud.models.User.id == user_id).first()
     if not target_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise messages.api_error(404, "user_not_found")
 
     if user_update.username is not None:
         existing = crud.get_user_by_username(db, username=user_update.username)
         if existing and existing.id != target_user.id:
-            raise HTTPException(status_code=400, detail="That name is already taken")
+            raise messages.api_error(400, "name_taken")
 
     # Deactivating or demoting an active parent must leave at least one other active parent
     is_active_parent = target_user.role == "PARENT" and target_user.is_active
     removes_parent = user_update.is_active is False or (user_update.role is not None and user_update.role != "PARENT")
     if is_active_parent and removes_parent and crud.count_admins(db) <= 1:
-        raise HTTPException(status_code=400, detail="Cannot deactivate or demote the last admin user")
+        raise messages.api_error(400, "last_admin_demote")
 
     if user_update.has_allowance is not None and user_update.has_allowance != target_user.has_allowance:
         if target_user.role != "CHILD":
-            raise HTTPException(status_code=400, detail="Only children can have an own allowance")
+            raise messages.api_error(400, "allowance_children_only")
         # Getting an own allowance means logging in and managing money, so the child needs a PIN
         if user_update.has_allowance and not target_user.pin_hash and not user_update.pin:
-            raise HTTPException(status_code=400, detail="Set a PIN so the child can log in")
+            raise messages.api_error(400, "child_needs_pin")
         if not user_update.has_allowance and crud.get_accounts(db, user_id):
-            raise HTTPException(status_code=400, detail="Delete the child's own accounts first")
+            raise messages.api_error(400, "delete_child_accounts_first")
 
     return crud.update_user(db, user_id, user_update)
 
@@ -184,11 +184,11 @@ def delete_user(
     db: Session = Depends(database.get_db),
 ):
     if current_user.role != "PARENT":
-        raise HTTPException(status_code=403, detail="Only parents can delete users")
+        raise messages.api_error(403, "only_parents_delete_users")
 
     user_to_delete = db.query(crud.models.User).filter(crud.models.User.id == user_id).first()
     if not user_to_delete:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise messages.api_error(404, "user_not_found")
 
     # Check if we are deleting an admin (PARENT)
     if user_to_delete.role == "PARENT":
@@ -197,7 +197,7 @@ def delete_user(
         # If we are deleting/inactivating an active admin, we need to ensure at least one OTHER active admin remains
         # If user is active, count includes them. So if count <= 1, we can't delete.
         if user_to_delete.is_active and admin_count <= 1:
-            raise HTTPException(status_code=400, detail="Cannot delete the last admin user")
+            raise messages.api_error(400, "last_admin_delete")
 
     # Their investments and yearly bills go where the parent decided (409 lists any without a decision)
     apply_item_decisions(db, user_id, removal.items if removal else [])
@@ -236,9 +236,7 @@ def update_privacy(
 ):
     # Only children can update their own privacy settings
     if current_user.role != "CHILD":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Only child accounts can modify privacy settings"
-        )
+        raise messages.api_error(status.HTTP_403_FORBIDDEN, "privacy_children_only")
 
     current_user.privacy_enabled = privacy_update.get("privacy_enabled", current_user.privacy_enabled)
     db.commit()
@@ -262,12 +260,12 @@ def create_account(
     db: Session = Depends(database.get_db),
 ):
     if is_dependent(current_user):
-        raise HTTPException(status_code=403, detail="Children without own allowance can't have accounts")
+        raise messages.api_error(403, "no_accounts_without_allowance")
     owner = (
         privacy.check_user_access(db, current_user, account.user_id, write=True) if account.user_id else current_user
     )
     if is_dependent(owner):
-        raise HTTPException(status_code=403, detail="Children without own allowance can't have accounts")
+        raise messages.api_error(403, "no_accounts_without_allowance")
     return crud.create_account(db, account=account, user_id=owner.id)
 
 
@@ -320,9 +318,9 @@ def create_transaction(
     privacy.check_account_access(db, current_user, transaction.account_id, write=True)
     category = crud.get_category(db, transaction.category_id)
     if not category:
-        raise HTTPException(status_code=400, detail="Category not found")
+        raise messages.api_error(400, "category_not_found")
     if category.type == models.CategoryType.TRANSFER:
-        raise HTTPException(status_code=400, detail="Transfers are booked with Settle up")
+        raise messages.api_error(400, "transfers_via_settle_up")
     check_member_tag(db, transaction.member_id, transaction.account_id)
     split_shares = check_shared(db, transaction.split_id, transaction.account_id, category)
     check_asset(db, current_user, transaction.asset_id)
@@ -338,7 +336,7 @@ def update_transaction(
 ):
     db_transaction = crud.get_transaction(db, transaction_id)
     if not db_transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+        raise messages.api_error(404, "transaction_not_found")
     privacy.check_account_access(db, current_user, db_transaction.account_id, write=True)
 
     current = crud.get_category(db, db_transaction.category_id)
@@ -346,9 +344,9 @@ def update_transaction(
         return update_transfer(db, db_transaction, transaction_update, current)
     category = crud.get_category(db, transaction_update.category_id or db_transaction.category_id)
     if not category:
-        raise HTTPException(status_code=400, detail="Category not found")
+        raise messages.api_error(400, "category_not_found")
     if category.type == models.CategoryType.TRANSFER:
-        raise HTTPException(status_code=400, detail="Transfers are booked with Settle up")
+        raise messages.api_error(400, "transfers_via_settle_up")
     check_member_tag(db, transaction_update.member_id, db_transaction.account_id)
     # The split's percents are read again only when the split itself changes; otherwise the
     # booked copy stays (also when that split was deleted since)
@@ -360,19 +358,19 @@ def update_transaction(
     else:
         split_shares = db_transaction.split_shares
         if db_transaction.split_shares and category.type != models.CategoryType.EXPENSE:
-            raise HTTPException(status_code=400, detail="Only expenses can be shared")
+            raise messages.api_error(400, "share_expenses_only")
     return crud.update_transaction(db, db_transaction, transaction_update, category, split_shares=split_shares)
 
 
 def update_transfer(db: Session, db_transaction, update: schemas.TransactionUpdate, category: models.Category):
     """An imported transfer keeps its amount and category (delete and import again); Settle up stays as booked."""
     if category.system_key == SETTLE_UP:
-        raise HTTPException(status_code=400, detail="Undo the settlement in the Common tab instead")
+        raise messages.api_error(400, "undo_settlement_in_common")
     changed = update.model_fields_set - {"description", "date"}
     if update.category_id == db_transaction.category_id:
         changed.discard("category_id")
     if changed:
-        raise HTTPException(status_code=400, detail="Only the date and description of a transfer can be changed")
+        raise messages.api_error(400, "transfer_date_description_only")
     return crud.update_transaction(db, db_transaction, update, category)
 
 
@@ -384,11 +382,11 @@ def delete_transaction(
 ):
     db_transaction = crud.get_transaction(db, transaction_id)
     if not db_transaction:
-        raise HTTPException(status_code=404, detail="Transaction not found")
+        raise messages.api_error(404, "transaction_not_found")
     # Same access rules as adding transactions on the account
     privacy.check_account_access(db, current_user, db_transaction.account_id, write=True)
     if crud.get_category(db, db_transaction.category_id).system_key == SETTLE_UP:
-        raise HTTPException(status_code=400, detail="Undo the settlement in the Common tab instead")
+        raise messages.api_error(400, "undo_settlement_in_common")
     return crud.delete_transaction(db, db_transaction)
 
 
@@ -412,9 +410,9 @@ def create_budget(
 ):
     owner = privacy.check_user_access(db, current_user, budget.user_id, write=True) if budget.user_id else current_user
     if is_dependent(owner):
-        raise HTTPException(status_code=403, detail="Children without own allowance can't have budgets")
+        raise messages.api_error(403, "no_budgets_without_allowance")
     if not crud.get_category(db, budget.category_id):
-        raise HTTPException(status_code=400, detail="Category not found")
+        raise messages.api_error(400, "category_not_found")
     return reports.budget_out(db, crud.create_budget(db, budget=budget, user_id=owner.id))
 
 
@@ -423,7 +421,7 @@ def get_manageable_budget(db: Session, current_user, budget_id: str):
     owner = db.query(models.User).filter(models.User.id == db_budget.user_id).first() if db_budget else None
     # Own budgets, or those of someone who shared with EDIT
     if not owner or not privacy.can_write(privacy.access_level(db, current_user, owner)):
-        raise HTTPException(status_code=404, detail="Budget not found")
+        raise messages.api_error(404, "budget_not_found")
     return db_budget
 
 
@@ -469,9 +467,9 @@ def set_share(
     db: Session = Depends(database.get_db),
 ):
     if is_dependent(current_user):
-        raise HTTPException(status_code=403, detail="Children without own allowance have nothing to share")
+        raise messages.api_error(403, "nothing_to_share_without_allowance")
     grantee = db.query(models.User).filter(models.User.id == grantee_id).first()
     if not grantee or grantee.role != "PARENT" or grantee.id == current_user.id:
-        raise HTTPException(status_code=400, detail="You can only share with a parent")
+        raise messages.api_error(400, "share_with_parent_only")
     crud.set_share(db, current_user, grantee_id, share.level)
     return {"level": share.level}
