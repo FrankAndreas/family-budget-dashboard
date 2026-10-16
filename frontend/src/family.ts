@@ -1,3 +1,5 @@
+import i18n from './i18n';
+
 // Family model: each parent's money is private unless they share it with the other parent
 // (view or manage). Costs the parents share go through the common budget. A child either has an
 // own allowance (Jugendlohn: own accounts and budgets, shareable with parents like a parent's) or is
@@ -48,7 +50,7 @@ export const canWrite = (access: Access | null) => access === 'OWN' || access ==
 
 export function buildScopes(me: FamilyUser, users: FamilyUser[], shares: ShareInfo[]): Scope[] {
     if (me.role !== 'PARENT') {
-        return [{ key: me.id, label: 'My Money', userIds: [me.id], access: 'OWN' }];
+        return [{ key: me.id, label: i18n.t('scopes.myMoney'), userIds: [me.id], access: 'OWN' }];
     }
 
     const others = users
@@ -56,10 +58,10 @@ export function buildScopes(me: FamilyUser, users: FamilyUser[], shares: ShareIn
         .map(u => ({ user: u, access: accessTo(me, u.id, users, shares) }))
         .filter((entry): entry is { user: FamilyUser; access: Access } => entry.access !== null);
     return [
-        { key: me.id, label: 'My finances', userIds: [me.id], access: 'OWN' },
+        { key: me.id, label: i18n.t('scopes.myFinances'), userIds: [me.id], access: 'OWN' },
         ...others.map(({ user, access }) => ({
             key: user.id,
-            label: user.role === 'PARENT' ? `${user.username}'s finances` : `${user.username} (own allowance)`,
+            label: i18n.t(user.role === 'PARENT' ? 'scopes.parentFinances' : 'scopes.ownAllowance', { name: user.username }),
             userIds: [user.id],
             budgetOwnerId: user.id,
             access

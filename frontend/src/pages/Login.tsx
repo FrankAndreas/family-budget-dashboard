@@ -1,11 +1,16 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../AuthContext';
 import { errorMessage, errorStatus } from '../api';
 import PinInput from '../components/PinInput';
 import { isValidPin } from '../pin';
 
+// The first parent's user name (created on the first start); a name, so the same in every language
+const ADMIN = 'Admin';
+
 export default function Login() {
+    const { t } = useTranslation();
     const { login } = useAuth();
     const navigate = useNavigate();
     const [username, setUsername] = useState('');
@@ -20,8 +25,8 @@ export default function Login() {
     const validate = () => {
         const nameMissing = !username.trim();
         const pinInvalid = !isValidPin(pin);
-        setUsernameError(nameMissing ? 'Please enter your name' : '');
-        setPinError(!pin ? 'Please enter your PIN' : pinInvalid ? 'The PIN has 4 digits' : '');
+        setUsernameError(nameMissing ? t('login.nameMissing') : '');
+        setPinError(!pin ? t('login.pinMissing') : pinInvalid ? t('login.pinDigits') : '');
         return !nameMissing && !pinInvalid;
     };
 
@@ -39,7 +44,7 @@ export default function Login() {
             // 403 means the account was deactivated; anything else is a wrong name or PIN
             // 403: deactivated; 429: locked after too many wrong PINs (the server says for how long)
             const status = errorStatus(err);
-            setError(status === 403 || status === 429 ? errorMessage(err, 'Login refused') : 'Wrong name or PIN');
+            setError(status === 403 || status === 429 ? errorMessage(err, t('login.refused')) : t('login.wrong'));
             setPin('');
         } finally {
             setLoading(false);
@@ -55,14 +60,14 @@ export default function Login() {
             <div className="glass-card w-full max-w-sm p-8">
                 <div className="mb-8 text-center">
                     <h1 className="bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-3xl font-bold text-transparent">
-                        Family Budget
+                        {t('common.appName')}
                     </h1>
-                    <p className="mt-2 text-slate-400">Log in with your name and PIN</p>
+                    <p className="mt-2 text-slate-400">{t('login.intro')}</p>
                 </div>
 
                 <form onSubmit={handleSubmit} noValidate className="flex flex-col gap-5">
                     <div className="flex flex-col gap-1.5">
-                        <label htmlFor="username" className="text-sm font-semibold text-slate-300">Name</label>
+                        <label htmlFor="username" className="text-sm font-semibold text-slate-300">{t('login.name')}</label>
                         <input
                             id="username"
                             type="text"
@@ -74,7 +79,7 @@ export default function Login() {
                                 if (usernameError) setUsernameError('');
                             }}
                             onBlur={revalidate}
-                            placeholder="Your name"
+                            placeholder={t('login.namePlaceholder')}
                             aria-invalid={!!usernameError}
                             className={`w-full rounded-lg border bg-slate-800/50 p-3 text-white placeholder-slate-500 focus:outline-none ${
                                 usernameError ? 'border-red-400' : 'border-slate-600 focus:border-blue-400'
@@ -84,7 +89,7 @@ export default function Login() {
                     </div>
 
                     <div className="flex flex-col gap-1.5">
-                        <label htmlFor="pin" className="text-sm font-semibold text-slate-300">PIN</label>
+                        <label htmlFor="pin" className="text-sm font-semibold text-slate-300">{t('login.pin')}</label>
                         <PinInput
                             id="pin"
                             value={pin}
@@ -105,15 +110,15 @@ export default function Login() {
                     )}
 
                     <button type="submit" className="btn-primary w-full py-3 text-lg" disabled={loading}>
-                        {loading ? 'Logging in…' : 'Log in'}
+                        {loading ? t('login.loggingIn') : t('login.logIn')}
                     </button>
                 </form>
 
                 <div className="mt-6 space-y-2 border-t border-slate-700 pt-4 text-center text-sm text-slate-400">
-                    <p>New here? A parent adds family members in Settings → Family.</p>
+                    <p>{t('login.newHere')}</p>
                     <p>
-                        First start? Log in as <strong className="text-slate-300">Admin</strong> with the PIN shown in the
-                        backend log, then change it.
+                        {t('login.firstStartBefore')}<strong className="text-slate-300">{ADMIN}</strong>
+                        {t('login.firstStartAfter')}
                     </p>
                 </div>
             </div>
