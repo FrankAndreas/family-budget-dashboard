@@ -11,37 +11,12 @@ import Investments from '../../components/Investments';
 import YearlyBills from '../../components/YearlyBills';
 import MonthCheck from '../../components/MonthCheck';
 import Wishes from '../../components/Wishes';
-import { money, useAssets, useSplits } from '../../finance';
+import { useAssets, useSplits } from '../../finance';
+import type { Account, Category, Transaction } from '../../accounts';
+import AccountCards from '../../components/AccountCards';
+import Transactions from '../../components/Transactions';
 import { useFamily } from '../../useFamily';
 import { accessTo, canWrite, dependents } from '../../family';
-
-interface Account {
-    id: string;
-    user_id: string;
-    name: string;
-    type: string;
-    balance: number;
-}
-
-interface Transaction {
-    id: string;
-    amount: number;
-    description: string;
-    date: string;
-    category_id: string;
-    member_id?: string | null;
-    split_id?: string | null;
-    // The percentages a shared expense was booked with (kept when its split is deleted)
-    split_shares?: Record<string, number> | null;
-    asset_id?: string | null;
-}
-
-interface Category {
-    id: string;
-    name: string;
-    type: string;
-    icon?: string;
-}
 
 export default function Dashboard() {
     const { user, logout } = useAuth();
@@ -53,24 +28,7 @@ export default function Dashboard() {
     const [categories, setCategories] = useState<Category[]>([]);
     const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
     const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [showAddAccount, setShowAddAccount] = useState(false);
-    const [showAddTransaction, setShowAddTransaction] = useState(false);
-    const [newAccountName, setNewAccountName] = useState('');
-    const [newAccountType, setNewAccountType] = useState('BANK');
-    const [newTransaction, setNewTransaction] = useState({
-        amount: '',
-        description: '',
-        category_id: '',
-        member_id: '',
-        split_id: '',
-        asset_id: ''
-    });
-    // Set while the transaction form is editing an existing transaction instead of adding one
-    const [editingTransactionId, setEditingTransactionId] = useState<string | null>(null);
     const [error, setError] = useState('');
-    // Account being renamed (inline form on its card)
-    const [editingAccount, setEditingAccount] = useState<{ id: string; name: string; type: string } | null>(null);
-
     // Bumped after any change to load accounts and the selected account's transactions again
     const [dataVersion, setDataVersion] = useState(0);
     const refresh = () => setDataVersion(v => v + 1);
@@ -110,138 +68,12 @@ export default function Dashboard() {
             });
     }, [selectedAccount, dataVersion]);
 
-    const handleAddAccount = async (e: React.FormEvent) => {
-        e.preventDefault();
-        try {
-            await api.post('/api/v1/accounts', {
-                name: newAccountName,
-                type: newAccountType
-            });
-            setNewAccountName('');
-            setShowAddAccount(false);
-            refresh();
-        } catch (error) {
-            console.error('Failed to create account', error);
-            setError(errorMessage(error, 'Failed to create account'));
-        }
-    };
-
-    const handleSaveAccount = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!editingAccount) return;
-
-        try {
-            await api.put(`/api/v1/accounts/${editingAccount.id}`, {
-                name: editingAccount.name,
-                type: editingAccount.type
-            });
-            setEditingAccount(null);
-            refresh();
-        } catch (error) {
-            console.error('Failed to update account', error);
-            setError(errorMessage(error, 'Failed to update account'));
-        }
-    };
-
-    const handleDeleteAccount = async (account: Account) => {
-        if (!confirm(`Delete account "${account.name}" and all its transactions? This cannot be undone.`)) return;
-
-        try {
-            await api.delete(`/api/v1/accounts/${account.id}`);
-            if (selectedAccount === account.id) {
-                setTransactions([]);
-            }
-            refresh();
-        } catch (error) {
-            console.error('Failed to delete account', error);
-            setError(errorMessage(error, 'Failed to delete account'));
-        }
-    };
-
-    const closeTransactionForm = () => {
-        setNewTransaction({ amount: '', description: '', category_id: '', member_id: '', split_id: '', asset_id: '' });
-        setEditingTransactionId(null);
-        setShowAddTransaction(false);
-    };
-
-    const handleEditTransaction = (transaction: Transaction) => {
-        setNewTransaction({
-            amount: Math.abs(transaction.amount).toString(),
-            description: transaction.description || '',
-            category_id: transaction.category_id,
-            member_id: transaction.member_id || '',
-            split_id: transaction.split_id || '',
-            asset_id: transaction.asset_id || ''
-        });
-        setEditingTransactionId(transaction.id);
-        setShowAddTransaction(true);
-    };
-
-    const handleSubmitTransaction = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!selectedAccount) return;
-
-        const fields = {
-            category_id: newTransaction.category_id,
-            amount: parseFloat(newTransaction.amount),
-            description: newTransaction.description,
-            // null removes a tag when editing
-            member_id: newTransaction.member_id || null,
-            split_id: newTransaction.split_id || null,
-            asset_id: newTransaction.asset_id || null
-        };
-        try {
-            if (editingTransactionId) {
-                await api.put(`/api/v1/transactions/${editingTransactionId}`, fields);
-            } else {
-                await api.post('/api/v1/transactions', { ...fields, account_id: selectedAccount });
-            }
-            closeTransactionForm();
-            refresh();
-        } catch (error) {
-            console.error('Failed to save transaction', error);
-            setError(errorMessage(error, 'Failed to save transaction'));
-        }
-    };
-
-    const handleDeleteTransaction = async (transaction: Transaction) => {
-        if (!selectedAccount) return;
-        if (!confirm(`Delete "${transaction.description || 'No description'}" (${money(transaction.amount)})?`)) return;
-
-        try {
-            await api.delete(`/api/v1/transactions/${transaction.id}`);
-            refresh();
-        } catch (error) {
-            console.error('Failed to delete transaction', error);
-            setError(errorMessage(error, 'Failed to delete transaction'));
-        }
-    };
-
     const ownerOf = (account: Account) => users.find(u => u.id === account.user_id);
-    const isParentAccount = (account: Account) => ownerOf(account)?.role === 'PARENT';
     const canEdit = (account: Account) => !!user && canWrite(accessTo(user, account.user_id, users, shares));
-    // Your own money; accounts others shared with you are listed but not added up
-    const totalBalance = accounts.filter(a => a.user_id === user?.id).reduce((sum, acc) => sum + acc.balance, 0);
-    const children = dependents(users);
-    const memberName = (memberId?: string | null) => children.find(c => c.id === memberId)?.username;
-    // A parent's expenses can be tagged with a child without own allowance
     const selectedAccountObj = accounts.find(a => a.id === selectedAccount);
-    const canTagChild = !!selectedAccountObj && isParentAccount(selectedAccountObj) && children.length > 0;
-    const canEditSelected = !!selectedAccountObj && canEdit(selectedAccountObj);
-    const incomeCategories = categories.filter(c => c.type === 'INCOME');
-    const expenseCategories = categories.filter(c => c.type === 'EXPENSE');
-    const isExpense = (categoryId: string) => expenseCategories.some(c => c.id === categoryId);
-    const isTransfer = (transaction: Transaction) =>
-        categories.find(c => c.id === transaction.category_id)?.type === 'TRANSFER';
-    const isSettleUp = (transaction: Transaction) =>
-        categories.find(c => c.id === transaction.category_id)?.name === 'Settle up';
+    // A deleted account's transactions stay loaded until another one is selected; don't show them
+    const shownTransactions = selectedAccountObj ? transactions : [];
     const isParent = user?.role === 'PARENT';
-    // Shared costs: a parent's expense divided with a split
-    const canShare = isParent && !!selectedAccountObj && isParentAccount(selectedAccountObj) && splits.length > 0
-        && isExpense(newTransaction.category_id);
-    // Repairs, service, tyres... can be linked to an investment
-    const canLinkItem = isParent && assets.length > 0 && isExpense(newTransaction.category_id);
-    const assetName = (id?: string | null) => assets.find(a => a.id === id)?.name;
 
     const tabs = [
         { id: 'overview', label: '🏦 Accounts' },
@@ -303,140 +135,21 @@ export default function Dashboard() {
             {/* Tab Content */}
             {activeTab === 'overview' && (
                 <div className="space-y-6">
-                    {/* Summary Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div className="glass-card p-6">
-                            <h3 className="text-emerald-400 text-lg font-semibold mb-2">My Balance</h3>
-                            <p className="text-3xl font-bold">{money(totalBalance)}</p>
-                        </div>
-                        <div className="glass-card p-6">
-                            <h3 className="text-sky-400 text-lg font-semibold mb-2">Accounts</h3>
-                            <p className="text-3xl font-bold">{accounts.length}</p>
-                        </div>
-                        <div className="glass-card p-6">
-                            <h3 className="text-indigo-400 text-lg font-semibold mb-2">Transactions in Selected Account</h3>
-                            <p className="text-3xl font-bold">{transactions.length}</p>
-                        </div>
-                    </div>
-
-                    {/* Accounts Section */}
-                    <div className="glass-card p-6">
-                        <div className="flex justify-between items-center mb-4">
-                            <h2 className="text-xl font-bold">Accounts</h2>
-                            <button
-                                onClick={() => setShowAddAccount(!showAddAccount)}
-                                className="btn-primary text-sm"
-                            >
-                                + Add Account
-                            </button>
-                        </div>
-
-                        {showAddAccount && (
-                            <form onSubmit={handleAddAccount} className="mb-4 p-4 bg-slate-800/30 rounded-lg">
-                                <input
-                                    type="text"
-                                    placeholder="Account Name"
-                                    value={newAccountName}
-                                    onChange={(e) => setNewAccountName(e.target.value)}
-                                    className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                    required
-                                />
-                                <select
-                                    value={newAccountType}
-                                    onChange={(e) => setNewAccountType(e.target.value)}
-                                    className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                >
-                                    <option value="BANK">Bank Account</option>
-                                    <option value="CASH">Cash</option>
-                                    <option value="SAVINGS">Savings</option>
-                                    <option value="CLEARING">Clearing (Migros, …)</option>
-                                </select>
-                                <button type="submit" className="btn-primary w-full">Create Account</button>
-                            </form>
-                        )}
-
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {accounts.map(account => (
-                                <div
-                                    key={account.id}
-                                    onClick={() => setSelectedAccount(account.id)}
-                                    className={`p-4 rounded-lg cursor-pointer transition-all ${selectedAccount === account.id
-                                        ? 'bg-blue-500/20 border-2 border-blue-400'
-                                        : 'bg-slate-800/30 border border-slate-700 hover:border-slate-600'
-                                        }`}
-                                >
-                                    {editingAccount?.id === account.id ? (
-                                        <form
-                                            onSubmit={handleSaveAccount}
-                                            onClick={(e) => e.stopPropagation()}
-                                            className="space-y-2"
-                                        >
-                                            <input
-                                                type="text"
-                                                value={editingAccount.name}
-                                                onChange={(e) => setEditingAccount({ ...editingAccount, name: e.target.value })}
-                                                className="w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                                aria-label="Account name"
-                                                required
-                                            />
-                                            <select
-                                                value={editingAccount.type}
-                                                onChange={(e) => setEditingAccount({ ...editingAccount, type: e.target.value })}
-                                                className="w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                                aria-label="Account type"
-                                            >
-                                                <option value="BANK">Bank Account</option>
-                                                <option value="CASH">Cash</option>
-                                                <option value="SAVINGS">Savings</option>
-                                                <option value="CLEARING">Clearing (Migros, …)</option>
-                                            </select>
-                                            <div className="flex gap-2">
-                                                <button type="submit" className="btn-primary text-sm flex-1">Save</button>
-                                                <button type="button" onClick={() => setEditingAccount(null)} className="px-3 text-sm text-slate-400 hover:text-white">
-                                                    Cancel
-                                                </button>
-                                            </div>
-                                        </form>
-                                    ) : (<>
-                                    <h3 className="font-semibold text-lg">{account.name}</h3>
-                                    {account.user_id !== user?.id && ownerOf(account) && (
-                                        <p className="text-xs text-slate-500">
-                                            {ownerOf(account)!.username}{ownerOf(account)!.role === 'CHILD' ? ' (own allowance)' : ''}
-                                        </p>
-                                    )}
-                                    <p className="text-sm text-slate-400">{account.type}</p>
-                                    <div className="flex justify-between items-end mt-2">
-                                        <p className="text-2xl font-bold">{money(account.balance)}</p>
-                                        {canEdit(account) && (
-                                            <div className="flex gap-3">
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setEditingAccount({ id: account.id, name: account.name, type: account.type });
-                                                    }}
-                                                    className="text-sm text-slate-500 hover:text-blue-400 transition-colors"
-                                                    title="Edit account"
-                                                >
-                                                    Edit
-                                                </button>
-                                                <button
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleDeleteAccount(account);
-                                                    }}
-                                                    className="text-sm text-slate-500 hover:text-red-400 transition-colors"
-                                                    title="Delete account"
-                                                >
-                                                    Delete
-                                                </button>
-                                            </div>
-                                        )}
-                                    </div>
-                                    </>)}
-                                </div>
-                            ))}
-                        </div>
-                    </div>
+                    <AccountCards
+                        accounts={accounts}
+                        transactionCount={shownTransactions.length}
+                        selectedAccount={selectedAccount}
+                        onSelect={setSelectedAccount}
+                        ownerOf={ownerOf}
+                        canEdit={canEdit}
+                        onChanged={refresh}
+                        onDeleted={(accountId) => {
+                            // Don't load the deleted account's transactions; the next account gets selected
+                            if (accountId === selectedAccount) setSelectedAccount(null);
+                            refresh();
+                        }}
+                        onError={setError}
+                    />
 
                     {/* Clearing accounts (Migros, ...) should end every month at 0 */}
                     <MonthCheck
@@ -446,180 +159,21 @@ export default function Dashboard() {
                         onBooked={refresh}
                     />
 
-                    {/* Transactions Section */}
-                    {selectedAccount && (
-                        <div className="glass-card p-6">
-                            <div className="flex justify-between items-center mb-4">
-                                <h2 className="text-xl font-bold">Transactions</h2>
-                                {canEditSelected && (
-                                <button
-                                    onClick={() => showAddTransaction ? closeTransactionForm() : setShowAddTransaction(true)}
-                                    className="btn-primary text-sm"
-                                >
-                                    + Add Transaction
-                                </button>
-                                )}
-                            </div>
-
-                            {!canEditSelected && selectedAccountObj && (
-                                <p className="text-sm text-slate-400 mb-3">
-                                    Read only: {ownerOf(selectedAccountObj)?.username ?? 'the owner'} shared this account with you to view.
-                                </p>
-                            )}
-
-                            {showAddTransaction && canEditSelected && (
-                                <form onSubmit={handleSubmitTransaction} className="mb-4 p-4 bg-slate-800/30 rounded-lg">
-                                    <input
-                                        type="number"
-                                        step="0.01"
-                                        min="0.01"
-                                        placeholder="Amount (income or expense is set by the category)"
-                                        value={newTransaction.amount}
-                                        onChange={(e) => setNewTransaction({ ...newTransaction, amount: e.target.value })}
-                                        className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                        required
-                                    />
-                                    <input
-                                        type="text"
-                                        placeholder="Description"
-                                        value={newTransaction.description}
-                                        onChange={(e) => setNewTransaction({ ...newTransaction, description: e.target.value })}
-                                        className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                    />
-                                    <select
-                                        value={newTransaction.category_id}
-                                        onChange={(e) => setNewTransaction({
-                                            ...newTransaction,
-                                            category_id: e.target.value,
-                                            // Only expenses can be shared
-                                            split_id: isExpense(e.target.value) ? newTransaction.split_id : '',
-                                            asset_id: isExpense(e.target.value) ? newTransaction.asset_id : ''
-                                        })}
-                                        className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                        required
-                                    >
-                                        <option value="">Select Category</option>
-                                        <optgroup label="Income">
-                                            {incomeCategories.map(cat => (
-                                                <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                            ))}
-                                        </optgroup>
-                                        <optgroup label="Expenses">
-                                            {expenseCategories.map(cat => (
-                                                <option key={cat.id} value={cat.id}>{cat.name}</option>
-                                            ))}
-                                        </optgroup>
-                                    </select>
-                                    {canTagChild && (
-                                        <select
-                                            value={newTransaction.member_id}
-                                            onChange={(e) => setNewTransaction({ ...newTransaction, member_id: e.target.value })}
-                                            className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                            aria-label="For child"
-                                        >
-                                            <option value="">For: no child</option>
-                                            {children.map(child => (
-                                                <option key={child.id} value={child.id}>For: {child.username}</option>
-                                            ))}
-                                        </select>
-                                    )}
-                                    {canShare && (
-                                        <select
-                                            value={newTransaction.split_id}
-                                            onChange={(e) => setNewTransaction({ ...newTransaction, split_id: e.target.value })}
-                                            className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                            aria-label="Shared"
-                                        >
-                                            <option value="">Shared: not shared</option>
-                                            {splits.map(split => (
-                                                <option key={split.id} value={split.id}>Shared: {split.name}</option>
-                                            ))}
-                                        </select>
-                                    )}
-                                    {canLinkItem && (
-                                        <select
-                                            value={newTransaction.asset_id}
-                                            onChange={(e) => setNewTransaction({ ...newTransaction, asset_id: e.target.value })}
-                                            className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                            aria-label="For item"
-                                        >
-                                            <option value="">For item: none</option>
-                                            {assets.map(asset => (
-                                                <option key={asset.id} value={asset.id}>For item: {asset.name}</option>
-                                            ))}
-                                        </select>
-                                    )}
-                                    <div className="flex gap-2">
-                                        <button type="submit" className="btn-primary flex-1">
-                                            {editingTransactionId ? 'Save Changes' : 'Add Transaction'}
-                                        </button>
-                                        {editingTransactionId && (
-                                            <button type="button" onClick={closeTransactionForm} className="px-4 text-slate-400 hover:text-white">
-                                                Cancel
-                                            </button>
-                                        )}
-                                    </div>
-                                </form>
-                            )}
-
-                            <div className="space-y-2">
-                                {transactions.length === 0 ? (
-                                    <p className="text-slate-400 text-center py-8">No transactions yet</p>
-                                ) : (
-                                    transactions.map(transaction => (
-                                        <div key={transaction.id} className="p-3 bg-slate-800/30 rounded-lg flex justify-between items-center">
-                                            <div>
-                                                <p className="font-semibold">
-                                                    {transaction.description || 'No description'}
-                                                    {memberName(transaction.member_id) && (
-                                                        <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300">
-                                                            for {memberName(transaction.member_id)}
-                                                        </span>
-                                                    )}
-                                                    {assetName(transaction.asset_id) && (
-                                                        <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
-                                                            {assetName(transaction.asset_id)}
-                                                        </span>
-                                                    )}
-                                                    {(transaction.split_id || transaction.split_shares) && (
-                                                        <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300">
-                                                            shared
-                                                        </span>
-                                                    )}
-                                                </p>
-                                                <p className="text-sm text-slate-400">{new Date(transaction.date).toLocaleDateString()}</p>
-                                            </div>
-                                            <div className="flex items-center gap-3">
-                                                <p className={`text-xl font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                    {transaction.amount >= 0 ? '+ ' : ''}{money(transaction.amount)}
-                                                </p>
-                                                {canEditSelected && !isTransfer(transaction) && (
-                                                <button
-                                                    onClick={() => handleEditTransaction(transaction)}
-                                                    className="text-slate-500 hover:text-blue-400 transition-colors"
-                                                    title="Edit transaction"
-                                                    aria-label="Edit transaction"
-                                                >
-                                                    ✎
-                                                </button>
-                                                )}
-                                                {/* Settle up is undone in the Common tab; imported transfers can be deleted here */}
-                                                {canEditSelected && !isSettleUp(transaction) && (
-                                                <button
-                                                    onClick={() => handleDeleteTransaction(transaction)}
-                                                    className="text-slate-500 hover:text-red-400 transition-colors"
-                                                    title="Delete transaction"
-                                                    aria-label="Delete transaction"
-                                                >
-                                                    ✕
-                                                </button>
-                                                )}
-                                            </div>
-                                        </div>
-                                    ))
-                                )}
-                            </div>
-                        </div>
+                    {selectedAccountObj && (
+                        <Transactions
+                            account={selectedAccountObj}
+                            transactions={shownTransactions}
+                            categories={categories}
+                            canEdit={canEdit(selectedAccountObj)}
+                            ownerName={ownerOf(selectedAccountObj)?.username}
+                            isParentAccount={ownerOf(selectedAccountObj)?.role === 'PARENT'}
+                            isParent={isParent}
+                            children={dependents(users)}
+                            splits={splits}
+                            assets={assets}
+                            onChanged={refresh}
+                            onError={setError}
+                        />
                     )}
                 </div>
             )}
