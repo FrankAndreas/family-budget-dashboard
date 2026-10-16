@@ -53,18 +53,4 @@ export async function fetchAllTransactions<T>(accountId: string): Promise<T[]> {
     }
 }
 
-// All transactions of the accounts owned by the given users (e.g. one scope in Budgets or Analytics)
-export async function fetchTransactionsForUsers<T>(userIds: string[]): Promise<T[]> {
-    const accounts: { id: string; user_id: string }[] = (await api.get('/api/v1/accounts')).data;
-    const transactions: T[] = [];
-    for (const account of accounts.filter(a => userIds.includes(a.user_id))) {
-        try {
-            transactions.push(...await fetchAllTransactions<T>(account.id));
-        } catch {
-            console.error('Failed to load transactions for account', account.id);
-        }
-    }
-    return transactions;
-}
-
 export default api;

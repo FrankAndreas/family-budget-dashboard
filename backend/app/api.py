@@ -4,7 +4,7 @@ from typing import List, Optional
 from datetime import timedelta
 from fastapi import Body
 
-from . import crud, schemas, auth, database, models, privacy
+from . import crud, schemas, auth, database, models, privacy, reports
 from .common_api import apply_item_decisions, visible_owner
 from .seed import SETTLE_UP
 
@@ -373,7 +373,7 @@ def get_budgets(
 ):
     # Without user_id: the caller's own budgets. With user_id: someone else's they may view.
     owner = privacy.check_user_access(db, current_user, user_id) if user_id else current_user
-    return crud.get_budgets(db, owner.id)
+    return [reports.budget_out(db, budget) for budget in crud.get_budgets(db, owner.id)]
 
 
 @router.post("/budgets", response_model=schemas.Budget)
@@ -387,7 +387,7 @@ def create_budget(
         raise HTTPException(status_code=403, detail="Children without own allowance can't have budgets")
     if not crud.get_category(db, budget.category_id):
         raise HTTPException(status_code=400, detail="Category not found")
-    return crud.create_budget(db, budget=budget, user_id=owner.id)
+    return reports.budget_out(db, crud.create_budget(db, budget=budget, user_id=owner.id))
 
 
 def get_manageable_budget(db: Session, current_user, budget_id: str):
@@ -406,7 +406,9 @@ def update_budget(
     current_user: schemas.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
-    return crud.update_budget(db, get_manageable_budget(db, current_user, budget_id), budget_update)
+    return reports.budget_out(
+        db, crud.update_budget(db, get_manageable_budget(db, current_user, budget_id), budget_update)
+    )
 
 
 @router.delete("/budgets/{budget_id}", response_model=schemas.Budget)

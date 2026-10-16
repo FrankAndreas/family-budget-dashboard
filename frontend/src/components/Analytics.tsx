@@ -1,23 +1,19 @@
 import { useState, useEffect } from 'react';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
-import api, { fetchTransactionsForUsers } from '../api';
+import api from '../api';
 import { useFamily } from '../useFamily';
-import { dependents } from '../family';
 import ScopeSelector from './ScopeSelector';
-import { format, startOfMonth, startOfYear, endOfMonth, eachDayOfInterval, subMonths } from 'date-fns';
+import { format, parseISO } from 'date-fns';
 
-interface Transaction {
-    id: string;
-    amount: number;
-    date: string;
-    category_id: string;
-    member_id?: string | null;
-}
+interface Amounts { income: number; expenses: number }
 
-interface Category {
-    id: string;
-    name: string;
-    type: string;
+// Calculated by the server for one scope and range, in Swiss time (GET /reports/summary)
+interface Summary extends Amounts {
+    by_category: { category_id: string; name: string; amount: number }[];
+    by_child: { member_id: string; name: string; amount: number }[];
+    // The last 6 months ("2026-10") and every day of the current month ("2026-10-15")
+    months: (Amounts & { month: string })[];
+    days: (Amounts & { date: string })[];
 }
 
 type TimeRange = 'month' | '3months' | 'year' | 'all';
@@ -29,143 +25,45 @@ const TIME_RANGE_LABELS: Record<TimeRange, string> = {
     all: 'All Time'
 };
 
-// Start of the selected range in local time; null means no lower bound
-const rangeStart = (range: TimeRange): Date | null => {
-    const now = new Date();
-    if (range === 'month') return startOfMonth(now);
-    if (range === '3months') return startOfMonth(subMonths(now, 2));
-    if (range === 'year') return startOfYear(now);
-    return null;
-};
-
 export default function Analytics() {
-    const [transactions, setTransactions] = useState<Transaction[]>([]);
-    const [categories, setCategories] = useState<Category[]>([]);
+    const [summary, setSummary] = useState<Summary | null>(null);
     const [timeRange, setTimeRange] = useState<TimeRange>('month');
     const { users, scopes } = useFamily();
     const [scopeKey, setScopeKey] = useState('');
     const activeScope = scopes.find(s => s.key === scopeKey) ?? scopes[0];
+    // Whose money: a scope is one person's accounts
+    const ownerId = activeScope?.userIds[0];
 
     useEffect(() => {
-        if (!activeScope) return;
-        // Only the scope's accounts count
-        Promise.all([
-            api.get('/api/v1/categories'),
-            fetchTransactionsForUsers<Transaction>(activeScope.userIds)
-        ])
-            .then(([categoriesRes, scopeTransactions]) => {
-                setCategories(categoriesRes.data);
-                const transferIds = new Set(
-                    (categoriesRes.data as Category[]).filter(c => c.type === 'TRANSFER').map(c => c.id)
-                );
-                // Settling up between parents moves money but is neither income nor spending
-                setTransactions(scopeTransactions.filter(t => !transferIds.has(t.category_id)));
-            })
+        if (!ownerId) return;
+        api.get('/api/v1/reports/summary', { params: { user_id: ownerId, range: timeRange } })
+            .then(res => setSummary(res.data))
             .catch(error => console.error('Failed to load analytics data', error));
-    }, [activeScope]);
-
-    // Calculate daily spending trend
-    const getDailyTrend = () => {
-        const now = new Date();
-        const start = startOfMonth(now);
-        const end = endOfMonth(now);
-        const days = eachDayOfInterval({ start, end });
-
-        return days.map(day => {
-            const dayStr = format(day, 'yyyy-MM-dd');
-            const dayTransactions = transactions.filter(t =>
-                format(new Date(t.date), 'yyyy-MM-dd') === dayStr
-            );
-
-            const income = dayTransactions
-                .filter(t => t.amount > 0)
-                .reduce((sum, t) => sum + t.amount, 0);
-
-            const expenses = Math.abs(dayTransactions
-                .filter(t => t.amount < 0)
-                .reduce((sum, t) => sum + t.amount, 0));
-
-            return {
-                date: format(day, 'MMM dd'),
-                income,
-                expenses,
-                net: income - expenses
-            };
-        });
-    };
-
-    // Transactions in the selected time range (summary cards and category breakdown)
-    const start = rangeStart(timeRange);
-    const rangeTransactions = start ? transactions.filter(t => new Date(t.date) >= start) : transactions;
-
-    // Calculate spending by category
-    const getCategoryBreakdown = () => {
-        const categorySpending: { [key: string]: number } = {};
-
-        rangeTransactions.forEach(t => {
-            if (t.amount < 0) { // Only expenses
-                const category = categories.find(c => c.id === t.category_id);
-                const categoryName = category?.name || 'Unknown';
-                categorySpending[categoryName] = (categorySpending[categoryName] || 0) + Math.abs(t.amount);
-            }
-        });
-
-        return Object.entries(categorySpending).map(([name, value]) => ({
-            name,
-            value: parseFloat(value.toFixed(2))
-        }));
-    };
-
-    // Calculate monthly comparison
-    const getMonthlyComparison = () => {
-        const months = [];
-        for (let i = 5; i >= 0; i--) {
-            const monthDate = subMonths(new Date(), i);
-            const monthStr = format(monthDate, 'yyyy-MM');
-
-            const monthTransactions = transactions.filter(t =>
-                format(new Date(t.date), 'yyyy-MM') === monthStr
-            );
-
-            const income = monthTransactions
-                .filter(t => t.amount > 0)
-                .reduce((sum, t) => sum + t.amount, 0);
-
-            const expenses = Math.abs(monthTransactions
-                .filter(t => t.amount < 0)
-                .reduce((sum, t) => sum + t.amount, 0));
-
-            months.push({
-                month: format(monthDate, 'MMM'),
-                income,
-                expenses,
-                savings: income - expenses
-            });
-        }
-
-        return months;
-    };
+    }, [ownerId, timeRange]);
 
     const COLORS = ['#22d3ee', '#e879f9', '#818cf8', '#34d399', '#f87171', '#fbbf24', '#fb923c'];
 
-    const dailyData = getDailyTrend();
-    const categoryData = getCategoryBreakdown();
-    const monthlyData = getMonthlyComparison();
+    const dailyData = (summary?.days ?? []).map(d => ({
+        date: format(parseISO(d.date), 'MMM dd'),
+        income: d.income,
+        expenses: d.expenses,
+        net: d.income - d.expenses
+    }));
+    const monthlyData = (summary?.months ?? []).map(m => ({
+        month: format(parseISO(`${m.month}-01`), 'MMM'),
+        income: m.income,
+        expenses: m.expenses,
+        savings: m.income - m.expenses
+    }));
+    const categoryData = (summary?.by_category ?? []).map(c => ({ name: c.name, value: c.amount }));
 
-    const totalIncome = rangeTransactions.filter(t => t.amount > 0).reduce((sum, t) => sum + t.amount, 0);
-    const totalExpenses = Math.abs(rangeTransactions.filter(t => t.amount < 0).reduce((sum, t) => sum + t.amount, 0));
+    const totalIncome = summary?.income ?? 0;
+    const totalExpenses = summary?.expenses ?? 0;
     const rangeLabel = TIME_RANGE_LABELS[timeRange];
     const netSavings = totalIncome - totalExpenses;
 
     // Expenses tagged with a dependent child, per child
-    const childCosts = dependents(users)
-        .map(child => ({
-            name: child.username,
-            value: Math.abs(rangeTransactions
-                .filter(t => t.member_id === child.id && t.amount < 0)
-                .reduce((sum, t) => sum + t.amount, 0))
-        }))
-        .filter(child => child.value > 0);
+    const childCosts = (summary?.by_child ?? []).map(child => ({ name: child.name, value: child.amount }));
 
     return (
         <div className="space-y-6">

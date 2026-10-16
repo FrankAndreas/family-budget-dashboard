@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import api, { errorMessage, fetchTransactionsForUsers } from '../api';
+import api, { errorMessage } from '../api';
 import { useFamily } from '../useFamily';
 import type { Scope } from '../family';
 import ScopeSelector from './ScopeSelector';
@@ -9,6 +9,9 @@ interface Budget {
     category_id: string;
     limit: number;
     period: string;
+    // Spent in the current month (MONTHLY) or year (YEARLY), and as a percentage of the limit
+    spent: number;
+    percentage: number;
 }
 
 interface Category {
@@ -17,47 +20,21 @@ interface Category {
     type: string;
 }
 
-interface Transaction {
-    amount: number;
-    date: string;
-    category_id: string;
-}
-
 interface BudgetWithCategory extends Budget {
     category: Category;
-    spent: number;
-    percentage: number;
 }
 
-// Budgets of a scope, with what was spent in the current period (this month or this year, local time)
+// Budgets of a scope with what was spent in the current period; the server calculates it (Swiss time)
 async function loadBudgetsWithSpending(scope: Scope): Promise<BudgetWithCategory[]> {
-    const [budgetsRes, categoriesRes, transactions] = await Promise.all([
+    const [budgetsRes, categoriesRes] = await Promise.all([
         api.get('/api/v1/budgets', { params: scope.budgetOwnerId ? { user_id: scope.budgetOwnerId } : {} }),
-        api.get('/api/v1/categories'),
-        // Only the scope's accounts count
-        fetchTransactionsForUsers<Transaction>(scope.userIds)
+        api.get('/api/v1/categories')
     ]);
     const categories: Category[] = categoriesRes.data;
-
-    const now = new Date();
-    const isInPeriod = (date: string, period: string) => {
-        const d = new Date(date);
-        return d.getFullYear() === now.getFullYear() && (period === 'YEARLY' || d.getMonth() === now.getMonth());
-    };
-
-    return budgetsRes.data.map((budget: Budget) => {
-        const category = categories.find(c => c.id === budget.category_id);
-        const spent = Math.abs(transactions
-            .filter(t => t.category_id === budget.category_id && t.amount < 0 && isInPeriod(t.date, budget.period))
-            .reduce((sum, t) => sum + t.amount, 0));
-
-        return {
-            ...budget,
-            category,
-            spent,
-            percentage: (spent / budget.limit) * 100
-        };
-    });
+    return budgetsRes.data.map((budget: Budget) => ({
+        ...budget,
+        category: categories.find(c => c.id === budget.category_id)
+    }));
 }
 
 export default function BudgetManager() {
