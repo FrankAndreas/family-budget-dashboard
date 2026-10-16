@@ -126,6 +126,15 @@ those of other projects on the NAS.
 If the images are private, log in to the registry once **as root**, since the task runs as root:
 `sudo docker login ghcr.io -u <github-user>` with a token that has `read:packages`.
 
+### Database updates
+A new version brings its database changes as migrations (`backend/app/migrations`), and the backend applies them
+itself when it starts. Nothing to do by hand. `nas-update.sh` backs up the database first.
+
+- A database from before migrations existed is brought up to date on its first start.
+- The backend's log shows a warning if old data has broken links between records (e.g. `Broken links in the database:
+  budgets: 1 row`). The app still runs; report it as an issue.
+- An older version doesn't understand a newer database, so a rollback also restores the backup (below).
+
 ### Rolling back an update
 If a new version misbehaves, go back to the previous one. First **disable the scheduled task**,
 otherwise the next night installs the same version again. Then, in the app folder:
@@ -175,6 +184,16 @@ from `.env`, or run as yourself with `PUID=$(id -u)` and `PGID=$(id -g)`).
 
 For development, run the backend with `uvicorn app.main:app --reload` in `backend/` and the
 frontend with `npm run dev` in `frontend/` (http://localhost:3000) instead.
+
+To change the database schema: change `backend/app/models.py`, then from `backend/` let Alembic compare the models
+with a database at the latest version and write the migration:
+
+```bash
+rm -f /tmp/schema.db && DATABASE_URL=sqlite:////tmp/schema.db alembic upgrade head
+DATABASE_URL=sqlite:////tmp/schema.db alembic revision --autogenerate -m "what changed"
+```
+
+Check the generated file in `app/migrations/versions/`, and add a test in `tests/test_database.py` if it moves data.
 
 ## Troubleshooting
 
