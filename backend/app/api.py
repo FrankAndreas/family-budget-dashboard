@@ -278,24 +278,6 @@ def delete_account(
     return crud.delete_account(db, get_own_account(db, current_user, account_id))
 
 
-# Category Routes
-@router.get("/categories", response_model=List[schemas.Category])
-def get_categories(db: Session = Depends(database.get_db)):
-    return crud.get_categories(db)
-
-
-@router.post("/categories", response_model=schemas.Category)
-def create_category(
-    category: schemas.CategoryCreate,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
-    db: Session = Depends(database.get_db),
-):
-    # Only parents can create categories
-    if current_user.role != "PARENT":
-        raise HTTPException(status_code=403, detail="Only parents can create categories")
-    return crud.create_category(db, category=category)
-
-
 # Transaction Routes
 @router.get("/accounts/{account_id}/transactions", response_model=List[schemas.Transaction])
 def get_transactions(
