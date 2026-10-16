@@ -13,13 +13,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from . import auth, crud, database, models, privacy, schemas
-from .seed import UNKNOWN_EXPENSE
+from .seed import OTHER_INCOME, UNKNOWN_EXPENSE, system_category
 
 router = APIRouter()
 
 ZURICH = ZoneInfo("Europe/Zurich")
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
-GAP_INCOME = "Other Income"
 
 
 def month_of(value: datetime) -> str:
@@ -92,8 +91,7 @@ def book_month_check(
         raise HTTPException(
             status_code=409, detail="Already booked; delete the month-check booking to book the new difference"
         )
-    name = UNKNOWN_EXPENSE if row["difference"] > 0 else GAP_INCOME
-    category = db.query(models.Category).filter(models.Category.name == name).one()
+    category = system_category(db, UNKNOWN_EXPENSE if row["difference"] > 0 else OTHER_INCOME)
     year, number = int(month[:4]), int(month[5:])
     transaction = schemas.TransactionCreate(
         account_id=account.id,

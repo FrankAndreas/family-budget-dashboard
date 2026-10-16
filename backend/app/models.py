@@ -90,6 +90,8 @@ class Category(Base):
     type = Column(Enum(CategoryType))
     icon = Column(String, nullable=True)
     is_global = Column(Boolean, default=True)
+    # Fixed key of a category the code needs (seed.TRANSFER, SETTLE_UP, ...); None for ordinary categories
+    system_key = Column(String, nullable=True, unique=True, index=True)
 
 
 class Transaction(Base):

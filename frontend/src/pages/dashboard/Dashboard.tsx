@@ -5,6 +5,7 @@ import BudgetManager from '../../components/BudgetManager';
 import Analytics from '../../components/Analytics';
 import DataManager from '../../components/DataManager';
 import FamilyManager from '../../components/FamilyManager';
+import CategoryManager from '../../components/CategoryManager';
 import ShareSettings from '../../components/ShareSettings';
 import CommonBudget from '../../components/CommonBudget';
 import Investments from '../../components/Investments';
@@ -187,6 +188,7 @@ export default function Dashboard() {
             {activeTab === 'settings' && (
                 <div className="space-y-6">
                     {user?.role === 'PARENT' && <FamilyManager />}
+                    {user?.role === 'PARENT' && <CategoryManager />}
                     <ShareSettings />
                     <DataManager onDataChanged={refresh} />
                 </div>

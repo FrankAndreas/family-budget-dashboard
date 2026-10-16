@@ -15,6 +15,7 @@ from . import (
     wishes_api,
     import_rules,
     reports,
+    categories_api,
 )
 from .seed import seed_admin, seed_categories
 
@@ -44,6 +45,7 @@ app.include_router(month_check.router, prefix="/api/v1")
 app.include_router(wishes_api.router, prefix="/api/v1")
 app.include_router(import_rules.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
+app.include_router(categories_api.router, prefix="/api/v1")
 
 # Configure CORS
 app.add_middleware(

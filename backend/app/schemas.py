@@ -93,13 +93,25 @@ class CategoryBase(BaseModel):
     icon: Optional[str] = None
 
 
+CategoryName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=50)]
+
+
 class CategoryCreate(CategoryBase):
-    pass
+    name: CategoryName
+    icon: Optional[str] = Field(default=None, max_length=8)
+
+
+class CategoryUpdate(BaseModel):
+    name: Optional[CategoryName] = None
+    type: Optional[CategoryType] = None
+    icon: Optional[str] = Field(default=None, max_length=8)
 
 
 class Category(CategoryBase):
     id: str
     is_global: bool = True
+    # Fixed key of a category the app needs (TRANSFER, SETTLE_UP, ...); None for ordinary ones
+    system_key: Optional[str] = None
 
     class Config:
         from_attributes = True

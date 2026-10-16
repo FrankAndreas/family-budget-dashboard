@@ -195,7 +195,7 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
         errors.append("category is required")
     elif not category:
         errors.append(f"Unknown category '{row['category']}'")
-    elif category.name == SETTLE_UP:
+    elif category.system_key == SETTLE_UP:
         errors.append("Settle up can't be imported; use the Common tab")
         category = None
 
@@ -358,7 +358,7 @@ def import_schema(
 ):
     """A JSON Schema of the import file for this user, listing the names that are valid for them."""
     lookups = Lookups(db, current_user)
-    importable = [c for c in lookups.categories.values() if c.name != SETTLE_UP]
+    importable = [c for c in lookups.categories.values() if c.system_key != SETTLE_UP]
 
     def unique(names) -> list[str]:
         return sorted(set(names), key=str.casefold)

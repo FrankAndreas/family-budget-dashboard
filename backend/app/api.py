@@ -278,24 +278,6 @@ def delete_account(
     return crud.delete_account(db, get_own_account(db, current_user, account_id))
 
 
-# Category Routes
-@router.get("/categories", response_model=List[schemas.Category])
-def get_categories(db: Session = Depends(database.get_db)):
-    return crud.get_categories(db)
-
-
-@router.post("/categories", response_model=schemas.Category)
-def create_category(
-    category: schemas.CategoryCreate,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
-    db: Session = Depends(database.get_db),
-):
-    # Only parents can create categories
-    if current_user.role != "PARENT":
-        raise HTTPException(status_code=403, detail="Only parents can create categories")
-    return crud.create_category(db, category=category)
-
-
 # Transaction Routes
 @router.get("/accounts/{account_id}/transactions", response_model=List[schemas.Transaction])
 def get_transactions(
@@ -366,7 +348,7 @@ def update_transaction(
 
 def update_transfer(db: Session, db_transaction, update: schemas.TransactionUpdate, category: models.Category):
     """An imported transfer keeps its amount and category (delete and import again); Settle up stays as booked."""
-    if category.name == SETTLE_UP:
+    if category.system_key == SETTLE_UP:
         raise HTTPException(status_code=400, detail="Undo the settlement in the Common tab instead")
     changed = update.model_fields_set - {"description", "date"}
     if update.category_id == db_transaction.category_id:
@@ -387,7 +369,7 @@ def delete_transaction(
         raise HTTPException(status_code=404, detail="Transaction not found")
     # Same access rules as adding transactions on the account
     privacy.check_account_access(db, current_user, db_transaction.account_id, write=True)
-    if crud.get_category(db, db_transaction.category_id).name == SETTLE_UP:
+    if crud.get_category(db, db_transaction.category_id).system_key == SETTLE_UP:
         raise HTTPException(status_code=400, detail="Undo the settlement in the Common tab instead")
     return crud.delete_transaction(db, db_transaction)
 

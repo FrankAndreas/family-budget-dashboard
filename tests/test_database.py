@@ -198,3 +198,17 @@ def test_sqlite_folder_is_created(tmp_path):
     assert (tmp_path / "new" / "folder").is_dir()
     database.ensure_sqlite_folder("sqlite://")  # in memory: nothing to create
     database.ensure_sqlite_folder("postgresql://host/db")  # not SQLite: nothing to do
+
+
+def test_category_keys_migration(tmp_path):
+    engine = sqlite(tmp_path)
+    database_setup.setup(engine)
+    database_setup.run(engine, command.downgrade, "0005")
+    without_link_checks(
+        engine,
+        "INSERT INTO categories (id, name, type) VALUES ('c1', 'Settle up', 'TRANSFER'), ('c2', 'Groceries', 'EXPENSE')",
+    )
+    database_setup.setup(engine)
+    with engine.connect() as conn:
+        keys = dict(conn.execute(text("SELECT name, system_key FROM categories")).all())
+    assert keys == {"Settle up": "SETTLE_UP", "Groceries": None}

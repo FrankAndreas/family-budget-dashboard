@@ -8,7 +8,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import auth, crud, database, finance, models, privacy, schemas
-from .seed import SETTLE_UP
+from .seed import SETTLE_UP, system_category
 
 router = APIRouter()
 
@@ -164,7 +164,7 @@ def create_settlement(
         raise HTTPException(status_code=400, detail="Settling up is between two parents")
     from_account = parent_account(db, settlement.from_account_id, settlement.from_user_id)
     to_account = parent_account(db, settlement.to_account_id, settlement.to_user_id)
-    category = db.query(models.Category).filter(models.Category.name == SETTLE_UP).one()
+    category = system_category(db, SETTLE_UP)
     amount = crud.to_cents(settlement.amount)
     when = crud.to_naive_utc(settlement.date) if settlement.date else datetime.utcnow()
 

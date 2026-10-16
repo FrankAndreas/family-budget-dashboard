@@ -19,6 +19,8 @@ test('category changed in the preview becomes an import rule', async ({ page, re
     await page.getByRole('button', { name: 'Settings' }).click();
     await page.getByLabel('File to import').setInputFiles(first);
     const category = page.getByLabel('Category of line 2');
+    // allTextContents doesn't wait: wait for the preview first
+    await expect(category).toBeVisible();
     const options = await category.locator('option').allTextContents();
     expect(options).toContain('Groceries');
     expect(options).toContain('Transfer (out)');

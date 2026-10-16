@@ -9,12 +9,12 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from . import auth, database, models
-from .seed import SETTLE_UP
+from .seed import OTHER_INCOME, SETTLE_UP, UNSORTED
 
 router = APIRouter()
 
 # The categories the bank converter uses for lines none of its rules recognise
-FALLBACKS = ("unsorted", "other income")
+FALLBACKS = (UNSORTED, OTHER_INCOME)
 MIN_TEXT, MAX_TEXT = 2, 120
 TRANSFER = models.CategoryType.TRANSFER
 
@@ -67,13 +67,13 @@ def adjust(raw: dict, change: Optional[dict], lookups, rules: list) -> tuple[dic
         allowed = (
             kind in (models.CategoryType.INCOME, models.CategoryType.EXPENSE)
             and target is not None
-            and target.name != SETTLE_UP
+            and target.system_key != SETTLE_UP
             and fits(target, kind)
         )
         if not allowed:
             return raw, f"Can't change {raw['category']} to {change['category']}", None
         return with_category(raw, target, kind), None, None
-    if file_category and key(file_category.name) in FALLBACKS:
+    if file_category and file_category.system_key in FALLBACKS:
         description = key(raw["description"])
         for rule in rules:
             if key(rule.text) in description and fits(rule.category, kind):
