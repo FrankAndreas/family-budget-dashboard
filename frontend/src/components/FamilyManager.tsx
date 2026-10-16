@@ -25,7 +25,7 @@ const hasLogin = (member: FamilyUser) => member.role === 'PARENT' || member.has_
 
 // Parents only: add family members, reset PINs, and switch children between "dependent" and "own allowance"
 export default function FamilyManager() {
-    const { user, refreshUser } = useAuth();
+    const { user, login, refreshUser } = useAuth();
     const { users, reload } = useFamily();
     const [error, setError] = useState('');
     const [notice, setNotice] = useState('');
@@ -145,6 +145,8 @@ export default function FamilyManager() {
         try {
             const update = pinAction === 'allowance' ? { has_allowance: true, pin: memberPin } : { pin: memberPin };
             await api.put(`/api/v1/users/${member.id}`, update);
+            // A new PIN ends all logins of that person; your own: log in again here with the new PIN
+            if (member.id === user?.id) await login(member.username, memberPin);
             closePinForm();
             showResult(pinAction === 'allowance'
                 ? `${member.username} now has an own allowance and logs in with the new PIN.`
