@@ -61,7 +61,7 @@ export default function RemoveMember({ member, onDone, onCancel }: Props) {
         <form onSubmit={remove} className="mt-3 p-4 rounded-lg border border-red-500/40 bg-red-500/10 space-y-3">
             <p className="font-semibold">Remove {member.username} from the family?</p>
             <p className="text-sm text-slate-300">
-                Their accounts, transactions and budgets are deleted. This can't be undone.
+                Their accounts, transactions, budgets and wishes are deleted. This can't be undone.
             </p>
             {items === null && !error && <p className="text-sm text-slate-400">Loading their items…</p>}
             {items && items.length > 0 && (
