@@ -175,8 +175,6 @@ def create_settlement(
         for account, sign in ((from_account, -1), (to_account, 1))
     )
     db.add_all([paid, received])
-    from_account.balance = crud.to_cents(from_account.balance - amount)
-    to_account.balance = crud.to_cents(to_account.balance + amount)
     db.flush()
     db_settlement = models.Settlement(
         from_user_id=settlement.from_user_id,

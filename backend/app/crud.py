@@ -111,7 +111,7 @@ def get_accounts(db: Session, user_id: str):
 
 
 def create_account(db: Session, account: schemas.AccountCreate, user_id: str):
-    db_account = models.Account(user_id=user_id, name=account.name, type=account.type, balance=0.0)
+    db_account = models.Account(user_id=user_id, name=account.name, type=account.type)
     db.add(db_account)
     db.commit()
     db.refresh(db_account)
@@ -207,11 +207,6 @@ def create_transaction(
     )
     db.add(db_transaction)
 
-    # Update account balance
-    account = get_account(db, transaction.account_id)
-    if account:
-        account.balance = to_cents(account.balance + amount)
-
     # Without commit (bulk import) the caller commits all rows at once
     if not commit:
         db.flush()
@@ -240,10 +235,6 @@ def update_transaction(
         setattr(db_transaction, key, value)
     db_transaction.split_shares = split_shares
 
-    account = get_account(db, db_transaction.account_id)
-    if account:
-        account.balance = to_cents(account.balance + db_transaction.amount - old_amount)
-
     db.commit()
     db.refresh(db_transaction)
     return db_transaction
@@ -254,11 +245,6 @@ def get_transaction(db: Session, transaction_id: str):
 
 
 def delete_transaction(db: Session, db_transaction: models.Transaction):
-    # Undo the transaction's effect on the account balance
-    account = get_account(db, db_transaction.account_id)
-    if account:
-        account.balance = to_cents(account.balance - db_transaction.amount)
-
     db.delete(db_transaction)
     db.commit()
     return db_transaction
