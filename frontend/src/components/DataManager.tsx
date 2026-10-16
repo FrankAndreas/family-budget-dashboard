@@ -8,6 +8,7 @@ import ImportRules from './ImportRules';
 
 interface ExportAccount {
     id: string;
+    user_id: string;
     name: string;
     type: string;
 }
@@ -60,7 +61,8 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
                 api.get('/api/v1/users')
             ]);
 
-            const accounts: ExportAccount[] = accountsRes.data;
+            // Only your own accounts: a restore creates them as yours, and others' accounts (even shared) aren't yours
+            const accounts = (accountsRes.data as ExportAccount[]).filter(a => a.user_id === user?.id);
             const categories: ExportCategory[] = categoriesRes.data;
             const family: FamilyUser[] = usersRes.data;
             const allTransactions: ExportTransaction[] = [];
