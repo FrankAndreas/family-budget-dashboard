@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { money } from '../finance';
 import { useFamily } from '../useFamily';
@@ -39,6 +40,7 @@ async function loadBudgetsWithSpending(scope: Scope): Promise<BudgetWithCategory
 }
 
 export default function BudgetManager() {
+    const { t } = useTranslation();
     const { scopes } = useFamily();
     const [scopeKey, setScopeKey] = useState('');
     const [budgets, setBudgets] = useState<BudgetWithCategory[]>([]);
@@ -73,9 +75,9 @@ export default function BudgetManager() {
             .then(setBudgets)
             .catch(error => {
                 console.error('Failed to load budgets', error);
-                setError(errorMessage(error, 'Failed to load budgets'));
+                setError(errorMessage(error, t('budgets.loadFailed')));
             });
-    }, [activeScope, reloadKey]);
+    }, [activeScope, reloadKey, t]);
 
     const handleAddBudget = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -91,7 +93,7 @@ export default function BudgetManager() {
             reloadBudgets();
         } catch (error) {
             console.error('Failed to create budget', error);
-            setError(errorMessage(error, 'Failed to create budget'));
+            setError(errorMessage(error, t('budgets.createFailed')));
         }
     };
 
@@ -108,19 +110,19 @@ export default function BudgetManager() {
             reloadBudgets();
         } catch (error) {
             console.error('Failed to update budget', error);
-            setError(errorMessage(error, 'Failed to update budget'));
+            setError(errorMessage(error, t('budgets.updateFailed')));
         }
     };
 
     const handleDeleteBudget = async (budget: BudgetWithCategory) => {
-        if (!confirm(`Delete the budget limit for ${budget.category?.name ?? 'this category'}?`)) return;
+        if (!confirm(t('budgets.confirmDelete', { category: budget.category?.name ?? t('budgets.thisCategory') }))) return;
 
         try {
             await api.delete(`/api/v1/budgets/${budget.id}`);
             reloadBudgets();
         } catch (error) {
             console.error('Failed to delete budget', error);
-            setError(errorMessage(error, 'Failed to delete budget'));
+            setError(errorMessage(error, t('budgets.deleteFailed')));
         }
     };
 
@@ -139,7 +141,7 @@ export default function BudgetManager() {
     return (
         <div className="glass-card p-6">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-2xl font-bold">Budget Limits</h2>
+                <h2 className="text-2xl font-bold">{t('budgets.title')}</h2>
                 <div className="flex items-center gap-3">
                     <ScopeSelector scopes={scopes} value={activeScope?.key ?? ''} onChange={setScopeKey} />
                     {canManage && (
@@ -147,7 +149,7 @@ export default function BudgetManager() {
                         onClick={() => setShowAddBudget(!showAddBudget)}
                         className="btn-primary text-sm"
                     >
-                        + Set Budget Limit
+                        {t('budgets.add')}
                     </button>
                     )}
                 </div>
@@ -155,14 +157,14 @@ export default function BudgetManager() {
 
             {!canManage && activeScope && (
                 <p className="mb-4 text-sm text-slate-400">
-                    Viewing {activeScope.label} (read only).
+                    {t('budgets.viewing', { scope: activeScope.label })}
                 </p>
             )}
 
             {error && (
                 <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 flex justify-between items-center">
                     <span>{error}</span>
-                    <button onClick={() => setError('')} className="text-red-300 hover:text-white" aria-label="Dismiss error">✕</button>
+                    <button onClick={() => setError('')} className="text-red-300 hover:text-white" aria-label={t('common.dismissError')}>✕</button>
                 </div>
             )}
 
@@ -174,7 +176,7 @@ export default function BudgetManager() {
                         className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
                         required
                     >
-                        <option value="">Select Category</option>
+                        <option value="">{t('budgets.selectCategory')}</option>
                         {categories.map(cat => (
                             <option key={cat.id} value={cat.id}>{cat.name}</option>
                         ))}
@@ -183,7 +185,7 @@ export default function BudgetManager() {
                         type="number"
                         step="0.01"
                         min="0.01"
-                        placeholder="Budget Limit"
+                        placeholder={t('budgets.limitPlaceholder')}
                         value={newBudget.limit}
                         onChange={(e) => setNewBudget({ ...newBudget, limit: e.target.value })}
                         className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
@@ -194,23 +196,23 @@ export default function BudgetManager() {
                         onChange={(e) => setNewBudget({ ...newBudget, period: e.target.value })}
                         className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
                     >
-                        <option value="MONTHLY">Monthly</option>
-                        <option value="YEARLY">Yearly</option>
+                        <option value="MONTHLY">{t('budgets.monthly')}</option>
+                        <option value="YEARLY">{t('budgets.yearly')}</option>
                     </select>
-                    <button type="submit" className="btn-primary w-full">Set Budget</button>
+                    <button type="submit" className="btn-primary w-full">{t('budgets.set')}</button>
                 </form>
             )}
 
             <div className="space-y-4">
                 {budgets.length === 0 ? (
-                    <p className="text-slate-400 text-center py-8">No budget limits set</p>
+                    <p className="text-slate-400 text-center py-8">{t('budgets.none')}</p>
                 ) : (
                     budgets.map(budget => (
                         <div key={budget.id} className="p-4 bg-slate-800/30 rounded-lg">
                             <div className="flex justify-between items-center mb-2">
                                 <div>
                                     <h3 className="font-semibold text-lg">{budget.category?.name}</h3>
-                                    <p className="text-sm text-slate-400">{budget.period === 'YEARLY' ? 'This year' : 'This month'}</p>
+                                    <p className="text-sm text-slate-400">{budget.period === 'YEARLY' ? t('budgets.thisYear') : t('budgets.thisMonth')}</p>
                                 </div>
                                 <div className="text-right">
                                     <p className={`text-2xl font-bold ${getProgressTextColor(budget.percentage)}`}>
@@ -221,16 +223,16 @@ export default function BudgetManager() {
                                         {canManage && <button
                                             onClick={() => setEditingBudget({ id: budget.id, limit: budget.limit.toString(), period: budget.period })}
                                             className="ml-3 text-slate-500 hover:text-blue-400 transition-colors"
-                                            title="Edit budget limit"
+                                            title={t('budgets.editTitle')}
                                         >
-                                            Edit
+                                            {t('common.edit')}
                                         </button>}
                                         {canManage && <button
                                             onClick={() => handleDeleteBudget(budget)}
                                             className="ml-3 text-slate-500 hover:text-red-400 transition-colors"
-                                            title="Delete budget limit"
+                                            title={t('budgets.deleteTitle')}
                                         >
-                                            Delete
+                                            {t('common.delete')}
                                         </button>}
                                     </p>
                                 </div>
@@ -245,21 +247,21 @@ export default function BudgetManager() {
                                         value={editingBudget.limit}
                                         onChange={(e) => setEditingBudget({ ...editingBudget, limit: e.target.value })}
                                         className="flex-1 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                        aria-label="Budget limit"
+                                        aria-label={t('budgets.limit')}
                                         required
                                     />
                                     <select
                                         value={editingBudget.period}
                                         onChange={(e) => setEditingBudget({ ...editingBudget, period: e.target.value })}
                                         className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                                        aria-label="Budget period"
+                                        aria-label={t('budgets.period')}
                                     >
-                                        <option value="MONTHLY">Monthly</option>
-                                        <option value="YEARLY">Yearly</option>
+                                        <option value="MONTHLY">{t('budgets.monthly')}</option>
+                                        <option value="YEARLY">{t('budgets.yearly')}</option>
                                     </select>
-                                    <button type="submit" className="btn-primary text-sm">Save</button>
+                                    <button type="submit" className="btn-primary text-sm">{t('common.save')}</button>
                                     <button type="button" onClick={() => setEditingBudget(null)} className="px-3 text-sm text-slate-400 hover:text-white">
-                                        Cancel
+                                        {t('common.cancel')}
                                     </button>
                                 </form>
                             )}
@@ -273,12 +275,12 @@ export default function BudgetManager() {
 
                             {budget.percentage >= 100 && (
                                 <div className="mt-2 p-2 bg-red-500/20 border border-red-500/50 rounded text-red-400 text-sm">
-                                    ⚠️ Budget exceeded! You've spent {money(budget.spent - budget.limit)} over the limit.
+                                    {t('budgets.exceeded', { amount: money(budget.spent - budget.limit) })}
                                 </div>
                             )}
                             {budget.percentage >= 80 && budget.percentage < 100 && (
                                 <div className="mt-2 p-2 bg-yellow-500/20 border border-yellow-500/50 rounded text-yellow-400 text-sm">
-                                    ⚠️ Warning: You've used {budget.percentage.toFixed(1)}% of your budget.
+                                    {t('budgets.warning', { percent: budget.percentage.toFixed(1) })}
                                 </div>
                             )}
                         </div>

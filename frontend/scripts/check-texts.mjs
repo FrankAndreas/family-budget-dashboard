@@ -12,6 +12,9 @@ const CHECKED = [
     // Task 7
     'App.tsx', 'pages/Login.tsx', 'pages/dashboard/Dashboard.tsx', 'components/PinInput.tsx',
     'components/ScopeSelector.tsx', 'components/OwnerSelect.tsx', 'components/AccountCards.tsx',
+    // Task 8
+    'components/Transactions.tsx', 'components/BudgetManager.tsx', 'components/Analytics.tsx',
+    'components/MonthCheck.tsx', 'components/CategoryManager.tsx',
 ];
 const ATTRIBUTES = new Set(['placeholder', 'aria-label', 'title', 'alt', 'label']);
 const CALLS = new Set(['confirm', 'alert', 'setError', 'errorMessage', 'setMessage']);

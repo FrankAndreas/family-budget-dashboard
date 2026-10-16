@@ -14,3 +14,10 @@ export const formatDate = (value: string | Date) =>
 
 export const formatMonth = (value: string | Date) =>
     toDate(value).toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
+
+// Chart labels: "16. Okt." / "16 Oct", and "Okt." / "Oct"
+export const formatDayShort = (value: string | Date) =>
+    toDate(value).toLocaleDateString(locale(), { day: 'numeric', month: 'short' });
+
+export const formatMonthShort = (value: string | Date) =>
+    toDate(value).toLocaleDateString(locale(), { month: 'short' });
