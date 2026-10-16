@@ -2,6 +2,9 @@
 
 from helpers import BASE_URL, add_transaction, create_account, register
 
+from app import database, models
+from app.seed import seed_categories
+
 
 def german(client, name="mum"):
     headers = register(client, name)
@@ -73,3 +76,24 @@ def test_report_shows_the_german_name(client):
     add_transaction(client, mum, account, unsorted, 10)
     report = client.get(f"{BASE_URL}/reports/summary", headers=mum).json()
     assert "Unsortiert" in str(report) and "Unsorted" not in str(report)
+
+
+def fresh_install():
+    models.Base.metadata.drop_all(bind=database.engine)
+    models.Base.metadata.create_all(bind=database.engine)
+    with database.SessionLocal() as db:
+        seed_categories(db)
+        return {c.name for c in db.query(models.Category)}
+
+
+def test_a_new_install_gets_german_categories(monkeypatch):
+    monkeypatch.setenv("DEFAULT_LANGUAGE", "de")
+    created = fresh_install()
+    assert {"Lebensmittel", "Miete", "Auswärts essen", "Rückerstattungen", "Mobilität"} <= created
+    assert "Groceries" not in created
+    # 🔒 categories keep their English name in the database
+    assert {"Unsorted", "Settle up", "Transfer", "Other Income", "Unknown expense"} <= created
+
+
+def test_an_english_install_keeps_english_categories():
+    assert {"Groceries", "Rent"} <= fresh_install()
