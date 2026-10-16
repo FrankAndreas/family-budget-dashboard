@@ -37,7 +37,8 @@ SPACES = re.compile(r"\s+")
 @dataclass
 class Rule:
     number: int
-    match: re.Pattern
+    # None if the pattern didn't compile: the rule is still checked for other problems, but never used
+    match: Optional[re.Pattern]
     action: str
     category: str = ""
     sign: str = ""  # "debit", "credit", or "" for both
@@ -165,6 +166,8 @@ def convert(rows: list[dict], config: dict, schema: common.Schema) -> Result:
     rules = read_rules(config, schema, problems, {key(account) for account, _ in accounts.values()})
     if problems:
         raise Problems(problems)
+    # Without problems all three were found (this tells the type checker so)
+    assert fallback_expense is not None and fallback_income is not None and transfer is not None
 
     result = Result()
     latest: Optional[tuple[date, int, str]] = None
@@ -179,7 +182,8 @@ def convert(rows: list[dict], config: dict, schema: common.Schema) -> Result:
             problems.append(f"line {line}: amount '{row['credit/debit amount']}' is not a number")
         if day is None:
             problems.append(f"line {line}: date '{row['booked at']}' is not a date")
-        if problems and (iban not in accounts or amount is None or day is None):
+        # The problems are recorded above; the line can't be converted
+        if iban not in accounts or amount is None or day is None:
             continue
 
         balance = common.number(row.get("balance", ""))
@@ -191,7 +195,7 @@ def convert(rows: list[dict], config: dict, schema: common.Schema) -> Result:
             result.skipped.append((line, text))
             continue
         debit = amount < 0
-        rule = next((r for r in rules if r.applies(debit) and r.match.search(text)), None)
+        rule = next((r for r in rules if r.applies(debit) and r.match is not None and r.match.search(text)), None)
         if rule and rule.action == "ignore":
             result.ignored.append((line, text, float(amount)))
             continue

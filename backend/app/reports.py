@@ -57,7 +57,7 @@ def bookings(db: Session, owner_id: str, since: Optional[date]) -> list[tuple[mo
     )
     if since:
         query = query.filter(models.Transaction.date >= utc_start(since))
-    return query.all()
+    return [(transaction, category) for transaction, category in query.all()]
 
 
 def budget_out(db: Session, budget: models.Budget) -> dict:

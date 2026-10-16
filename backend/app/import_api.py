@@ -10,7 +10,7 @@ import json
 import math
 import re
 from datetime import datetime
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
@@ -60,7 +60,7 @@ def text_value(value) -> str:
     return str(value).strip()
 
 
-def parse_file(filename: str, content: bytes) -> list[dict[str, str]]:
+def parse_file(filename: str, content: bytes) -> list[dict[str, Any]]:
     """The file's rows as {field: text}, each with its "_line" (CSV line, or position in the JSON list)."""
     if len(content) > MAX_BYTES:
         raise HTTPException(status_code=400, detail="The file is larger than 1 MB")
@@ -80,7 +80,7 @@ def parse_file(filename: str, content: bytes) -> list[dict[str, str]]:
     return rows
 
 
-def parse_json(text: str) -> list[dict[str, str]]:
+def parse_json(text: str) -> list[dict[str, Any]]:
     try:
         data = json.loads(text)
     except json.JSONDecodeError as error:
@@ -94,7 +94,7 @@ def parse_json(text: str) -> list[dict[str, str]]:
     ]
 
 
-def parse_csv(text: str) -> list[dict[str, str]]:
+def parse_csv(text: str) -> list[dict[str, Any]]:
     header = text.split("\n", 1)[0]
     delimiter = ";" if header.count(";") > header.count(",") else ","
     reader = csv.reader(io.StringIO(text), delimiter=delimiter)
@@ -240,6 +240,8 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
     if errors:
         out["status"] = "error"
         return out
+    # Without errors every value was found (this tells the type checker so)
+    assert account is not None and category is not None and date is not None and amount is not None
 
     if is_transfer:
         amount = amount * DIRECTIONS[direction]

@@ -35,7 +35,7 @@ jobs:
         run: |
           cd backend
           pip install -r requirements.txt
-          pip install pytest pytest-cov flake8 black mypy
+          pip install pytest pytest-cov flake8 black mypy==2.4.0
       
       - name: Run Black (code formatting check)
         run: |
@@ -50,8 +50,7 @@ jobs:
       - name: Run MyPy (type checking)
         run: |
           cd backend
-          mypy app/ --ignore-missing-imports
-        continue-on-error: true
+          mypy app/ ../tools/ --ignore-missing-imports
       
       # The tests run the API in-process against a temporary SQLite database (see tests/conftest.py)
       - name: Run pytest

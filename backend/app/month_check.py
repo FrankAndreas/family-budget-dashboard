@@ -39,7 +39,7 @@ def clearing_account(db: Session, current_user, account_id: str, write: bool = F
 
 def months(db: Session, account: models.Account) -> dict:
     """Per Swiss month: money in, money out, their difference, and whether its month-check booking exists."""
-    sums = defaultdict(lambda: [0.0, 0.0])
+    sums: defaultdict[str, list[float]] = defaultdict(lambda: [0.0, 0.0])
     references = set()
     for t in db.query(models.Transaction).filter(models.Transaction.account_id == account.id):
         sums[month_of(t.date)][0 if t.amount >= 0 else 1] += abs(t.amount)

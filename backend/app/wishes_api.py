@@ -157,7 +157,7 @@ def family_plan(
     require_parent(current_user)
     rows, total = [], 0.0
     planned = [w for w in visible_wishes(db, current_user) if w.family_position is not None and not w.bought_on]
-    for wish in sorted(planned, key=lambda w: w.family_position):
+    for wish in sorted(planned, key=lambda w: w.family_position or 0):
         out = wish_out(db, current_user, wish)
         total = finance.cents(total + (out["price"] or 0))
         rows.append({**out, "running_total": total})
