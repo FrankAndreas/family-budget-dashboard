@@ -109,7 +109,7 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
         db_user.failed_logins, db_user.locked_until = 0, None
         db.commit()
     access_token = auth.create_access_token(
-        data={"sub": db_user.id},
+        data={"sub": db_user.id, "ver": db_user.token_version or 0},
         expires_delta=timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
     return {"access_token": access_token, "token_type": "bearer"}
@@ -206,6 +206,16 @@ def delete_user(
     # Their investments and yearly bills go where the parent decided (409 lists any without a decision)
     apply_item_decisions(db, user_id, removal.items if removal else [])
     return crud.delete_user(db, user_id)
+
+
+@router.post("/me/logout-everywhere")
+def logout_everywhere(
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+):
+    """End all of the user's logins, on every device, this one included."""
+    current_user.token_version = (current_user.token_version or 0) + 1
+    db.commit()
+    return {"logged_out": True}
 
 
 @router.patch("/me/privacy")
