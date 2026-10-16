@@ -11,7 +11,7 @@ import Investments from '../../components/Investments';
 import YearlyBills from '../../components/YearlyBills';
 import MonthCheck from '../../components/MonthCheck';
 import Wishes from '../../components/Wishes';
-import { useAssets, useSplits } from '../../finance';
+import { money, useAssets, useSplits } from '../../finance';
 import { useFamily } from '../../useFamily';
 import { accessTo, canWrite, dependents } from '../../family';
 
@@ -206,7 +206,7 @@ export default function Dashboard() {
 
     const handleDeleteTransaction = async (transaction: Transaction) => {
         if (!selectedAccount) return;
-        if (!confirm(`Delete "${transaction.description || 'No description'}" (${transaction.amount.toFixed(2)})?`)) return;
+        if (!confirm(`Delete "${transaction.description || 'No description'}" (${money(transaction.amount)})?`)) return;
 
         try {
             await api.delete(`/api/v1/transactions/${transaction.id}`);
@@ -307,7 +307,7 @@ export default function Dashboard() {
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div className="glass-card p-6">
                             <h3 className="text-emerald-400 text-lg font-semibold mb-2">My Balance</h3>
-                            <p className="text-3xl font-bold">${totalBalance.toFixed(2)}</p>
+                            <p className="text-3xl font-bold">{money(totalBalance)}</p>
                         </div>
                         <div className="glass-card p-6">
                             <h3 className="text-sky-400 text-lg font-semibold mb-2">Accounts</h3>
@@ -406,7 +406,7 @@ export default function Dashboard() {
                                     )}
                                     <p className="text-sm text-slate-400">{account.type}</p>
                                     <div className="flex justify-between items-end mt-2">
-                                        <p className="text-2xl font-bold">${account.balance.toFixed(2)}</p>
+                                        <p className="text-2xl font-bold">{money(account.balance)}</p>
                                         {canEdit(account) && (
                                             <div className="flex gap-3">
                                                 <button
@@ -591,7 +591,7 @@ export default function Dashboard() {
                                             </div>
                                             <div className="flex items-center gap-3">
                                                 <p className={`text-xl font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                                    {transaction.amount >= 0 ? '+' : ''} ${transaction.amount.toFixed(2)}
+                                                    {transaction.amount >= 0 ? '+ ' : ''}{money(transaction.amount)}
                                                 </p>
                                                 {canEditSelected && !isTransfer(transaction) && (
                                                 <button

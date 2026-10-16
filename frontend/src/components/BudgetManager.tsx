@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import api, { errorMessage } from '../api';
+import { money } from '../finance';
 import { useFamily } from '../useFamily';
 import type { Scope } from '../family';
 import ScopeSelector from './ScopeSelector';
@@ -213,7 +214,7 @@ export default function BudgetManager() {
                                 </div>
                                 <div className="text-right">
                                     <p className={`text-2xl font-bold ${getProgressTextColor(budget.percentage)}`}>
-                                        ${budget.spent.toFixed(2)} / ${budget.limit.toFixed(2)}
+                                        {money(budget.spent)} / {money(budget.limit)}
                                     </p>
                                     <p className="text-sm text-slate-400">
                                         {budget.percentage.toFixed(1)}%
@@ -272,7 +273,7 @@ export default function BudgetManager() {
 
                             {budget.percentage >= 100 && (
                                 <div className="mt-2 p-2 bg-red-500/20 border border-red-500/50 rounded text-red-400 text-sm">
-                                    ⚠️ Budget exceeded! You've spent ${(budget.spent - budget.limit).toFixed(2)} over the limit.
+                                    ⚠️ Budget exceeded! You've spent {money(budget.spent - budget.limit)} over the limit.
                                 </div>
                             )}
                             {budget.percentage >= 80 && budget.percentage < 100 && (

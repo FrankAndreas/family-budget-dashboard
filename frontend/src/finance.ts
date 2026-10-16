@@ -13,9 +13,12 @@ export interface Overview {
     totals: Record<string, number>;
 }
 
-// Same money format as the rest of the app
+// Swiss francs, the same text in every browser: CHF 1'234.50, CHF -22.10 (Intl's output differs between browsers)
 export function money(value: number): string {
-    return `$${value.toFixed(2)}`;
+    const cents = Math.round(value * 100);
+    const francs = Math.floor(Math.abs(cents) / 100).toString().replace(/\B(?=(\d{3})+(?!\d))/g, "'");
+    const rest = (Math.abs(cents) % 100).toString().padStart(2, '0');
+    return `CHF ${cents < 0 ? '-' : ''}${francs}.${rest}`;
 }
 
 export const describeSplit = (split: Split, nameOf: (id: string) => string) =>
