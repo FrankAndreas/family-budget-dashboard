@@ -1,7 +1,8 @@
-from pydantic import BaseModel, Field, StringConstraints, field_validator
+from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
 from typing import Annotated, Optional, Literal
 from datetime import date, datetime, timezone
 from .models import UserRole, AccountType, CategoryType, ShareLevel
+from . import i18n
 
 # PINs are exactly 4 digits (same rule as the family-chore app)
 Pin = Annotated[str, Field(pattern=r"^\d{4}$")]
@@ -118,6 +119,12 @@ class Category(CategoryBase):
     is_global: bool = True
     # Fixed key of a category the app needs (TRANSFER, SETTLE_UP, ...); None for ordinary ones
     system_key: Optional[str] = None
+
+    @model_validator(mode="after")
+    def name_in_language(self) -> "Category":
+        # The app's own categories are shown in the request's language
+        self.name = i18n.system_name(self.system_key, self.name)
+        return self
 
     class Config:
         from_attributes = True

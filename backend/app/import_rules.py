@@ -8,7 +8,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from . import auth, database, models, messages
+from . import auth, database, i18n, models, messages
 from .seed import OTHER_INCOME, SETTLE_UP, UNSORTED
 
 router = APIRouter()
@@ -51,7 +51,7 @@ def fits(category: models.Category, kind) -> bool:
 
 
 def with_category(raw: dict, category: models.Category, kind) -> dict:
-    row = {**raw, "category": category.name}
+    row = {**raw, "category": i18n.category_name(category)}
     if category.type == TRANSFER:
         # The sign stays: an expense row is money out, an income row money in
         row["direction"] = "out" if kind == models.CategoryType.EXPENSE else "in"
@@ -110,7 +110,7 @@ def rule_out(rule: models.ImportRule) -> dict:
     return {
         "id": rule.id,
         "text": rule.text,
-        "category": rule.category.name,
+        "category": i18n.category_name(rule.category),
         "category_type": rule.category.type.value,
         "toml": toml_block(rule.text, rule.category),
     }

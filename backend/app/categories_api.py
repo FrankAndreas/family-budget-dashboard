@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import auth, database, messages, models, schemas
+from . import auth, database, i18n, messages, models, schemas
 
 router = APIRouter()
 
@@ -45,7 +45,11 @@ def describe(counts: dict[str, int]) -> str:
 
 
 def name_taken(db: Session, name: str, except_id: Optional[str] = None) -> bool:
-    return any(c.name.casefold() == name.casefold() and c.id != except_id for c in db.query(models.Category) if c.name)
+    # A 🔒 category's name is taken in every language
+    taken = name.casefold()
+    return any(
+        taken in {n.casefold() for n in i18n.all_names(c) if n} and c.id != except_id for c in db.query(models.Category)
+    )
 
 
 def get_category(db: Session, category_id: str) -> models.Category:
@@ -61,7 +65,11 @@ def check_kind(kind: Optional[models.CategoryType]) -> None:
 
 
 @router.get("/categories", response_model=List[schemas.Category])
-def list_categories(db: Session = Depends(database.get_db)):
+def list_categories(
+    db: Session = Depends(database.get_db),
+    # Not required, but a logged-in person gets the 🔒 names in their own language
+    _user: Optional[models.User] = Depends(auth.get_optional_user),
+):
     return db.query(models.Category).all()
 
 

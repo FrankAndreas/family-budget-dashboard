@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from . import auth, database, models, privacy
+from . import auth, database, i18n, models, privacy
 
 router = APIRouter()
 
@@ -102,7 +102,7 @@ def summary(db: Session, owner: models.User, period: str, day: date) -> dict:
         if start is None or local >= start:
             totals[category.type] += amount
             if category.type == EXPENSE:
-                by_category.setdefault(category.id, [category.name, 0.0])[1] += amount
+                by_category.setdefault(category.id, [i18n.category_name(category), 0.0])[1] += amount
                 if transaction.member_id:
                     by_child[transaction.member_id] += amount
         if local.strftime("%Y-%m") in months:

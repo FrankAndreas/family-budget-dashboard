@@ -6,7 +6,7 @@ from typing import Optional
 from jose import JWTError, jwt
 import bcrypt
 from fastapi.security import OAuth2PasswordBearer
-from fastapi import Depends, status
+from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from . import schemas, database, models, i18n, messages
 
@@ -24,6 +24,7 @@ LOCK_MINUTES = 15
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
+optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
 
 
 # PINs are hashed with bcrypt directly (passlib is unmaintained and breaks with bcrypt 5).
@@ -60,7 +61,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     return encoded_jwt
 
 
-async def get_current_user_from_token(token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)):
+async def get_current_user_from_token(
+    token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)
+) -> models.User:
     # Built before the token is checked, so in the browser's language (right for an expired login)
     credentials_exception = messages.api_error(
         status.HTTP_401_UNAUTHORIZED, "not_logged_in", headers={"WWW-Authenticate": "Bearer"}
@@ -83,3 +86,15 @@ async def get_current_user_from_token(token: str = Depends(oauth2_scheme), db: S
     # From here on, the request speaks the person's language
     i18n.set_current(i18n.user_language(user))
     return user
+
+
+async def get_optional_user(
+    token: Optional[str] = Depends(optional_oauth2_scheme), db: Session = Depends(database.get_db)
+) -> Optional[models.User]:
+    """The logged-in person if the request has a valid login, else None (for endpoints open to everyone)."""
+    if not token:
+        return None
+    try:
+        return await get_current_user_from_token(token, db)
+    except HTTPException:
+        return None

@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from . import auth, crud, database, import_rules, models, privacy, schemas, messages
+from . import auth, crud, database, i18n, import_rules, models, privacy, schemas, messages
 from .api import check_asset, check_member_tag, check_shared, is_dependent
 from .common_api import visible_owner
 from .seed import SETTLE_UP
@@ -52,6 +52,11 @@ TEMPLATE = (
 def key(name: str) -> str:
     """Names match ignoring upper/lower case and surrounding spaces."""
     return name.strip().casefold()
+
+
+def categories_by_name(db: Session) -> dict[str, models.Category]:
+    """Categories by key(name); the 🔒 ones under their stored name and their name in every language."""
+    return {key(name): c for c in db.query(models.Category) for name in i18n.all_names(c)}
 
 
 def text_value(value) -> str:
@@ -129,7 +134,7 @@ class Lookups:
         self.user_id = user.id
         self.writable = [a for a in accounts if privacy.can_write(levels.get(a.user_id))]
         self.view_only = [a for a in accounts if levels.get(a.user_id) == "VIEW"]
-        self.categories = {key(c.name): c for c in db.query(models.Category)}
+        self.categories = categories_by_name(db)
         self.children = {key(u.username): u for u in users if is_dependent(u) and levels.get(u.id)}
         is_parent = user.role == models.UserRole.PARENT
         self.splits = {key(s.name): s for s in db.query(models.Split)} if is_parent else {}
@@ -203,7 +208,10 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
         errors.append(messages.text("category_required"))
     elif not category:
         errors.append(messages.text("unknown_category", name=row["category"]))
-    elif category.system_key == SETTLE_UP:
+    else:
+        # The name of the person's language, so the preview matches the category list
+        row["category"] = out["category"] = i18n.category_name(category)
+    if category is not None and category.system_key == SETTLE_UP:
         errors.append(messages.text("settle_up_not_importable"))
         category = None
 
@@ -356,10 +364,11 @@ def run_import(
             transaction, category, split_shares = row["_create"]
             crud.create_transaction(db, transaction, category, split_shares=split_shares, commit=False)
         # Remembered rules are saved with the bookings, so a failed import saves none
+        categories = categories_by_name(db)
         for row in rows:
             text = changed.get(row["line"], {}).get("remember")
             if text:
-                category = db.query(models.Category).filter(models.Category.name == row["category"]).one()
+                category = categories[key(row["category"])]
                 import_rules.remember(db, text, category)
         db.commit()
     except Exception:
@@ -374,7 +383,8 @@ def import_schema(
 ):
     """A JSON Schema of the import file for this user, listing the names that are valid for them."""
     lookups = Lookups(db, current_user)
-    importable = [c for c in lookups.categories.values() if c.system_key != SETTLE_UP]
+    # Each category once (lookups know the 🔒 ones under several names); the schema uses the stored names
+    importable = [c for c in {c.id: c for c in lookups.categories.values()}.values() if c.system_key != SETTLE_UP]
 
     def unique(names) -> list[str]:
         return sorted(set(names), key=str.casefold)
