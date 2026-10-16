@@ -6,13 +6,15 @@ Date: 2026-10-16. Status: draft, for review. Issues #41 and #34.
 
 - **#41:** every amount is stored as exact integer cents instead of a floating-point number; the unused
   `accounts.balance` column (balances are calculated since #39) is dropped.
-- **#34:** the app shows money as Swiss francs, "CHF 1’234.50", instead of "$1234.50".
+- **#34:** the app shows money as Swiss francs, "CHF 1'234.50", instead of "$1234.50".
 
 Nothing else changes for the user, the API, the import and export files or the converters: they keep using francs
 with decimals (e.g. `84.3`).
 
-Decided with the user: the API stays in francs (a column type converts at the database boundary); the format is the
-Swiss one from `Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' })`.
+Decided with the user: the API stays in francs (a column type converts at the database boundary); amounts are shown
+in the Swiss format "CHF 1'234.50". (`Intl.NumberFormat('de-CH')` was the plan, but its output depends on the
+browser's locale data: the separator is `'` or `’`, and negatives come out as "CHF-22.10". A small formatter of our
+own gives the same text everywhere.)
 
 ## 1. Storage in cents
 
@@ -43,8 +45,9 @@ Swiss one from `Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' 
 
 ## 3. Display in CHF
 
-- `frontend/src/finance.ts`: `money(value)` uses `Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' })`
-  ("CHF 1’234.50", "CHF -22.10").
+- `frontend/src/finance.ts`: `money(value)` rounds to cents and writes `CHF`, a space, a minus for negative amounts,
+  the francs grouped by thousands with `'`, a point and two decimals: "CHF 1'234.50", "CHF -22.10", "CHF 0.00"
+  (never "-0.00").
 - Every amount shown uses `money()`: the places that build `$…` or call `toFixed(2)` for money directly (Dashboard,
   Analytics, Budgets, Common, Investments, Monthly costs, Yearly bills, Month check, Wishes) are switched. Chart axes
   keep plain numbers; chart tooltips use `money()`.
@@ -60,7 +63,7 @@ Swiss one from `Intl.NumberFormat('de-CH', { style: 'currency', currency: 'CHF' 
     filled; `compare_metadata` against the models is empty at head.
   - The full suite passes unchanged (the API is unchanged).
 - **Browser tests:** expectations change from `$45.50` to `CHF 45.50` (with the Swiss separator where amounts reach
-  thousands: `CHF 3’000.00`); all pass.
+  thousands: `CHF 3'000.00`); all pass.
 
 ## Out of scope
 
