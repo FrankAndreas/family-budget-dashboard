@@ -1,6 +1,20 @@
 import uuid
 import enum
-from sqlalchemy import Column, String, Boolean, Float, ForeignKey, DateTime, Date, Enum, Integer, JSON, func, select
+from sqlalchemy import (
+    Column,
+    String,
+    Boolean,
+    Float,
+    ForeignKey,
+    DateTime,
+    Date,
+    Enum,
+    Index,
+    Integer,
+    JSON,
+    func,
+    select,
+)
 from sqlalchemy.orm import column_property, relationship
 from .database import Base
 from datetime import datetime
@@ -79,6 +93,10 @@ class Category(Base):
 
 class Transaction(Base):
     __tablename__ = "transactions"
+    __table_args__ = (
+        Index("ix_transactions_account_date", "account_id", "date"),
+        Index("ix_transactions_reference", "reference"),
+    )
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     account_id = Column(String, ForeignKey("accounts.id"))

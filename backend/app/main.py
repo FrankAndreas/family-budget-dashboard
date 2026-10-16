@@ -4,12 +4,11 @@ import os
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
-from . import models, database, api, common_api, export_api, import_api, month_check, wishes_api, import_rules
+from . import database, database_setup, api, common_api, export_api, import_api, month_check, wishes_api, import_rules
 from .seed import seed_admin, seed_categories
-from .migrate import add_missing_columns
 
-models.Base.metadata.create_all(bind=database.engine)
-add_missing_columns(database.engine)
+# Create or upgrade the schema (Alembic migrations in app/migrations)
+database_setup.setup(database.engine)
 
 logger = logging.getLogger(__name__)
 
