@@ -7,6 +7,7 @@ import DataManager from '../../components/DataManager';
 import FamilyManager from '../../components/FamilyManager';
 import CategoryManager from '../../components/CategoryManager';
 import ShareSettings from '../../components/ShareSettings';
+import Logins from '../../components/Logins';
 import CommonBudget from '../../components/CommonBudget';
 import Investments from '../../components/Investments';
 import YearlyBills from '../../components/YearlyBills';
@@ -190,6 +191,7 @@ export default function Dashboard() {
                     {user?.role === 'PARENT' && <FamilyManager />}
                     {user?.role === 'PARENT' && <CategoryManager />}
                     <ShareSettings />
+                    <Logins />
                     <DataManager onDataChanged={refresh} />
                 </div>
             )}

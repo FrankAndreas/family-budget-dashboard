@@ -72,11 +72,13 @@ async def get_current_user_from_token(token: str = Depends(oauth2_scheme), db: S
         user_id: str = payload.get("sub")
         if user_id is None:
             raise credentials_exception
+        # Tokens issued before session versions existed have none: version 0
+        version = payload.get("ver", 0)
         token_data = schemas.TokenData(user_id=user_id)
     except JWTError:
         raise credentials_exception
 
     user = db.query(models.User).filter(models.User.id == token_data.user_id).first()
-    if user is None or not user.is_active:
+    if user is None or not user.is_active or version != (user.token_version or 0):
         raise credentials_exception
     return user

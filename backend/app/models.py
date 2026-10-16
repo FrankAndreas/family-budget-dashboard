@@ -67,6 +67,8 @@ class User(Base):
     # Wrong PINs in a row, and until when logins are refused after too many (see auth.MAX_WRONG_PINS)
     failed_logins: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Part of every login token; raising it ends all of the user's logins ("log out everywhere", new PIN)
+    token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
 
     accounts: Mapped[list["Account"]] = relationship("Account", back_populates="user")
     budgets: Mapped[list["Budget"]] = relationship("Budget", back_populates="user")

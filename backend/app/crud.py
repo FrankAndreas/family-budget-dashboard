@@ -45,6 +45,9 @@ def update_user(db: Session, user_id: str, user_update: schemas.UserUpdate):
         update_data["pin_hash"] = auth.get_pin_hash(update_data.pop("pin"))
         # A new PIN (e.g. set by a parent for a locked-out child) ends a lock after wrong PINs
         update_data.update(failed_logins=0, locked_until=None)
+    # A new PIN or deactivation ends all of the user's logins
+    if "pin_hash" in update_data or update_data.get("is_active") is False:
+        update_data["token_version"] = (db_user.token_version or 0) + 1
 
     for key, value in update_data.items():
         setattr(db_user, key, value)
