@@ -185,3 +185,27 @@ class PlannedCost(Base):
     owner_id = Column(String, ForeignKey("users.id"), nullable=True)
     split_id = Column(String, ForeignKey("splits.id"), nullable=True)
     notes = Column(String, nullable=True)
+
+
+class Wish(Base):
+    """Something to buy: in its owner's list (ordered by position) and, if planned together, the family plan."""
+
+    __tablename__ = "wishes"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = Column(String)
+    estimate = Column(Float, nullable=True)
+    notes = Column(String, nullable=True)
+    # Exactly one of: a family member (personal) or a split (common)
+    owner_id = Column(String, ForeignKey("users.id"), nullable=True)
+    split_id = Column(String, ForeignKey("splits.id"), nullable=True)
+    # The best offer found (typed in after using the search links)
+    best_price = Column(Float, nullable=True)
+    best_shop = Column(String, nullable=True)
+    best_url = Column(String, nullable=True)
+    best_checked = Column(Date, nullable=True)
+    # Order in the owner's list and in the family plan (smaller = higher); family_position None = not in the plan
+    position = Column(Integer, default=0)
+    family_position = Column(Integer, nullable=True)
+    bought_on = Column(Date, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
