@@ -42,7 +42,7 @@ export default function Transactions({
     const isTransfer = (transaction: Transaction) =>
         categories.find(c => c.id === transaction.category_id)?.type === 'TRANSFER';
     const isSettleUp = (transaction: Transaction) =>
-        categories.find(c => c.id === transaction.category_id)?.name === 'Settle up';
+        categories.find(c => c.id === transaction.category_id)?.system_key === 'SETTLE_UP';
     const memberName = (memberId?: string | null) => children.find(c => c.id === memberId)?.username;
     const assetName = (id?: string | null) => assets.find(a => a.id === id)?.name;
     const canTagChild = isParentAccount && children.length > 0;

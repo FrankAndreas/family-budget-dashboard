@@ -26,6 +26,8 @@ export interface Category {
     name: string;
     type: string;
     icon?: string;
+    // Set for the categories the app itself uses (TRANSFER, SETTLE_UP, ...): their name can't change
+    system_key?: string | null;
 }
 
 export const ACCOUNT_TYPES = [
