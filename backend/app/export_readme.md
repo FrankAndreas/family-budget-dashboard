@@ -26,6 +26,7 @@ other family members share with them, and (for parents) the common budget, inves
 | `splits.csv` | parent and split | a named ratio for dividing common costs, e.g. "Equal" 50/50 |
 | `investments.csv` | investment | long-lived purchase; `age_years`, `replacement_due`, `monthly_set_aside` (price spread over the lifespan), `follow_up_costs` (linked expenses), `total_cost`, `cost_per_year` are calculated on the export day |
 | `planned_costs.csv` | planned cost | yearly bills (`frequency` `YEARLY`, `due_month` 1-12, `next_due`) and common monthly costs; `monthly` is the monthly equivalent; `owner` for a personal cost, `split` for a common one |
+| `wishes.csv` | wish | things to buy: `owner` or `split` (common), `estimate`, the best offer found, `price` (best price, else estimate), `position` in the owner's list, `family_position` in the parents' family plan (empty = not in it), `bought_on` |
 
 ### transactions.csv
 

@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 
 from . import auth, database, finance, models, privacy
 from .common_api import asset_out, planned_cost_out, shared_transactions, visible_owner
+from .wishes_api import visible_wishes, wish_out
 
 router = APIRouter()
 
@@ -209,6 +210,35 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
         "planned_cost_id,name,category_id,category,amount,frequency,due_month,next_due,monthly,"
         "owner_id,owner,split_id,split,notes".split(","),
         cost_rows,
+    )
+
+    wish_rows = []
+    for wish in sorted(visible_wishes(db, user), key=lambda w: (w.split_id or "", w.owner_id or "", w.position)):
+        out = wish_out(db, user, wish)
+        wish_rows.append(
+            [
+                wish.id,
+                wish.name,
+                wish.owner_id,
+                names.get(wish.owner_id) if wish.owner_id else None,
+                wish.split_id,
+                split_name(wish.split_id),
+                wish.estimate,
+                wish.best_price,
+                wish.best_shop,
+                wish.best_url,
+                wish.best_checked,
+                out["price"],
+                wish.position,
+                wish.family_position,
+                wish.bought_on,
+                wish.notes,
+            ]
+        )
+    files["wishes.csv"] = to_csv(
+        "wish_id,name,owner_id,owner,split_id,split,estimate,best_price,best_shop,best_url,best_checked,price,"
+        "position,family_position,bought_on,notes".split(","),
+        wish_rows,
     )
 
     files["README.md"] = README.read_text(encoding="utf-8").format(user=user.username, date=date.today().isoformat())

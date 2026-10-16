@@ -24,6 +24,8 @@ HEADERS = {
     "age_years,replacement_due,monthly_set_aside,follow_up_costs,total_cost,cost_per_year,notes",
     "planned_costs.csv": "planned_cost_id,name,category_id,category,amount,frequency,due_month,next_due,monthly,"
     "owner_id,owner,split_id,split,notes",
+    "wishes.csv": "wish_id,name,owner_id,owner,split_id,split,estimate,best_price,best_shop,best_url,best_checked,"
+    "price,position,family_position,bought_on,notes",
 }
 
 
@@ -181,3 +183,16 @@ def test_investments_and_planned_costs(client, family):
     )
     # Dad can't see mum's personal bill
     assert rows(export(client, family["dad"]), "planned_costs.csv") == []
+
+
+def test_wishes_follow_visibility(client):
+    mum = register(client, "mum")
+    dad = register(client, "dad")
+    client.post(
+        f"{BASE_URL}/wishes",
+        json={"name": "Bike", "owner_id": user_id(client, mum, "mum"), "estimate": 800},
+        headers=mum,
+    )
+    client.post(f"{BASE_URL}/wishes", json={"name": "Drill", "owner_id": user_id(client, dad, "dad")}, headers=dad)
+    wishes = rows(export(client, mum), "wishes.csv")
+    assert [(w["name"], w["price"]) for w in wishes] == [("Bike", "800.0")]
