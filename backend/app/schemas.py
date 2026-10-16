@@ -100,6 +100,8 @@ class CategoryCreate(CategoryBase):
 class Category(CategoryBase):
     id: str
     is_global: bool = True
+    # Fixed key of a category the app needs (TRANSFER, SETTLE_UP, ...); None for ordinary ones
+    system_key: Optional[str] = None
 
     class Config:
         from_attributes = True

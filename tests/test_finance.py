@@ -67,7 +67,7 @@ def test_seed_adds_missing_categories_to_existing_database():
     from app.seed import SETTLE_UP, seed_categories
 
     with database.SessionLocal() as db:
-        db.query(models.Category).filter(models.Category.name == SETTLE_UP).delete()
+        db.query(models.Category).filter(models.Category.system_key == SETTLE_UP).delete()
         db.commit()
         assert seed_categories(db) == 1
         assert seed_categories(db) == 0
