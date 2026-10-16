@@ -331,3 +331,40 @@ class ItemDecision(BaseModel):
 
 class MemberRemoval(BaseModel):
     items: list[ItemDecision] = []
+
+
+# Wish Schemas
+class WishIn(BaseModel):
+    name: Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+    estimate: Optional[float] = Field(default=None, ge=0)
+    notes: Optional[str] = Field(default=None, max_length=1000)
+    owner_id: Optional[str] = None
+    split_id: Optional[str] = None
+    best_price: Optional[float] = Field(default=None, ge=0)
+    best_shop: Optional[str] = Field(default=None, max_length=120)
+    best_url: Optional[str] = Field(default=None, max_length=1000, pattern=r"^https?://")
+    best_checked: Optional[date] = None
+
+
+class Wish(WishIn):
+    id: str
+    position: int
+    family_position: Optional[int]
+    bought_on: Optional[date]
+    # best_price, else estimate
+    price: Optional[float]
+    can_edit: bool
+    in_family_plan: bool
+
+
+class FamilyPlanRow(Wish):
+    running_total: float
+
+
+class WishMove(BaseModel):
+    list: Literal["own", "family"]
+    direction: Literal["up", "down"]
+
+
+class WishBought(BaseModel):
+    bought_on: Optional[date] = None

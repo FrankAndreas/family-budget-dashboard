@@ -10,6 +10,7 @@ import CommonBudget from '../../components/CommonBudget';
 import Investments from '../../components/Investments';
 import YearlyBills from '../../components/YearlyBills';
 import MonthCheck from '../../components/MonthCheck';
+import Wishes from '../../components/Wishes';
 import { useAssets, useSplits } from '../../finance';
 import { useFamily } from '../../useFamily';
 import { accessTo, canWrite, dependents } from '../../family';
@@ -244,6 +245,7 @@ export default function Dashboard() {
         { id: 'overview', label: '🏦 Accounts' },
         { id: 'budgets', label: '💰 Budgets' },
         ...(isParent ? [{ id: 'common', label: '🤝 Common' }, { id: 'investments', label: '📦 Investments' }, { id: 'bills', label: '🧾 Yearly bills' }] : []),
+        { id: 'wishes', label: '🎁 Wishes' },
         { id: 'analytics', label: '📈 Analytics' },
         { id: 'settings', label: '⚙️ Settings' }
     ];
@@ -624,6 +626,7 @@ export default function Dashboard() {
             {activeTab === 'common' && <CommonBudget />}
             {activeTab === 'investments' && <Investments />}
             {activeTab === 'bills' && <YearlyBills />}
+            {activeTab === 'wishes' && <Wishes />}
             {activeTab === 'analytics' && <Analytics />}
             {activeTab === 'settings' && (
                 <div className="space-y-6">
