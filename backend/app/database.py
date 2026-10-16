@@ -1,9 +1,19 @@
 import os
 from sqlalchemy import create_engine, event
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Engine, make_url
 from sqlalchemy.orm import sessionmaker, declarative_base
 
 SQLALCHEMY_DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./data/budget.db")
+
+
+def ensure_sqlite_folder(url: str) -> None:
+    """SQLite creates the database file but not its folder (e.g. backend/data in a fresh clone)."""
+    database = make_url(url).database if url.startswith("sqlite") else None
+    if database and database != ":memory:":
+        os.makedirs(os.path.dirname(os.path.abspath(database)), exist_ok=True)
+
+
+ensure_sqlite_folder(SQLALCHEMY_DATABASE_URL)
 
 # check_same_thread is needed for SQLite
 connect_args = {"check_same_thread": False} if SQLALCHEMY_DATABASE_URL.startswith("sqlite") else {}

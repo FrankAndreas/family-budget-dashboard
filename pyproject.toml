@@ -38,21 +38,6 @@ disable = "C0330, C0326"
 [tool.pylint.format]
 max-line-length = "120"
 
-[tool.pytest.ini_options]
-testpaths = ["tests"]
-python_files = "test_*.py"
-python_classes = "Test*"
-python_functions = "test_*"
-addopts = "-v --tb=short --strict-markers"
-markers = [
-    "auth: Authentication tests",
-    "accounts: Account management tests",
-    "transactions: Transaction tests",
-    "budgets: Budget tests",
-    "privacy: Privacy enforcement tests",
-    "categories: Category tests",
-]
-
 [tool.coverage.run]
 source = ["backend/app"]
 omit = ["*/tests/*", "*/venv/*"]

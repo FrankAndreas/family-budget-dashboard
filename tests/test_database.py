@@ -191,3 +191,10 @@ class TestCentsMigration:
                 "t3": 0.3,
             }
             assert conn.execute(text("SELECT balance FROM accounts")).scalar() == 62.5
+
+
+def test_sqlite_folder_is_created(tmp_path):
+    database.ensure_sqlite_folder(f"sqlite:///{tmp_path}/new/folder/budget.db")
+    assert (tmp_path / "new" / "folder").is_dir()
+    database.ensure_sqlite_folder("sqlite://")  # in memory: nothing to create
+    database.ensure_sqlite_folder("postgresql://host/db")  # not SQLite: nothing to do
