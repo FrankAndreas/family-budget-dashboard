@@ -1,7 +1,7 @@
 """Common budget, splits, settlements, planned costs (yearly bills) and assets (investments). Parents only."""
 
 from datetime import date, datetime
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
@@ -132,7 +132,7 @@ def common_expenses(_: models.User = Depends(require_parent), db: Session = Depe
             "description": t.description,
             "amount": abs(t.amount),
             "payer_id": payer,
-            "split_name": split_names.get(t.split_id),
+            "split_name": split_names.get(t.split_id or ""),
             "shares": finance.split_amount(abs(t.amount), t.split_shares or {}),
         }
         for t, payer in shared_transactions(db)
@@ -329,7 +329,7 @@ def delete_planned_cost(
 
 @router.get("/common/overview", response_model=schemas.Overview)
 def common_overview(_: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
-    items = []
+    items: list[dict[str, Any]] = []
     for cost in db.query(models.PlannedCost).filter(models.PlannedCost.split_id.isnot(None)):
         monthly = finance.monthly_equivalent(cost.amount, cost.frequency.value)
         shares = monthly_shares(db, monthly, None, cost.split_id)
@@ -365,7 +365,7 @@ def get_asset(db: Session, current_user: models.User, asset_id: str, write: bool
 
 
 def common_asset_items(db: Session) -> list[dict]:
-    items = []
+    items: list[dict[str, Any]] = []
     for asset in db.query(models.Asset).filter(models.Asset.split_id.isnot(None)):
         monthly = finance.cents(asset.price / (asset.lifespan_years * 12))
         shares = monthly_shares(db, monthly, None, asset.split_id)
@@ -441,15 +441,18 @@ def delete_asset(
 
 
 # Removing a family member: their investments and yearly bills need a new home first
-ITEM_MODELS = {"asset": models.Asset, "planned": models.PlannedCost}
-
-
 def owned_items(db: Session, user_id: str) -> list[dict]:
-    return [
-        {"kind": kind, "id": item.id, "name": item.name}
-        for kind, model in ITEM_MODELS.items()
-        for item in db.query(model).filter(model.owner_id == user_id)
+    assets = db.query(models.Asset).filter(models.Asset.owner_id == user_id)
+    costs = db.query(models.PlannedCost).filter(models.PlannedCost.owner_id == user_id)
+    return [{"kind": "asset", "id": a.id, "name": a.name} for a in assets] + [
+        {"kind": "planned", "id": c.id, "name": c.name} for c in costs
     ]
+
+
+def find_item(db: Session, kind: str, item_id: str) -> models.Asset | models.PlannedCost:
+    if kind == "asset":
+        return db.query(models.Asset).filter(models.Asset.id == item_id).one()
+    return db.query(models.PlannedCost).filter(models.PlannedCost.id == item_id).one()
 
 
 @router.get("/users/{user_id}/items", response_model=List[schemas.OwnedItem])
@@ -479,9 +482,9 @@ def apply_item_decisions(db: Session, user_id: str, decisions: list[schemas.Item
         if not valid:
             raise HTTPException(status_code=400, detail=f"Can't move an item to {target}")
     for (kind, item_id), target in decided.items():
-        item = db.query(ITEM_MODELS[kind]).filter(ITEM_MODELS[kind].id == item_id).one()
+        item = find_item(db, kind, item_id)
         if target == "delete":
-            if kind == "asset":
+            if isinstance(item, models.Asset):
                 unlink_and_delete_asset(db, item)
             else:
                 db.delete(item)

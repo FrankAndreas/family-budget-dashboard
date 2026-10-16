@@ -1,7 +1,8 @@
 import uuid
 import enum
+from typing import Any, Optional
+
 from sqlalchemy import (
-    Column,
     String,
     Boolean,
     ForeignKey,
@@ -15,10 +16,10 @@ from sqlalchemy import (
     select,
     type_coerce,
 )
-from sqlalchemy.orm import column_property, relationship
+from sqlalchemy.orm import Mapped, column_property, mapped_column, relationship
 from .database import Base
 from .money import Money
-from datetime import datetime
+from datetime import date, datetime
 
 
 class UserRole(str, enum.Enum):
@@ -51,47 +52,36 @@ class ShareLevel(str, enum.Enum):
 class User(Base):
     __tablename__ = "users"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    username = Column(String, unique=True, index=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    username: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=True)
     # None for children added by a parent without their own login
-    pin_hash = Column(String, nullable=True)
-    role = Column(Enum(UserRole), default=UserRole.PARENT)
+    pin_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.PARENT, nullable=True)
     # Children only: True = own allowance (Jugendlohn) with separate accounts and budgets,
     # False = dependent child whose costs are household expenses tagged with them
-    has_allowance = Column(Boolean, default=True)
+    has_allowance: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
     # If privacy_enabled is True, other parents cannot see this user's details (mainly for children feature)
-    privacy_enabled = Column(Boolean, default=False)
-    is_active = Column(Boolean, default=True)
-    settings = Column(JSON, default={})
+    privacy_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
+    settings: Mapped[Any] = mapped_column(JSON, default={}, nullable=True)
     # Wrong PINs in a row, and until when logins are refused after too many (see auth.MAX_WRONG_PINS)
-    failed_logins = Column(Integer, default=0)
-    locked_until = Column(DateTime, nullable=True)
+    failed_logins: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
-    accounts = relationship("Account", back_populates="user")
-    budgets = relationship("Budget", back_populates="user")
-
-
-class Account(Base):
-    __tablename__ = "accounts"
-
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, ForeignKey("users.id"))
-    name = Column(String)
-    type = Column(Enum(AccountType), default=AccountType.BANK)
-    user = relationship("User", back_populates="accounts")
-    transactions = relationship("Transaction", back_populates="account")
+    accounts: Mapped[list["Account"]] = relationship("Account", back_populates="user")
+    budgets: Mapped[list["Budget"]] = relationship("Budget", back_populates="user")
 
 
 class Category(Base):
     __tablename__ = "categories"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String, unique=True)
-    type = Column(Enum(CategoryType))
-    icon = Column(String, nullable=True)
-    is_global = Column(Boolean, default=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, unique=True, nullable=True)
+    type: Mapped[CategoryType] = mapped_column(Enum(CategoryType), nullable=True)
+    icon: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    is_global: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
     # Fixed key of a category the code needs (seed.TRANSFER, SETTLE_UP, ...); None for ordinary categories
-    system_key = Column(String, nullable=True, unique=True, index=True)
+    system_key: Mapped[Optional[str]] = mapped_column(String, nullable=True, unique=True, index=True)
 
 
 class Transaction(Base):
@@ -101,48 +91,57 @@ class Transaction(Base):
         Index("ix_transactions_reference", "reference"),
     )
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    account_id = Column(String, ForeignKey("accounts.id"))
-    category_id = Column(String, ForeignKey("categories.id"))
-    amount = Column(Money)
-    date = Column(DateTime, default=datetime.utcnow)
-    description = Column(String, nullable=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    account_id: Mapped[str] = mapped_column(String, ForeignKey("accounts.id"), nullable=True)
+    category_id: Mapped[str] = mapped_column(String, ForeignKey("categories.id"), nullable=True)
+    amount: Mapped[float] = mapped_column(Money, nullable=True)
+    date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
+    description: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # Optional tag: the dependent child this household expense was for
-    member_id = Column(String, ForeignKey("users.id"), nullable=True)
+    member_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     # Shared with the other parent(s): the split used, and its percents at booking time
     # (so editing the split later doesn't change past balances)
-    split_id = Column(String, ForeignKey("splits.id"), nullable=True)
-    split_shares = Column(JSON, nullable=True)
+    split_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("splits.id"), nullable=True)
+    split_shares: Mapped[Any] = mapped_column(JSON, nullable=True)
     # The investment this follow-up cost belongs to (repair, service, ...)
-    asset_id = Column(String, ForeignKey("assets.id"), nullable=True)
+    asset_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("assets.id"), nullable=True)
     # The importing tool's own ID for the source (receipt file, hash, ...); recognises repeated imports
-    reference = Column(String, nullable=True)
+    reference: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
-    account = relationship("Account", back_populates="transactions")
-    category = relationship("Category")
+    account: Mapped["Account"] = relationship("Account", back_populates="transactions")
+    category: Mapped["Category"] = relationship("Category")
 
 
-# An account's balance is the sum of its transactions, calculated on every read, so it can't drift
-Account.balance = column_property(
-    # Summed in cents (exact); the Money type turns the result back into francs
-    select(type_coerce(func.coalesce(func.sum(Transaction.amount), 0), Money))
-    .where(Transaction.account_id == Account.id)
-    .correlate_except(Transaction)
-    .scalar_subquery()
-)
+class Account(Base):
+    __tablename__ = "accounts"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    name: Mapped[str] = mapped_column(String, nullable=True)
+    type: Mapped[AccountType] = mapped_column(Enum(AccountType), default=AccountType.BANK, nullable=True)
+    user: Mapped["User"] = relationship("User", back_populates="accounts")
+    transactions: Mapped[list["Transaction"]] = relationship("Transaction", back_populates="account")
+    # The sum of its transactions, calculated on every read so it can't drift; summed in cents (exact), and the Money
+    # type turns the result back into francs
+    balance: Mapped[float] = column_property(
+        select(type_coerce(func.coalesce(func.sum(Transaction.amount), 0), Money))
+        .where(Transaction.account_id == id)
+        .correlate_except(Transaction)
+        .scalar_subquery()
+    )
 
 
 class Budget(Base):
     __tablename__ = "budgets"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, ForeignKey("users.id"))
-    category_id = Column(String, ForeignKey("categories.id"))
-    limit = Column(Money)
-    period = Column(String, default="MONTHLY")
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    category_id: Mapped[str] = mapped_column(String, ForeignKey("categories.id"), nullable=True)
+    limit: Mapped[float] = mapped_column(Money, nullable=True)
+    period: Mapped[str] = mapped_column(String, default="MONTHLY", nullable=True)
 
-    user = relationship("User", back_populates="budgets")
-    category = relationship("Category")
+    user: Mapped["User"] = relationship("User", back_populates="budgets")
+    category: Mapped["Category"] = relationship("Category")
 
 
 class Share(Base):
@@ -150,10 +149,10 @@ class Share(Base):
 
     __tablename__ = "shares"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    owner_id = Column(String, ForeignKey("users.id"))
-    grantee_id = Column(String, ForeignKey("users.id"))
-    level = Column(Enum(ShareLevel))
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    owner_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    grantee_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    level: Mapped[ShareLevel] = mapped_column(Enum(ShareLevel), nullable=True)
 
 
 class Split(Base):
@@ -161,10 +160,10 @@ class Split(Base):
 
     __tablename__ = "splits"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String, unique=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, unique=True, nullable=True)
     # {parent user id: whole percent}; sums to 100
-    shares = Column(JSON, default={})
+    shares: Mapped[Any] = mapped_column(JSON, default={}, nullable=True)
 
 
 class Asset(Base):
@@ -172,15 +171,15 @@ class Asset(Base):
 
     __tablename__ = "assets"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String)
-    price = Column(Money)
-    purchase_date = Column(Date)
-    lifespan_years = Column(Integer)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, nullable=True)
+    price: Mapped[float] = mapped_column(Money, nullable=True)
+    purchase_date: Mapped[date] = mapped_column(Date, nullable=True)
+    lifespan_years: Mapped[int] = mapped_column(Integer, nullable=True)
     # Exactly one of: a family member (personal) or a split (common)
-    owner_id = Column(String, ForeignKey("users.id"), nullable=True)
-    split_id = Column(String, ForeignKey("splits.id"), nullable=True)
-    notes = Column(String, nullable=True)
+    owner_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    split_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("splits.id"), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
 class Settlement(Base):
@@ -188,13 +187,13 @@ class Settlement(Base):
 
     __tablename__ = "settlements"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    from_user_id = Column(String, ForeignKey("users.id"))
-    to_user_id = Column(String, ForeignKey("users.id"))
-    amount = Column(Money)
-    date = Column(DateTime, default=datetime.utcnow)
-    from_transaction_id = Column(String, ForeignKey("transactions.id"))
-    to_transaction_id = Column(String, ForeignKey("transactions.id"))
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    from_user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    to_user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    amount: Mapped[float] = mapped_column(Money, nullable=True)
+    date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
+    from_transaction_id: Mapped[str] = mapped_column(String, ForeignKey("transactions.id"), nullable=True)
+    to_transaction_id: Mapped[str] = mapped_column(String, ForeignKey("transactions.id"), nullable=True)
 
 
 class Frequency(str, enum.Enum):
@@ -207,16 +206,16 @@ class PlannedCost(Base):
 
     __tablename__ = "planned_costs"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String)
-    category_id = Column(String, ForeignKey("categories.id"))
-    amount = Column(Money)
-    frequency = Column(Enum(Frequency))
-    due_month = Column(Integer, nullable=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, nullable=True)
+    category_id: Mapped[str] = mapped_column(String, ForeignKey("categories.id"), nullable=True)
+    amount: Mapped[float] = mapped_column(Money, nullable=True)
+    frequency: Mapped[Frequency] = mapped_column(Enum(Frequency), nullable=True)
+    due_month: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # Exactly one of: a family member (personal) or a split (common)
-    owner_id = Column(String, ForeignKey("users.id"), nullable=True)
-    split_id = Column(String, ForeignKey("splits.id"), nullable=True)
-    notes = Column(String, nullable=True)
+    owner_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    split_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("splits.id"), nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(String, nullable=True)
 
 
 class Wish(Base):
@@ -224,23 +223,23 @@ class Wish(Base):
 
     __tablename__ = "wishes"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = Column(String)
-    estimate = Column(Money, nullable=True)
-    notes = Column(String, nullable=True)
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, nullable=True)
+    estimate: Mapped[Optional[float]] = mapped_column(Money, nullable=True)
+    notes: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # Exactly one of: a family member (personal) or a split (common)
-    owner_id = Column(String, ForeignKey("users.id"), nullable=True)
-    split_id = Column(String, ForeignKey("splits.id"), nullable=True)
+    owner_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
+    split_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("splits.id"), nullable=True)
     # The best offer found (typed in after using the search links)
-    best_price = Column(Money, nullable=True)
-    best_shop = Column(String, nullable=True)
-    best_url = Column(String, nullable=True)
-    best_checked = Column(Date, nullable=True)
+    best_price: Mapped[Optional[float]] = mapped_column(Money, nullable=True)
+    best_shop: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    best_url: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    best_checked: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     # Order in the owner's list and in the family plan (smaller = higher); family_position None = not in the plan
-    position = Column(Integer, default=0)
-    family_position = Column(Integer, nullable=True)
-    bought_on = Column(Date, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    position: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    family_position: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    bought_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
 
 
 class ImportRule(Base):
@@ -248,10 +247,10 @@ class ImportRule(Base):
 
     __tablename__ = "import_rules"
 
-    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     # Matched ignoring case, anywhere in the description
-    text = Column(String)
-    category_id = Column(String, ForeignKey("categories.id"))
-    created_at = Column(DateTime, default=datetime.utcnow)
+    text: Mapped[str] = mapped_column(String, nullable=True)
+    category_id: Mapped[str] = mapped_column(String, ForeignKey("categories.id"), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
 
-    category = relationship("Category")
+    category: Mapped["Category"] = relationship("Category")

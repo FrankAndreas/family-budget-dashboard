@@ -1,3 +1,5 @@
+from typing import Optional
+
 from sqlalchemy.orm import Session
 from . import models, schemas, auth
 from datetime import datetime, timezone
@@ -120,7 +122,7 @@ def create_account(db: Session, account: schemas.AccountCreate, user_id: str):
     return db_account
 
 
-def get_account(db: Session, account_id: str):
+def get_account(db: Session, account_id: str) -> Optional[models.Account]:
     return db.query(models.Account).filter(models.Account.id == account_id).first()
 
 

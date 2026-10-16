@@ -28,7 +28,7 @@ def check_member_tag(db: Session, member_id: Optional[str], account_id: str) -> 
     if not member or not is_dependent(member):
         raise HTTPException(status_code=400, detail="Expenses can only be tagged with a child without own allowance")
     account = crud.get_account(db, account_id)
-    owner = db.query(crud.models.User).filter(crud.models.User.id == account.user_id).first()
+    owner = account.user if account else None
     if not owner or owner.role != "PARENT":
         raise HTTPException(status_code=400, detail="Only household expenses can be tagged with a child")
 
@@ -39,7 +39,8 @@ def check_shared(db: Session, split_id: Optional[str], account_id: str, category
         return None
     if category.type != models.CategoryType.EXPENSE:
         raise HTTPException(status_code=400, detail="Only expenses can be shared")
-    owner = db.query(models.User).filter(models.User.id == crud.get_account(db, account_id).user_id).first()
+    account = crud.get_account(db, account_id)
+    owner = account.user if account else None
     if not owner or owner.role != "PARENT":
         raise HTTPException(status_code=400, detail="Only a parent's expenses can be shared")
     split = db.query(models.Split).filter(models.Split.id == split_id).first()
@@ -116,7 +117,7 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
 
 @router.get("/users", response_model=List[schemas.User])
 def read_users(
-    current_user: schemas.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
 ):
     return [user for user in db.query(crud.models.User).all() if privacy.can_list_user(current_user, user)]
 
@@ -124,7 +125,7 @@ def read_users(
 @router.post("/members", response_model=schemas.User)
 def create_member(
     member: schemas.MemberCreate,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     # A parent adds a younger child who has no own money and no login
@@ -136,7 +137,7 @@ def create_member(
 
 
 @router.get("/me", response_model=schemas.User)
-def read_users_me(current_user: schemas.User = Depends(auth.get_current_user_from_token)):
+def read_users_me(current_user: models.User = Depends(auth.get_current_user_from_token)):
     return current_user
 
 
@@ -144,7 +145,7 @@ def read_users_me(current_user: schemas.User = Depends(auth.get_current_user_fro
 def update_user(
     user_id: str,
     user_update: schemas.UserUpdate,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     # Only PARENT can update other users (or themselves)
@@ -183,7 +184,7 @@ def update_user(
 def delete_user(
     user_id: str,
     removal: Optional[schemas.MemberRemoval] = Body(default=None),
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     if current_user.role != "PARENT":
@@ -210,7 +211,7 @@ def delete_user(
 @router.patch("/me/privacy")
 def update_privacy(
     privacy_update: dict,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     # Only children can update their own privacy settings
@@ -219,19 +220,16 @@ def update_privacy(
             status_code=status.HTTP_403_FORBIDDEN, detail="Only child accounts can modify privacy settings"
         )
 
-    db_user = db.query(crud.models.User).filter(crud.models.User.id == current_user.id).first()
-    if db_user:
-        db_user.privacy_enabled = privacy_update.get("privacy_enabled", db_user.privacy_enabled)
-        db.commit()
-        db.refresh(db_user)
-
-    return {"message": "Privacy settings updated", "privacy_enabled": db_user.privacy_enabled}
+    current_user.privacy_enabled = privacy_update.get("privacy_enabled", current_user.privacy_enabled)
+    db.commit()
+    db.refresh(current_user)
+    return {"message": "Privacy settings updated", "privacy_enabled": current_user.privacy_enabled}
 
 
 # Account Routes
 @router.get("/accounts", response_model=List[schemas.Account])
 def get_accounts(
-    current_user: schemas.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
 ):
     # Return all accounts the user has access to (own, the other parents', children without privacy)
     return privacy.get_accessible_accounts(db, current_user)
@@ -240,7 +238,7 @@ def get_accounts(
 @router.post("/accounts", response_model=schemas.Account)
 def create_account(
     account: schemas.AccountCreate,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     if is_dependent(current_user):
@@ -262,7 +260,7 @@ def get_own_account(db: Session, current_user, account_id: str):
 def update_account(
     account_id: str,
     account_update: schemas.AccountUpdate,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     return crud.update_account(db, get_own_account(db, current_user, account_id), account_update)
@@ -271,7 +269,7 @@ def update_account(
 @router.delete("/accounts/{account_id}", response_model=schemas.Account)
 def delete_account(
     account_id: str,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     # Deleting an account also deletes all its transactions
@@ -284,7 +282,7 @@ def get_transactions(
     account_id: str,
     skip: int = 0,
     limit: int = 100,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     # Check if user has access to this account (with privacy enforcement)
@@ -295,7 +293,7 @@ def get_transactions(
 @router.post("/transactions", response_model=schemas.Transaction)
 def create_transaction(
     transaction: schemas.TransactionCreate,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     # Check if user has access to this account (with privacy enforcement)
@@ -315,7 +313,7 @@ def create_transaction(
 def update_transaction(
     transaction_id: str,
     transaction_update: schemas.TransactionUpdate,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     db_transaction = crud.get_transaction(db, transaction_id)
@@ -361,7 +359,7 @@ def update_transfer(db: Session, db_transaction, update: schemas.TransactionUpda
 @router.delete("/transactions/{transaction_id}", response_model=schemas.Transaction)
 def delete_transaction(
     transaction_id: str,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     db_transaction = crud.get_transaction(db, transaction_id)
@@ -378,7 +376,7 @@ def delete_transaction(
 @router.get("/budgets", response_model=List[schemas.Budget])
 def get_budgets(
     user_id: Optional[str] = None,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     # Without user_id: the caller's own budgets. With user_id: someone else's they may view.
@@ -389,7 +387,7 @@ def get_budgets(
 @router.post("/budgets", response_model=schemas.Budget)
 def create_budget(
     budget: schemas.BudgetCreate,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     owner = privacy.check_user_access(db, current_user, budget.user_id, write=True) if budget.user_id else current_user
@@ -413,7 +411,7 @@ def get_manageable_budget(db: Session, current_user, budget_id: str):
 def update_budget(
     budget_id: str,
     budget_update: schemas.BudgetUpdate,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     return reports.budget_out(
@@ -424,7 +422,7 @@ def update_budget(
 @router.delete("/budgets/{budget_id}", response_model=schemas.Budget)
 def delete_budget(
     budget_id: str,
-    current_user: schemas.User = Depends(auth.get_current_user_from_token),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     return crud.delete_budget(db, get_manageable_budget(db, current_user, budget_id))

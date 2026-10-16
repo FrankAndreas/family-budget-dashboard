@@ -98,15 +98,17 @@ class Schema:
     def __init__(self, schema: dict):
         props = schema.get("properties", {}).get("transactions", {}).get("items", {}).get("properties", {})
 
-        def names(field):
-            return {key(name): name for name in props.get(field, {}).get("enum", [])}
+        def names(field: str) -> dict[str, str]:
+            return {key(name): str(name) for name in props.get(field, {}).get("enum", [])}
 
         self.accounts = names("account")
         self.owners = names("owner")
         self.children = names("for")
         self.splits = names("shared")
         self.items = names("item")
-        self.categories = {key(name): (name, kind) for name, kind in schema.get("x-category-types", {}).items()}
+        self.categories: dict[str, tuple[str, str]] = {
+            key(name): (str(name), str(kind)) for name, kind in schema.get("x-category-types", {}).items()
+        }
         if not self.categories:
             raise Problems(["The schema has no category types; download it again from the app (Data Management)"])
         # Rules learnt in the app's import preview: (text to find, category, its type)
