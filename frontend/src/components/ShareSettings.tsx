@@ -1,18 +1,17 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import { useFamily } from '../useFamily';
 
 type Level = 'NONE' | 'VIEW' | 'EDIT';
 
-const LEVELS: Record<Level, string> = {
-    NONE: "Don't share",
-    VIEW: 'Can view',
-    EDIT: 'Can view and manage'
-};
+// Labels: sharing.levels.<level> in the locale files
+const LEVELS: Level[] = ['NONE', 'VIEW', 'EDIT'];
 
 // Decide which parent may see (or manage) your accounts, transactions and budgets
 export default function ShareSettings() {
+    const { t } = useTranslation();
     const { user } = useAuth();
     const { users, shares, reload } = useFamily();
     const [error, setError] = useState('');
@@ -29,7 +28,7 @@ export default function ShareSettings() {
             setError('');
             reload();
         } catch (err) {
-            setError(errorMessage(err, 'Failed to save sharing'));
+            setError(errorMessage(err, t('sharing.saveFailed')));
         }
     };
 
@@ -37,24 +36,22 @@ export default function ShareSettings() {
 
     return (
         <div className="glass-card p-6">
-            <h2 className="text-2xl font-bold mb-2">Sharing</h2>
+            <h2 className="text-2xl font-bold mb-2">{t('sharing.title')}</h2>
             <p className="text-slate-400 mb-4 text-sm">
-                {isChild
-                    ? 'Choose what each parent may do with your accounts, transactions and budgets. Privacy mode hides everything from all parents.'
-                    : 'Your accounts, transactions and budgets are private. Costs you share go through the Common tab, which both parents always see.'}
+                {isChild ? t('sharing.introChild') : t('sharing.introParent')}
             </p>
             {error && <p className="mb-3 text-red-300">{error}</p>}
             <div className="space-y-3">
                 {parents.map(parent => (
                     <label key={parent.id} className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-800/30 rounded-lg">
-                        <span>Share my finances with <strong>{parent.username}</strong></span>
+                        <span>{t('sharing.shareWithBefore')}<strong>{parent.username}</strong></span>
                         <select
                             value={levelFor(parent.id)}
                             onChange={(e) => setLevel(parent.id, e.target.value as Level)}
                             className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
                         >
-                            {(Object.keys(LEVELS) as Level[]).map(level => (
-                                <option key={level} value={level}>{LEVELS[level]}</option>
+                            {LEVELS.map(level => (
+                                <option key={level} value={level}>{t(`sharing.levels.${level}`)}</option>
                             ))}
                         </select>
                     </label>

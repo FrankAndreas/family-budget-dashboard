@@ -5,10 +5,10 @@ import json
 import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from . import auth, database, models
+from . import auth, database, i18n, models, messages
 from .seed import OTHER_INCOME, SETTLE_UP, UNSORTED
 
 router = APIRouter()
@@ -25,7 +25,7 @@ def key(name: str) -> str:
 
 def require_parent(user: models.User) -> None:
     if user.role != models.UserRole.PARENT:
-        raise HTTPException(status_code=403, detail="Only parents can save import rules")
+        raise messages.api_error(403, "only_parents_import_rules")
 
 
 def parse_changes(text: str) -> dict[int, dict]:
@@ -38,7 +38,7 @@ def parse_changes(text: str) -> dict[int, dict]:
         if not all(isinstance(c, dict) and isinstance(c.get("category"), str) for c in changes.values()):
             raise ValueError
     except ValueError, AttributeError, TypeError:
-        raise HTTPException(status_code=400, detail="changes must be JSON")
+        raise messages.api_error(400, "changes_not_json")
     return changes
 
 
@@ -51,7 +51,7 @@ def fits(category: models.Category, kind) -> bool:
 
 
 def with_category(raw: dict, category: models.Category, kind) -> dict:
-    row = {**raw, "category": category.name}
+    row = {**raw, "category": i18n.category_name(category)}
     if category.type == TRANSFER:
         # The sign stays: an expense row is money out, an income row money in
         row["direction"] = "out" if kind == models.CategoryType.EXPENSE else "in"
@@ -110,7 +110,7 @@ def rule_out(rule: models.ImportRule) -> dict:
     return {
         "id": rule.id,
         "text": rule.text,
-        "category": rule.category.name,
+        "category": i18n.category_name(rule.category),
         "category_type": rule.category.type.value,
         "toml": toml_block(rule.text, rule.category),
     }
@@ -133,7 +133,7 @@ def delete_rule(
     require_parent(current_user)
     rule = db.query(models.ImportRule).filter(models.ImportRule.id == rule_id).first()
     if not rule:
-        raise HTTPException(status_code=404, detail="Rule not found")
+        raise messages.api_error(404, "rule_not_found")
     db.delete(rule)
     db.commit()
     return {"deleted": rule_id}

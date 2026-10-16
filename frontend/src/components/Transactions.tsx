@@ -1,6 +1,8 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { money, type Asset, type Split } from '../finance';
+import { formatDate } from '../format';
 import type { Account, Category, Transaction } from '../accounts';
 import type { FamilyUser } from '../family';
 
@@ -31,6 +33,7 @@ export default function Transactions({
     account, transactions, categories, canEdit, ownerName, isParentAccount, isParent, children, splits, assets,
     onChanged, onError
 }: Props) {
+    const { t } = useTranslation();
     const [showForm, setShowForm] = useState(false);
     const [form, setForm] = useState(emptyForm);
     // Set while the form is editing an existing transaction instead of adding one
@@ -91,35 +94,37 @@ export default function Transactions({
             onChanged();
         } catch (error) {
             console.error('Failed to save transaction', error);
-            onError(errorMessage(error, 'Failed to save transaction'));
+            onError(errorMessage(error, t('transactions.saveFailed')));
         }
     };
 
     const handleDelete = async (transaction: Transaction) => {
-        if (!confirm(`Delete "${transaction.description || 'No description'}" (${money(transaction.amount)})?`)) return;
+        if (!confirm(t('transactions.confirmDelete', {
+            description: transaction.description || t('transactions.noDescription'), amount: money(transaction.amount),
+        }))) return;
         try {
             await api.delete(`/api/v1/transactions/${transaction.id}`);
             onChanged();
         } catch (error) {
             console.error('Failed to delete transaction', error);
-            onError(errorMessage(error, 'Failed to delete transaction'));
+            onError(errorMessage(error, t('transactions.deleteFailed')));
         }
     };
 
     return (
         <div className="glass-card p-6">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">Transactions</h2>
+                <h2 className="text-xl font-bold">{t('transactions.title')}</h2>
                 {canEdit && (
                     <button onClick={() => showForm ? closeForm() : setShowForm(true)} className="btn-primary text-sm">
-                        + Add Transaction
+                        {t('transactions.add')}
                     </button>
                 )}
             </div>
 
             {!canEdit && (
                 <p className="text-sm text-slate-400 mb-3">
-                    Read only: {ownerName ?? 'the owner'} shared this account with you to view.
+                    {t('transactions.readOnly', { owner: ownerName ?? t('transactions.theOwner') })}
                 </p>
             )}
 
@@ -129,7 +134,7 @@ export default function Transactions({
                         type="number"
                         step="0.01"
                         min="0.01"
-                        placeholder="Amount (income or expense is set by the category)"
+                        placeholder={t('transactions.amountPlaceholder')}
                         value={form.amount}
                         onChange={(e) => setForm({ ...form, amount: e.target.value })}
                         className={field}
@@ -137,7 +142,7 @@ export default function Transactions({
                     />
                     <input
                         type="text"
-                        placeholder="Description"
+                        placeholder={t('transactions.descriptionPlaceholder')}
                         value={form.description}
                         onChange={(e) => setForm({ ...form, description: e.target.value })}
                         className={field}
@@ -154,11 +159,11 @@ export default function Transactions({
                         className={field}
                         required
                     >
-                        <option value="">Select Category</option>
-                        <optgroup label="Income">
+                        <option value="">{t('transactions.selectCategory')}</option>
+                        <optgroup label={t('transactions.income')}>
                             {incomeCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                         </optgroup>
-                        <optgroup label="Expenses">
+                        <optgroup label={t('transactions.expenses')}>
                             {expenseCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                         </optgroup>
                     </select>
@@ -167,10 +172,10 @@ export default function Transactions({
                             value={form.member_id}
                             onChange={(e) => setForm({ ...form, member_id: e.target.value })}
                             className={field}
-                            aria-label="For child"
+                            aria-label={t('transactions.forChild')}
                         >
-                            <option value="">For: no child</option>
-                            {children.map(child => <option key={child.id} value={child.id}>For: {child.username}</option>)}
+                            <option value="">{t('transactions.forNoChild')}</option>
+                            {children.map(child => <option key={child.id} value={child.id}>{t('transactions.forName', { name: child.username })}</option>)}
                         </select>
                     )}
                     {canShare && (
@@ -178,10 +183,10 @@ export default function Transactions({
                             value={form.split_id}
                             onChange={(e) => setForm({ ...form, split_id: e.target.value })}
                             className={field}
-                            aria-label="Shared"
+                            aria-label={t('transactions.shared')}
                         >
-                            <option value="">Shared: not shared</option>
-                            {splits.map(split => <option key={split.id} value={split.id}>Shared: {split.name}</option>)}
+                            <option value="">{t('transactions.notShared')}</option>
+                            {splits.map(split => <option key={split.id} value={split.id}>{t('transactions.sharedWith', { name: split.name })}</option>)}
                         </select>
                     )}
                     {canLinkItem && (
@@ -189,19 +194,19 @@ export default function Transactions({
                             value={form.asset_id}
                             onChange={(e) => setForm({ ...form, asset_id: e.target.value })}
                             className={field}
-                            aria-label="For item"
+                            aria-label={t('transactions.forItem')}
                         >
-                            <option value="">For item: none</option>
-                            {assets.map(asset => <option key={asset.id} value={asset.id}>For item: {asset.name}</option>)}
+                            <option value="">{t('transactions.forNoItem')}</option>
+                            {assets.map(asset => <option key={asset.id} value={asset.id}>{t('transactions.forItemName', { name: asset.name })}</option>)}
                         </select>
                     )}
                     <div className="flex gap-2">
                         <button type="submit" className="btn-primary flex-1">
-                            {editingId ? 'Save Changes' : 'Add Transaction'}
+                            {editingId ? t('transactions.saveChanges') : t('transactions.addTransaction')}
                         </button>
                         {editingId && (
                             <button type="button" onClick={closeForm} className="px-4 text-slate-400 hover:text-white">
-                                Cancel
+                                {t('common.cancel')}
                             </button>
                         )}
                     </div>
@@ -210,16 +215,16 @@ export default function Transactions({
 
             <div className="space-y-2">
                 {transactions.length === 0 ? (
-                    <p className="text-slate-400 text-center py-8">No transactions yet</p>
+                    <p className="text-slate-400 text-center py-8">{t('transactions.none')}</p>
                 ) : (
                     transactions.map(transaction => (
                         <div key={transaction.id} className="p-3 bg-slate-800/30 rounded-lg flex justify-between items-center">
                             <div>
                                 <p className="font-semibold">
-                                    {transaction.description || 'No description'}
+                                    {transaction.description || t('transactions.noDescription')}
                                     {memberName(transaction.member_id) && (
                                         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300">
-                                            for {memberName(transaction.member_id)}
+                                            {t('transactions.forBadge', { name: memberName(transaction.member_id) })}
                                         </span>
                                     )}
                                     {assetName(transaction.asset_id) && (
@@ -229,11 +234,11 @@ export default function Transactions({
                                     )}
                                     {(transaction.split_id || transaction.split_shares) && (
                                         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300">
-                                            shared
+                                            {t('transactions.sharedBadge')}
                                         </span>
                                     )}
                                 </p>
-                                <p className="text-sm text-slate-400">{new Date(transaction.date).toLocaleDateString()}</p>
+                                <p className="text-sm text-slate-400">{formatDate(transaction.date)}</p>
                             </div>
                             <div className="flex items-center gap-3">
                                 <p className={`text-xl font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
@@ -243,8 +248,8 @@ export default function Transactions({
                                     <button
                                         onClick={() => handleEdit(transaction)}
                                         className="text-slate-500 hover:text-blue-400 transition-colors"
-                                        title="Edit transaction"
-                                        aria-label="Edit transaction"
+                                        title={t('transactions.edit')}
+                                        aria-label={t('transactions.edit')}
                                     >
                                         ✎
                                     </button>
@@ -254,8 +259,8 @@ export default function Transactions({
                                     <button
                                         onClick={() => handleDelete(transaction)}
                                         className="text-slate-500 hover:text-red-400 transition-colors"
-                                        title="Delete transaction"
-                                        aria-label="Delete transaction"
+                                        title={t('transactions.delete')}
+                                        aria-label={t('transactions.delete')}
                                     >
                                         ✕
                                     </button>

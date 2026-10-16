@@ -9,10 +9,10 @@ from datetime import datetime, timezone
 from typing import List
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from . import auth, crud, database, models, privacy, schemas
+from . import auth, crud, database, models, privacy, schemas, messages
 from .seed import OTHER_INCOME, UNKNOWN_EXPENSE, system_category
 
 router = APIRouter()
@@ -33,7 +33,7 @@ def reference(month: str) -> str:
 def clearing_account(db: Session, current_user, account_id: str, write: bool = False) -> models.Account:
     account = privacy.check_account_access(db, current_user, account_id, write=write)
     if account.type != models.AccountType.CLEARING:
-        raise HTTPException(status_code=400, detail="Only clearing accounts have a month check")
+        raise messages.api_error(400, "month_check_clearing_only")
     return account
 
 
@@ -81,16 +81,14 @@ def book_month_check(
 ):
     account = clearing_account(db, current_user, account_id, write=True)
     if not MONTH.match(month):
-        raise HTTPException(status_code=400, detail="Month must be YYYY-MM")
+        raise messages.api_error(400, "month_format")
     if month >= current_month():
-        raise HTTPException(status_code=400, detail="Only completed months can be checked")
+        raise messages.api_error(400, "month_check_completed_only")
     row = months(db, account).get(month)
     if not row or not row["difference"]:
-        raise HTTPException(status_code=400, detail="This month adds up already")
+        raise messages.api_error(400, "month_adds_up")
     if row["booked"]:
-        raise HTTPException(
-            status_code=409, detail="Already booked; delete the month-check booking to book the new difference"
-        )
+        raise messages.api_error(409, "month_check_booked")
     category = system_category(db, UNKNOWN_EXPENSE if row["difference"] > 0 else OTHER_INCOME)
     year, number = int(month[:4]), int(month[5:])
     transaction = schemas.TransactionCreate(

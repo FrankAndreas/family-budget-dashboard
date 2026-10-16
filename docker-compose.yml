@@ -24,6 +24,9 @@ services:
       # PIN for the first parent "Admin" on an empty database; empty means a
       # random PIN, printed once in the backend log
       - INITIAL_ADMIN_PIN=${INITIAL_ADMIN_PIN:-}
+      # de or en: language of people who haven't picked one, and of a new
+      # database's default categories
+      - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE:-de}
     restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1" ]

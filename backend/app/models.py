@@ -73,6 +73,13 @@ class User(Base):
     accounts: Mapped[list["Account"]] = relationship("Account", back_populates="user")
     budgets: Mapped[list["Budget"]] = relationship("Budget", back_populates="user")
 
+    @property
+    def language(self) -> str:
+        """Stored in settings; the default language if none was chosen."""
+        from . import i18n
+
+        return i18n.user_language(self)
+
 
 class Category(Base):
     __tablename__ = "categories"

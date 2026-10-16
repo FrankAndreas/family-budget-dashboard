@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import { useFamily } from '../useFamily';
 import { money, useSplits, type Overview } from '../finance';
+import { formatDate } from '../format';
 import SplitManager from './SplitManager';
 import MonthlyCosts from './MonthlyCosts';
 
@@ -21,6 +23,7 @@ interface Settlement { id: string; from_user_id: string; to_user_id: string; amo
 
 // Costs the parents share: who owes whom, each parent's monthly share, and the splits
 export default function CommonBudget() {
+    const { t } = useTranslation();
     const { user } = useAuth();
     const { users } = useFamily();
     const { splits, reload: reloadSplits } = useSplits();
@@ -37,8 +40,8 @@ export default function CommonBudget() {
     const refresh = () => setVersion(v => v + 1);
 
     const parents = users.filter(u => u.role === 'PARENT' && u.is_active !== false);
-    const nameOf = (id: string) => (id === user?.id ? 'You' : users.find(u => u.id === id)?.username ?? 'former parent');
-    const whose = (id: string) => (id === user?.id ? 'your' : `${nameOf(id)}'s`);
+    const isMe = (id: string) => id === user?.id;
+    const nameOf = (id: string) => (isMe(id) ? t('common.you') : users.find(u => u.id === id)?.username ?? t('common.formerParent'));
 
     useEffect(() => {
         Promise.all([
@@ -55,8 +58,8 @@ export default function CommonBudget() {
                 setSettlements(s.data);
                 setAccounts(a.data);
             })
-            .catch(err => setError(errorMessage(err, 'Failed to load the common budget')));
-    }, [version, splits]);
+            .catch(err => setError(errorMessage(err, t('commonBudget.loadFailed'))));
+    }, [version, splits, t]);
 
     // Who owes most pays who is owed most (with two parents that's the whole balance)
     const byAmount = [...balances].sort((a, b) => a.amount - b.amount);
@@ -66,10 +69,25 @@ export default function CommonBudget() {
     // Two parents: one sentence ("Dad owes you ..."); more: one line per parent
     const perParent = balances.length > 2;
     const lineFor = (b: Balance) => {
-        const you = b.user_id === user?.id;
-        if (Math.abs(b.amount) < 0.005) return `${nameOf(b.user_id)} ${you ? 'are' : 'is'} settled`;
-        if (b.amount > 0) return `${nameOf(b.user_id)} ${you ? 'are' : 'is'} owed ${money(b.amount)}`;
-        return `${nameOf(b.user_id)} ${you ? 'owe' : 'owes'} ${money(-b.amount)}`;
+        const you = isMe(b.user_id);
+        const name = nameOf(b.user_id);
+        if (Math.abs(b.amount) < 0.005) return you ? t('commonBudget.youSettled') : t('commonBudget.nameSettled', { name });
+        if (b.amount > 0) return t(you ? 'commonBudget.youOwed' : 'commonBudget.nameOwed', { name, amount: money(b.amount) });
+        return t(you ? 'commonBudget.youOwe' : 'commonBudget.nameOwes', { name, amount: money(-b.amount) });
+    };
+    // "Dad owes you CHF 50.00" (two parents)
+    const debtSentence = (from: string, to: string, amount: number) => {
+        const values = { from: nameOf(from), to: nameOf(to), amount: money(amount) };
+        if (isMe(from)) return t('commonBudget.youOweName', values);
+        if (isMe(to)) return t('commonBudget.nameOwesYou', values);
+        return t('commonBudget.nameOwesName', values);
+    };
+    // "16.10.2026: Dad paid you CHF 50.00"
+    const paymentLine = (s: Settlement) => {
+        const values = { date: formatDate(s.date), from: nameOf(s.from_user_id), to: nameOf(s.to_user_id), amount: money(s.amount) };
+        if (isMe(s.from_user_id)) return t('commonBudget.youPaid', values);
+        if (isMe(s.to_user_id)) return t('commonBudget.paidYou', values);
+        return t('commonBudget.paid', values);
     };
     // Each parent pays from / receives into their own accounts; only accounts you can see are offered
     const accountsOf = (userId?: string) => accounts.filter(a => a.user_id === userId);
@@ -112,25 +130,25 @@ export default function CommonBudget() {
             setSettling(null);
             refresh();
         } catch (err) {
-            setError(errorMessage(err, 'Failed to settle up'));
+            setError(errorMessage(err, t('commonBudget.settleFailed')));
         }
     };
 
     const undoSettlement = async (settlement: Settlement) => {
-        if (!confirm(`Undo the payment of ${money(settlement.amount)}? Both transfer transactions are removed.`)) return;
+        if (!confirm(t('commonBudget.confirmUndo', { amount: money(settlement.amount) }))) return;
         try {
             await api.delete(`/api/v1/settlements/${settlement.id}`);
             refresh();
         } catch (err) {
-            setError(errorMessage(err, 'Failed to undo'));
+            setError(errorMessage(err, t('commonBudget.undoFailed')));
         }
     };
 
     if (parents.length < 2) {
         return (
             <div className="glass-card p-6">
-                <h2 className="text-2xl font-bold mb-2">Common budget</h2>
-                <p className="text-slate-400">Sharing costs needs a second parent. Add one in Settings → Family.</p>
+                <h2 className="text-2xl font-bold mb-2">{t('commonBudget.title')}</h2>
+                <p className="text-slate-400">{t('commonBudget.needsSecondParent')}</p>
             </div>
         );
     }
@@ -142,12 +160,12 @@ export default function CommonBudget() {
             {error && (
                 <div className="p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 flex justify-between">
                     <span>{error}</span>
-                    <button onClick={() => setError('')} aria-label="Dismiss error">✕</button>
+                    <button onClick={() => setError('')} aria-label={t('common.dismissError')}>✕</button>
                 </div>
             )}
 
             <div className="glass-card p-6">
-                <h2 className="text-xl font-bold mb-2">Balance</h2>
+                <h2 className="text-xl font-bold mb-2">{t('commonBudget.balance')}</h2>
                 {perParent ? (
                     owed > 0 ? (
                         <ul className="space-y-1">
@@ -158,22 +176,19 @@ export default function CommonBudget() {
                             ))}
                         </ul>
                     ) : (
-                        <p className="text-2xl font-bold text-emerald-400">All settled</p>
+                        <p className="text-2xl font-bold text-emerald-400">{t('commonBudget.allSettled')}</p>
                     )
                 ) : owed > 0 && debtor && creditor ? (
-                    <p className="text-2xl font-bold">
-                        {nameOf(debtor.user_id)} {debtor.user_id === user?.id ? 'owe' : 'owes'}{' '}
-                        {creditor.user_id === user?.id ? 'you' : nameOf(creditor.user_id)} {money(owed)}
-                    </p>
+                    <p className="text-2xl font-bold">{debtSentence(debtor.user_id, creditor.user_id, owed)}</p>
                 ) : (
-                    <p className="text-2xl font-bold text-emerald-400">All settled</p>
+                    <p className="text-2xl font-bold text-emerald-400">{t('commonBudget.allSettled')}</p>
                 )}
                 {owed > 0 && !settling && (
                     <button
                         onClick={startSettling}
                         className="btn-primary text-sm mt-3"
                     >
-                        Settle up
+                        {t('commonBudget.settleUp')}
                     </button>
                 )}
                 {settling && (
@@ -186,12 +201,12 @@ export default function CommonBudget() {
                                     ? choosePair(e.target.value, settling.toUser)
                                     : choosePair(settling.fromUser, e.target.value)}
                                 className={input}
-                                aria-label={key === 'fromUser' ? 'Who pays' : 'Who receives'}
+                                aria-label={key === 'fromUser' ? t('commonBudget.whoPays') : t('commonBudget.whoReceives')}
                                 required
                             >
                                 {balances.map(b => (
                                     <option key={b.user_id} value={b.user_id}>
-                                        {key === 'fromUser' ? 'Pays: ' : 'Receives: '}{nameOf(b.user_id)}
+                                        {t(key === 'fromUser' ? 'commonBudget.pays' : 'commonBudget.receives', { name: nameOf(b.user_id) })}
                                     </option>
                                 ))}
                             </select>
@@ -201,12 +216,18 @@ export default function CommonBudget() {
                             value={settling.amount}
                             onChange={(e) => setSettling({ ...settling, amount: e.target.value })}
                             className={input}
-                            aria-label="Amount"
+                            aria-label={t('commonBudget.amount')}
                             required
                         />
                         {[
-                            { key: 'fromAccount' as const, owner: settling.fromUser, label: `From ${whose(settling.fromUser)} account` },
-                            { key: 'toAccount' as const, owner: settling.toUser, label: `To ${whose(settling.toUser)} account` }
+                            {
+                                key: 'fromAccount' as const, owner: settling.fromUser, label: isMe(settling.fromUser)
+                                    ? t('commonBudget.fromYourAccount') : t('commonBudget.fromNamesAccount', { name: nameOf(settling.fromUser) }),
+                            },
+                            {
+                                key: 'toAccount' as const, owner: settling.toUser, label: isMe(settling.toUser)
+                                    ? t('commonBudget.toYourAccount') : t('commonBudget.toNamesAccount', { name: nameOf(settling.toUser) }),
+                            },
                         ].map(field => (
                             <select
                                 key={field.key}
@@ -220,13 +241,10 @@ export default function CommonBudget() {
                                 {accountsOf(field.owner).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                         ))}
-                        <p className="text-xs text-slate-500">
-                            Only accounts you can see are listed. If the other parent's accounts are missing, they can
-                            record the payment themselves, or share their finances with you.
-                        </p>
+                        <p className="text-xs text-slate-500">{t('commonBudget.accountsHint')}</p>
                         <div className="flex gap-2">
-                            <button type="submit" className="btn-primary flex-1">Record payment</button>
-                            <button type="button" onClick={() => setSettling(null)} className="px-4 text-slate-400 hover:text-white">Cancel</button>
+                            <button type="submit" className="btn-primary flex-1">{t('commonBudget.recordPayment')}</button>
+                            <button type="button" onClick={() => setSettling(null)} className="px-4 text-slate-400 hover:text-white">{t('common.cancel')}</button>
                         </div>
                     </form>
                 )}
@@ -234,8 +252,8 @@ export default function CommonBudget() {
                     <div className="mt-4 space-y-1 text-sm text-slate-400">
                         {settlements.slice(0, 5).map(s => (
                             <div key={s.id} className="flex justify-between gap-2">
-                                <span>{new Date(s.date).toLocaleDateString()}: {nameOf(s.from_user_id)} paid {nameOf(s.to_user_id).replace('You', 'you')} {money(s.amount)}</span>
-                                <button onClick={() => undoSettlement(s)} className="hover:text-red-400">Undo</button>
+                                <span>{paymentLine(s)}</span>
+                                <button onClick={() => undoSettlement(s)} className="hover:text-red-400">{t('commonBudget.undo')}</button>
                             </div>
                         ))}
                     </div>
@@ -243,23 +261,21 @@ export default function CommonBudget() {
             </div>
 
             <div className="glass-card p-6">
-                <h2 className="text-xl font-bold mb-1">Monthly shares</h2>
-                <p className="text-sm text-slate-400 mb-4">
-                    Common monthly costs, yearly bills (÷ 12) and investments (set-aside), divided by their split.
-                </p>
+                <h2 className="text-xl font-bold mb-1">{t('commonBudget.monthlyShares')}</h2>
+                <p className="text-sm text-slate-400 mb-4">{t('commonBudget.monthlySharesIntro')}</p>
                 {overview.items.length === 0 ? (
-                    <p className="text-slate-400 text-sm">Nothing planned yet. Add common costs below, or common yearly bills and investments in their tabs.</p>
+                    <p className="text-slate-400 text-sm">{t('commonBudget.nothingPlanned')}</p>
                 ) : (
                     <div className="space-y-1">
                         {overview.items.map(item => (
                             <div key={item.id} className="flex justify-between p-2 bg-slate-800/30 rounded">
                                 <span>{item.kind === 'asset' ? '📦 ' : ''}{item.name}</span>
-                                <span>{money(item.monthly)}/month</span>
+                                <span>{t('common.perMonth', { amount: money(item.monthly) })}</span>
                             </div>
                         ))}
                         <div className="flex flex-wrap gap-4 pt-3 font-bold">
                             {parents.map(p => (
-                                <span key={p.id}>{nameOf(p.id)}: {money(overview.totals[p.id] ?? 0)}/month</span>
+                                <span key={p.id}>{nameOf(p.id)}: {t('common.perMonth', { amount: money(overview.totals[p.id] ?? 0) })}</span>
                             ))}
                         </div>
                     </div>
@@ -269,17 +285,19 @@ export default function CommonBudget() {
             <MonthlyCosts splits={splits} onChange={refresh} />
 
             <div className="glass-card p-6">
-                <h2 className="text-xl font-bold mb-4">Shared expenses</h2>
+                <h2 className="text-xl font-bold mb-4">{t('commonBudget.sharedExpenses')}</h2>
                 {expenses.length === 0 ? (
-                    <p className="text-slate-400 text-sm">No shared expenses yet. When you add an expense, choose a split under "Shared".</p>
+                    <p className="text-slate-400 text-sm">{t('commonBudget.noSharedExpenses')}</p>
                 ) : (
                     <div className="space-y-2">
                         {expenses.slice(0, 30).map(e => (
                             <div key={e.transaction_id} className="p-3 bg-slate-800/30 rounded-lg flex flex-wrap justify-between gap-2">
                                 <div>
-                                    <p className="font-semibold">{e.description || 'No description'}</p>
+                                    <p className="font-semibold">{e.description || t('common.noDescription')}</p>
                                     <p className="text-sm text-slate-400">
-                                        {new Date(e.date).toLocaleDateString()} · paid by {nameOf(e.payer_id).replace('You', 'you')} · {e.split_name ?? 'deleted split'}
+                                        {t(isMe(e.payer_id) ? 'commonBudget.paidByYou' : 'commonBudget.paidBy', {
+                                            date: formatDate(e.date), name: nameOf(e.payer_id), split: e.split_name ?? t('commonBudget.deletedSplit'),
+                                        })}
                                     </p>
                                 </div>
                                 <div className="text-right">

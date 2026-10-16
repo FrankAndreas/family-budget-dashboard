@@ -70,6 +70,9 @@ the same way). Costs the parents share, investments and yearly bills are in the 
 **Investments** and **Yearly bills** tabs. To choose the first PIN yourself, set
 `INITIAL_ADMIN_PIN=1234` in `.env` before the first start.
 
+The app is German unless a person picks English in **Settings → Logins**. For English as the default (people
+who haven't picked a language, and a new database's default categories), set `DEFAULT_LANGUAGE=en` in `.env`.
+
 If you lose the PIN before anyone uses the app, stop it, delete `data/budget.db` and start again.
 **This deletes all data.**
 

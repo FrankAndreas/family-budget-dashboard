@@ -1,5 +1,6 @@
 import { useAuth } from '../../AuthContext';
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import api, { errorMessage, fetchAllTransactions } from '../../api';
 import BudgetManager from '../../components/BudgetManager';
 import Analytics from '../../components/Analytics';
@@ -21,6 +22,7 @@ import { useFamily } from '../../useFamily';
 import { accessTo, canWrite, dependents } from '../../family';
 
 export default function Dashboard() {
+    const { t } = useTranslation();
     const { user, logout } = useAuth();
     const { users, shares, reload: reloadFamily } = useFamily();
     const { splits, reload: reloadSplits } = useSplits();
@@ -40,9 +42,9 @@ export default function Dashboard() {
             .then(response => setCategories(response.data))
             .catch(error => {
                 console.error('Failed to load categories', error);
-                setError(errorMessage(error, 'Failed to load categories'));
+                setError(errorMessage(error, t('dashboard.loadCategoriesFailed')));
             });
-    }, []);
+    }, [t]);
 
     useEffect(() => {
         api.get('/api/v1/accounts')
@@ -56,9 +58,9 @@ export default function Dashboard() {
             })
             .catch(error => {
                 console.error('Failed to load accounts', error);
-                setError(errorMessage(error, 'Failed to load accounts'));
+                setError(errorMessage(error, t('dashboard.loadAccountsFailed')));
             });
-    }, [dataVersion]);
+    }, [dataVersion, t]);
 
     useEffect(() => {
         if (!selectedAccount) return;
@@ -66,9 +68,9 @@ export default function Dashboard() {
             .then(setTransactions)
             .catch(error => {
                 console.error('Failed to load transactions', error);
-                setError(errorMessage(error, 'Failed to load transactions'));
+                setError(errorMessage(error, t('dashboard.loadTransactionsFailed')));
             });
-    }, [selectedAccount, dataVersion]);
+    }, [selectedAccount, dataVersion, t]);
 
     const ownerOf = (account: Account) => users.find(u => u.id === account.user_id);
     const canEdit = (account: Account) => !!user && canWrite(accessTo(user, account.user_id, users, shares));
@@ -78,13 +80,8 @@ export default function Dashboard() {
     const isParent = user?.role === 'PARENT';
 
     const tabs = [
-        { id: 'overview', label: '🏦 Accounts' },
-        { id: 'budgets', label: '💰 Budgets' },
-        ...(isParent ? [{ id: 'common', label: '🤝 Common' }, { id: 'investments', label: '📦 Investments' }, { id: 'bills', label: '🧾 Yearly bills' }] : []),
-        { id: 'wishes', label: '🎁 Wishes' },
-        { id: 'analytics', label: '📈 Analytics' },
-        { id: 'settings', label: '⚙️ Settings' }
-    ];
+        'overview', 'budgets', ...(isParent ? ['common', 'investments', 'bills'] as const : []), 'wishes', 'analytics', 'settings',
+    ] as const;
 
     return (
         <div className="min-h-screen p-6">
@@ -93,12 +90,14 @@ export default function Dashboard() {
                 <div className="flex justify-between items-center">
                     <div>
                         <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-transparent">
-                            Family Budget
+                            {t('common.appName')}
                         </h1>
-                        <p className="text-slate-400 mt-1">Welcome back, {user?.username} ({user?.role})</p>
+                        <p className="text-slate-400 mt-1">
+                            {t('dashboard.welcome', { name: user?.username, role: user ? t(`common.roles.${user.role}`) : '' })}
+                        </p>
                     </div>
                     <button onClick={logout} className="btn-primary">
-                        Logout
+                        {t('dashboard.logout')}
                     </button>
                 </div>
             </div>
@@ -106,7 +105,7 @@ export default function Dashboard() {
             {error && (
                 <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 flex justify-between items-center">
                     <span>{error}</span>
-                    <button onClick={() => setError('')} className="text-red-300 hover:text-white" aria-label="Dismiss error">✕</button>
+                    <button onClick={() => setError('')} className="text-red-300 hover:text-white" aria-label={t('common.dismissError')}>✕</button>
                 </div>
             )}
 
@@ -115,20 +114,20 @@ export default function Dashboard() {
                 <div className="flex gap-2 overflow-x-auto">
                     {tabs.map(tab => (
                         <button
-                            key={tab.id}
+                            key={tab}
                             onClick={() => {
-                                setActiveTab(tab.id);
+                                setActiveTab(tab);
                                 // Other tabs may have changed the family, splits or investments the forms here offer
                                 reloadFamily();
                                 reloadSplits();
                                 reloadAssets();
                             }}
-                            className={`flex-1 whitespace-nowrap py-3 px-4 rounded-lg font-semibold transition-all ${activeTab === tab.id
+                            className={`flex-1 whitespace-nowrap py-3 px-4 rounded-lg font-semibold transition-all ${activeTab === tab
                                 ? 'bg-blue-500/20 text-blue-400 border-2 border-blue-400'
                                 : 'text-slate-400 hover:bg-slate-800/30'
                                 }`}
                         >
-                            {tab.label}
+                            {t(`dashboard.tabs.${tab}`)}
                         </button>
                     ))}
                 </div>

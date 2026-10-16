@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../api';
 import { money } from '../finance';
 import { useFamily } from '../useFamily';
 import ScopeSelector from './ScopeSelector';
-import { format, parseISO } from 'date-fns';
+import { formatDayShort, formatMonthShort } from '../format';
 
 interface Amounts { income: number; expenses: number }
 
@@ -19,14 +20,11 @@ interface Summary extends Amounts {
 
 type TimeRange = 'month' | '3months' | 'year' | 'all';
 
-const TIME_RANGE_LABELS: Record<TimeRange, string> = {
-    month: 'This Month',
-    '3months': 'Last 3 Months',
-    year: 'This Year',
-    all: 'All Time'
-};
+// Labels: analytics.ranges.<range> in the locale files
+const TIME_RANGES: TimeRange[] = ['month', '3months', 'year', 'all'];
 
 export default function Analytics() {
+    const { t } = useTranslation();
     const [summary, setSummary] = useState<Summary | null>(null);
     const [timeRange, setTimeRange] = useState<TimeRange>('month');
     const { users, scopes } = useFamily();
@@ -45,13 +43,13 @@ export default function Analytics() {
     const COLORS = ['#22d3ee', '#e879f9', '#818cf8', '#34d399', '#f87171', '#fbbf24', '#fb923c'];
 
     const dailyData = (summary?.days ?? []).map(d => ({
-        date: format(parseISO(d.date), 'MMM dd'),
+        date: formatDayShort(d.date),
         income: d.income,
         expenses: d.expenses,
         net: d.income - d.expenses
     }));
     const monthlyData = (summary?.months ?? []).map(m => ({
-        month: format(parseISO(`${m.month}-01`), 'MMM'),
+        month: formatMonthShort(m.month),
         income: m.income,
         expenses: m.expenses,
         savings: m.income - m.expenses
@@ -60,7 +58,7 @@ export default function Analytics() {
 
     const totalIncome = summary?.income ?? 0;
     const totalExpenses = summary?.expenses ?? 0;
-    const rangeLabel = TIME_RANGE_LABELS[timeRange];
+    const rangeLabel = t(`analytics.ranges.${timeRange}`);
     const netSavings = totalIncome - totalExpenses;
 
     // Expenses tagged with a dependent child, per child
@@ -75,10 +73,10 @@ export default function Analytics() {
                     value={timeRange}
                     onChange={(e) => setTimeRange(e.target.value as TimeRange)}
                     className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-                    aria-label="Time range"
+                    aria-label={t('analytics.timeRange')}
                 >
-                    {(Object.keys(TIME_RANGE_LABELS) as TimeRange[]).map(range => (
-                        <option key={range} value={range}>{TIME_RANGE_LABELS[range]}</option>
+                    {TIME_RANGES.map(range => (
+                        <option key={range} value={range}>{t(`analytics.ranges.${range}`)}</option>
                     ))}
                 </select>
             </div>
@@ -86,16 +84,16 @@ export default function Analytics() {
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="glass-card p-6">
-                    <h3 className="text-emerald-400 text-sm font-semibold mb-2">Income ({rangeLabel})</h3>
+                    <h3 className="text-emerald-400 text-sm font-semibold mb-2">{t('analytics.income', { range: rangeLabel })}</h3>
                     <p className="text-3xl font-bold">{money(totalIncome)}</p>
                 </div>
                 <div className="glass-card p-6">
-                    <h3 className="text-red-400 text-sm font-semibold mb-2">Expenses ({rangeLabel})</h3>
+                    <h3 className="text-red-400 text-sm font-semibold mb-2">{t('analytics.expenses', { range: rangeLabel })}</h3>
                     <p className="text-3xl font-bold">{money(totalExpenses)}</p>
                 </div>
                 <div className="glass-card p-6">
                     <h3 className={`${netSavings >= 0 ? 'text-sky-400' : 'text-red-400'} text-sm font-semibold mb-2`}>
-                        Net {netSavings >= 0 ? 'Savings' : 'Deficit'} ({rangeLabel})
+                        {t(netSavings >= 0 ? 'analytics.netSavings' : 'analytics.netDeficit', { range: rangeLabel })}
                     </h3>
                     <p className="text-3xl font-bold">{money(Math.abs(netSavings))}</p>
                 </div>
@@ -103,7 +101,7 @@ export default function Analytics() {
 
             {/* Monthly Comparison */}
             <div className="glass-card p-6">
-                <h2 className="text-xl font-bold mb-4">6-Month Comparison</h2>
+                <h2 className="text-xl font-bold mb-4">{t('analytics.comparison')}</h2>
                 <ResponsiveContainer width="100%" height={300}>
                     <BarChart data={monthlyData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -115,16 +113,16 @@ export default function Analytics() {
                             labelStyle={{ color: '#f8fafc' }}
                         />
                         <Legend />
-                        <Bar dataKey="income" fill="#34d399" name="Income" />
-                        <Bar dataKey="expenses" fill="#f87171" name="Expenses" />
-                        <Bar dataKey="savings" fill="#22d3ee" name="Savings" />
+                        <Bar dataKey="income" fill="#34d399" name={t('analytics.incomeSeries')} />
+                        <Bar dataKey="expenses" fill="#f87171" name={t('analytics.expensesSeries')} />
+                        <Bar dataKey="savings" fill="#22d3ee" name={t('analytics.savingsSeries')} />
                     </BarChart>
                 </ResponsiveContainer>
             </div>
 
             {/* Daily Trend */}
             <div className="glass-card p-6">
-                <h2 className="text-xl font-bold mb-4">Daily Trend (This Month)</h2>
+                <h2 className="text-xl font-bold mb-4">{t('analytics.dailyTrend')}</h2>
                 <ResponsiveContainer width="100%" height={300}>
                     <LineChart data={dailyData}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
@@ -136,9 +134,9 @@ export default function Analytics() {
                             labelStyle={{ color: '#f8fafc' }}
                         />
                         <Legend />
-                        <Line type="monotone" dataKey="income" stroke="#34d399" strokeWidth={2} name="Income" />
-                        <Line type="monotone" dataKey="expenses" stroke="#f87171" strokeWidth={2} name="Expenses" />
-                        <Line type="monotone" dataKey="net" stroke="#22d3ee" strokeWidth={2} name="Net" />
+                        <Line type="monotone" dataKey="income" stroke="#34d399" strokeWidth={2} name={t('analytics.incomeSeries')} />
+                        <Line type="monotone" dataKey="expenses" stroke="#f87171" strokeWidth={2} name={t('analytics.expensesSeries')} />
+                        <Line type="monotone" dataKey="net" stroke="#22d3ee" strokeWidth={2} name={t('analytics.netSeries')} />
                     </LineChart>
                 </ResponsiveContainer>
             </div>
@@ -146,8 +144,8 @@ export default function Analytics() {
             {/* Costs per dependent child */}
             {users.find(u => u.id === activeScope?.userIds[0])?.role === 'PARENT' && childCosts.length > 0 && (
                 <div className="glass-card p-6">
-                    <h2 className="text-xl font-bold mb-1">Costs per Child ({rangeLabel})</h2>
-                    <p className="text-sm text-slate-400 mb-4">Expenses tagged with a child. They're included in the totals above.</p>
+                    <h2 className="text-xl font-bold mb-1">{t('analytics.costsPerChild', { range: rangeLabel })}</h2>
+                    <p className="text-sm text-slate-400 mb-4">{t('analytics.costsPerChildIntro')}</p>
                     <div className="space-y-2">
                         {childCosts.map(child => (
                             <div key={child.name} className="flex items-center justify-between p-2 bg-slate-800/30 rounded">
@@ -161,7 +159,7 @@ export default function Analytics() {
 
             {/* Category Breakdown */}
             <div className="glass-card p-6">
-                <h2 className="text-xl font-bold mb-4">Spending by Category ({rangeLabel})</h2>
+                <h2 className="text-xl font-bold mb-4">{t('analytics.byCategory', { range: rangeLabel })}</h2>
                 {categoryData.length > 0 ? (
                     <div className="flex flex-col md:flex-row items-center gap-8">
                         <ResponsiveContainer width="100%" height={300}>
@@ -202,7 +200,7 @@ export default function Analytics() {
                         </div>
                     </div>
                 ) : (
-                    <p className="text-slate-400 text-center py-8">No expense data available</p>
+                    <p className="text-slate-400 text-center py-8">{t('analytics.noData')}</p>
                 )}
             </div>
         </div>
