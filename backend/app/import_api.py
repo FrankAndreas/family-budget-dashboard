@@ -320,7 +320,9 @@ def check_file(db: Session, user: models.User, file: UploadFile, changes: Option
         for text in filter(None, problems):
             out["errors"].append(text)
             out["status"] = "error"
-        out.update(file_category=raw["category"], rule=rule)
+        # The file's category by its name in the person's language when known, like the category list
+        known = lookups.categories.get(key(raw["category"]))
+        out.update(file_category=i18n.category_name(known) if known else raw["category"], rule=rule)
         rows.append(out)
     return rows
 

@@ -97,3 +97,12 @@ def test_a_new_install_gets_german_categories(monkeypatch):
 
 def test_an_english_install_keeps_english_categories():
     assert {"Groceries", "Rent"} <= fresh_install()
+
+
+def test_preview_names_the_files_category_in_the_persons_language(client):
+    mum = german(client)
+    create_account(client, mum, "Bank")
+    row = preview(client, mum, "unsorted")
+    # The preview's dropdown and "was <file category>" compare with the category list, which is German
+    assert row["file_category"] == "Unsortiert"
+    assert preview(client, mum, "Nope")["file_category"] == "Nope"

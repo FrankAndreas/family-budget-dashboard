@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import axios from 'axios';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
@@ -65,6 +66,7 @@ const previewFromError = (error: unknown): Preview | null => {
 
 // onImported: the booked rows changed balances and lists elsewhere in the app
 export default function ImportTransactions({ onImported }: { onImported?: () => void }) {
+    const { t } = useTranslation();
     const { user } = useAuth();
     const [file, setFile] = useState<File | null>(null);
     const [preview, setPreview] = useState<Preview | null>(null);
@@ -78,8 +80,8 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
     useEffect(() => {
         api.get('/api/v1/categories')
             .then(res => setCategories(res.data))
-            .catch(error => setStatus({ kind: 'error', text: errorMessage(error, 'Failed to load categories') }));
-    }, []);
+            .catch(error => setStatus({ kind: 'error', text: errorMessage(error, t('importing.loadCategoriesFailed')) }));
+    }, [t]);
 
     const reset = () => {
         setFile(null);
@@ -96,7 +98,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
         if (type !== 'EXPENSE' && type !== 'INCOME') return null;
         return [
             ...categories.filter(c => c.type === type).map(c => ({ value: c.name, label: c.name })),
-            { value: 'Transfer', label: type === 'EXPENSE' ? 'Transfer (out)' : 'Transfer (in)' }
+            { value: 'Transfer', label: type === 'EXPENSE' ? t('importing.transferOut') : t('importing.transferIn') }
         ];
     };
 
@@ -112,7 +114,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
             const res = await api.post('/api/v1/import/preview', formData(file, [], next));
             setPreview(res.data);
         } catch (error) {
-            setStatus({ kind: 'error', text: errorMessage(error, 'Could not check the change') });
+            setStatus({ kind: 'error', text: errorMessage(error, t('importing.changeFailed')) });
         } finally {
             setBusy(false);
         }
@@ -135,7 +137,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
             setFile(chosen);
             setPreview(res.data);
         } catch (error) {
-            setStatus({ kind: 'error', text: errorMessage(error, 'Could not read the file') });
+            setStatus({ kind: 'error', text: errorMessage(error, t('importing.readFailed')) });
         } finally {
             setBusy(false);
         }
@@ -157,15 +159,15 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
             setStatus({
                 kind: 'success',
                 text: imported === 0
-                    ? 'Nothing was imported: every row is already booked.'
-                    : `Imported ${imported} transaction${imported === 1 ? '' : 's'}${skipped ? `; skipped ${skipped} duplicate${skipped === 1 ? '' : 's'}` : ''}.`,
+                    ? t('importing.nothingImported')
+                    : `${t('importing.imported', { count: imported })}${skipped ? t('importing.skipped', { count: skipped }) : ''}.`,
             });
             reset();
             if (imported > 0) onImported?.();
         } catch (error) {
             const rows = previewFromError(error);
             if (rows) setPreview(rows);
-            setStatus({ kind: 'error', text: rows ? 'The file has errors; nothing was imported.' : errorMessage(error, 'Import failed') });
+            setStatus({ kind: 'error', text: rows ? t('importing.hasErrors') : errorMessage(error, t('importing.importFailed')) });
         } finally {
             setBusy(false);
         }
@@ -176,7 +178,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
             const res = await api.get(path, { responseType: 'blob' });
             downloadBlob(res.data, filename);
         } catch (error) {
-            setStatus({ kind: 'error', text: errorMessage(error, 'Download failed') });
+            setStatus({ kind: 'error', text: errorMessage(error, t('importing.downloadFailed')) });
         }
     };
 
@@ -184,17 +186,14 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
 
     return (
         <div className="mb-8">
-            <h3 className="text-lg font-semibold mb-4">Import Transactions</h3>
-            <p className="text-slate-400 mb-3">
-                Book many transactions at once from a CSV or JSON file, e.g. one written by a tool that reads receipts.
-                You see a preview first; nothing is booked until you confirm.
-            </p>
+            <h3 className="text-lg font-semibold mb-4">{t('importing.title')}</h3>
+            <p className="text-slate-400 mb-3">{t('importing.intro')}</p>
             <div className="flex flex-wrap gap-3 mb-4 text-sm">
                 <button className="text-blue-400 hover:underline" onClick={() => download('/api/v1/import/template.csv', 'budget-import-template.csv')}>
-                    CSV template
+                    {t('importing.csvTemplate')}
                 </button>
                 <button className="text-blue-400 hover:underline" onClick={() => download('/api/v1/import/schema', 'budget-import-schema.json')}>
-                    JSON Schema (for AI tools)
+                    {t('importing.jsonSchema')}
                 </button>
             </div>
 
@@ -204,14 +203,14 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                     : 'bg-red-500/20 border-red-500/50 text-red-300'
                     }`}>
                     <span>{status.text}</span>
-                    <button onClick={() => setStatus(null)} className="hover:text-white" aria-label="Dismiss message">✕</button>
+                    <button onClick={() => setStatus(null)} className="hover:text-white" aria-label={t('importing.dismiss')}>✕</button>
                 </div>
             )}
 
             <input
                 type="file"
                 accept=".csv,.json,text/csv,application/json"
-                aria-label="File to import"
+                aria-label={t('importing.file')}
                 onChange={handleFile}
                 disabled={busy}
                 className="block w-full text-sm text-slate-400
@@ -222,26 +221,26 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
             hover:file:bg-blue-500/30
             file:cursor-pointer cursor-pointer"
             />
-            {busy && <p className="mt-2 text-blue-400">Checking…</p>}
+            {busy && <p className="mt-2 text-blue-400">{t('importing.checking')}</p>}
 
             {preview && file && (
                 <div className="mt-4">
                     <p className="text-sm text-slate-300 mb-2">
-                        <strong>{file.name}</strong>: {preview.ok} ready
-                        {preview.duplicates > 0 && `, ${preview.duplicates} already booked`}
-                        {preview.errors > 0 && <span className="text-red-300">, {preview.errors} with errors</span>}
+                        <strong>{file.name}</strong>: {t('importing.ready', { count: preview.ok })}
+                        {preview.duplicates > 0 && t('importing.alreadyBooked', { count: preview.duplicates })}
+                        {preview.errors > 0 && <span className="text-red-300">{t('importing.withErrors', { count: preview.errors })}</span>}
                     </p>
                     <div className="overflow-x-auto max-h-96 overflow-y-auto border border-slate-700 rounded-lg">
                         <table className="w-full text-sm">
                             <thead className="bg-slate-800/80 sticky top-0">
                                 <tr className="text-left text-slate-400">
-                                    <th className="p-2">Line</th>
-                                    <th className="p-2">Date</th>
-                                    <th className="p-2">Account</th>
-                                    <th className="p-2">Category</th>
-                                    <th className="p-2 text-right">Amount</th>
-                                    <th className="p-2">Description</th>
-                                    <th className="p-2">Status</th>
+                                    <th className="p-2">{t('importing.columns.line')}</th>
+                                    <th className="p-2">{t('importing.columns.date')}</th>
+                                    <th className="p-2">{t('importing.columns.account')}</th>
+                                    <th className="p-2">{t('importing.columns.category')}</th>
+                                    <th className="p-2 text-right">{t('importing.columns.amount')}</th>
+                                    <th className="p-2">{t('importing.columns.description')}</th>
+                                    <th className="p-2">{t('importing.columns.status')}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -256,15 +255,15 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                                     value={choicesFor(row)!.find(c => c.value.toLowerCase() === row.category.trim().toLowerCase())?.value ?? row.category}
                                                     onChange={(e) => changeCategory(row, e.target.value)}
                                                     disabled={busy}
-                                                    aria-label={`Category of line ${row.line}`}
+                                                    aria-label={t('importing.categoryOfLine', { line: row.line })}
                                                     className="p-1 rounded bg-slate-800/50 border border-slate-600 text-white"
                                                 >
                                                     {choicesFor(row)!.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                                                 </select>
                                             ) : row.category}
                                             {row.shared && <span className="text-slate-400"> · {row.shared}</span>}
-                                            {changes[row.line] && <div className="text-xs text-slate-500">was <s>{row.file_category}</s></div>}
-                                            {row.rule && <div className="text-xs text-emerald-400">by rule: {row.rule}</div>}
+                                            {changes[row.line] && <div className="text-xs text-slate-500">{t('importing.was')}<s>{row.file_category}</s></div>}
+                                            {row.rule && <div className="text-xs text-emerald-400">{t('importing.byRule', { rule: row.rule })}</div>}
                                             {isParent && changes[row.line] && (
                                                 <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                                                     <label className="flex items-center gap-1 cursor-pointer">
@@ -272,17 +271,17 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                                             type="checkbox"
                                                             checked={changes[row.line].remember}
                                                             onChange={(e) => setRemember(row.line, { remember: e.target.checked })}
-                                                            aria-label={`Remember line ${row.line} as a rule`}
+                                                            aria-label={t('importing.rememberLine', { line: row.line })}
                                                         />
-                                                        remember for
+                                                        {t('importing.rememberFor')}
                                                     </label>
                                                     {changes[row.line].remember && (
                                                         <input
                                                             value={changes[row.line].text}
                                                             onChange={(e) => setRemember(row.line, { text: e.target.value })}
                                                             maxLength={120}
-                                                            aria-label={`Rule text for line ${row.line}`}
-                                                            title="Bookings whose description contains this text (ignoring case)"
+                                                            aria-label={t('importing.ruleTextOfLine', { line: row.line })}
+                                                            title={t('importing.ruleTextHint')}
                                                             className="p-1 w-36 rounded bg-slate-800/50 border border-slate-600 text-white"
                                                         />
                                                     )}
@@ -291,13 +290,13 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                         </td>
                                         <td className="p-2 text-right whitespace-nowrap">
                                             {row.direction && (
-                                                <span className="mr-1 text-xs text-slate-400">{row.direction.trim().toLowerCase() === 'in' ? '→ in' : '← out'}</span>
+                                                <span className="mr-1 text-xs text-slate-400">{row.direction.trim().toLowerCase() === 'in' ? t('importing.in') : t('importing.out')}</span>
                                             )}
                                             {row.amount}
                                         </td>
                                         <td className="p-2">{row.description}</td>
                                         <td className={`p-2 ${STATUS_STYLE[row.status]}`}>
-                                            {row.status === 'ok' && 'Ready'}
+                                            {row.status === 'ok' && t('importing.statusReady')}
                                             {row.status === 'error' && row.errors.map(e => <div key={e}>{e}</div>)}
                                             {row.status === 'duplicate' && (
                                                 <label className="flex items-start gap-2 cursor-pointer">
@@ -307,7 +306,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                                         checked={included.has(row.line)}
                                                         onChange={() => toggle(row.line)}
                                                     />
-                                                    <span>{row.note}. Import anyway</span>
+                                                    <span>{t('importing.importAnyway', { note: row.note })}</span>
                                                 </label>
                                             )}
                                         </td>
@@ -322,13 +321,13 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                             disabled={busy || preview.errors > 0 || count === 0}
                             onClick={handleImport}
                         >
-                            Import {count} transaction{count === 1 ? '' : 's'}
+                            {t('importing.importCount', { count })}
                         </button>
                         <button className="text-slate-400 hover:text-white" onClick={reset} disabled={busy}>
-                            Cancel
+                            {t('common.cancel')}
                         </button>
                         {preview.errors > 0 && (
-                            <span className="text-sm text-red-300">Fix the errors in the file and choose it again.</span>
+                            <span className="text-sm text-red-300">{t('importing.fixErrors')}</span>
                         )}
                     </div>
                 </div>

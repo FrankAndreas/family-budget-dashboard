@@ -6,19 +6,8 @@ import path from 'node:path';
 import ts from 'typescript';
 
 const SRC = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..', 'src');
-// Files already translated; the translation tasks add theirs until every .tsx file is checked
-const CHECKED = [
-    'components/Logins.tsx',
-    // Task 7
-    'App.tsx', 'pages/Login.tsx', 'pages/dashboard/Dashboard.tsx', 'components/PinInput.tsx',
-    'components/ScopeSelector.tsx', 'components/OwnerSelect.tsx', 'components/AccountCards.tsx',
-    // Task 8
-    'components/Transactions.tsx', 'components/BudgetManager.tsx', 'components/Analytics.tsx',
-    'components/MonthCheck.tsx', 'components/CategoryManager.tsx',
-    // Task 9
-    'components/CommonBudget.tsx', 'components/SplitManager.tsx', 'components/YearlyBills.tsx',
-    'components/MonthlyCosts.tsx', 'components/Investments.tsx', 'components/Wishes.tsx',
-];
+// Every component and page
+const CHECKED = fs.readdirSync(SRC, { recursive: true }).filter(file => file.endsWith('.tsx')).sort();
 const ATTRIBUTES = new Set(['placeholder', 'aria-label', 'title', 'alt', 'label']);
 const CALLS = new Set(['confirm', 'alert', 'setError', 'errorMessage', 'setMessage']);
 const PROPERTIES = new Set(['label', 'text', 'title', 'placeholder']);
