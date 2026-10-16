@@ -1,5 +1,6 @@
 import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
 import api from './api';
+import { applyLanguage, browserLanguage, type Language } from './i18n';
 
 interface User {
     id: string;
@@ -7,6 +8,7 @@ interface User {
     role: 'PARENT' | 'CHILD';
     privacy_enabled?: boolean;
     has_allowance: boolean;
+    language: Language;
 }
 
 interface AuthContextType {
@@ -23,13 +25,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
 
+    // The app speaks the person's own language once they are logged in
+    const signedIn = (me: User) => {
+        applyLanguage(me.language);
+        setUser(me);
+    };
+
     useEffect(() => {
         const checkAuth = async () => {
             const token = localStorage.getItem('token');
             if (token) {
                 try {
                     const response = await api.get('/api/v1/me');
-                    setUser(response.data);
+                    signedIn(response.data);
                 } catch {
                     localStorage.removeItem('token');
                 }
@@ -43,18 +51,19 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         const response = await api.post('/api/v1/login', { username, pin });
         localStorage.setItem('token', response.data.access_token);
         const userResponse = await api.get('/api/v1/me');
-        setUser(userResponse.data);
+        signedIn(userResponse.data);
     };
 
     // Reload the current user after their settings change on the server
     const refreshUser = async () => {
         const response = await api.get('/api/v1/me');
-        setUser(response.data);
+        signedIn(response.data);
     };
 
     const logout = () => {
         localStorage.removeItem('token');
         setUser(null);
+        applyLanguage(browserLanguage());
     };
 
     return (

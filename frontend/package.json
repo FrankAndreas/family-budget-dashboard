@@ -4,15 +4,18 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0 && npm run check-texts",
     "preview": "vite preview",
-    "type-check": "tsc -b"
+    "type-check": "tsc -b",
+    "check-texts": "node scripts/check-texts.mjs"
   },
   "dependencies": {
     "axios": "^1.20.0",
     "date-fns": "^4.4.0",
+    "i18next": "26.4.2",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
+    "react-i18next": "17.0.15",
     "react-router-dom": "^7.18.4",
     "recharts": "^3.10.1"
   },
