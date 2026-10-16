@@ -63,7 +63,12 @@ def delete_user(db: Session, user_id: str):
     if not db_user:
         return None
 
-    # SQLite doesn't enforce foreign keys here, so remove the user's data explicitly
+    # Remove the user's data explicitly, children before parents (SQLite enforces the links)
+    # The payments stay on the other parent's account; the settlement records go with the member, first,
+    # because they point to the transactions deleted below
+    db.query(models.Settlement).filter(
+        (models.Settlement.from_user_id == user_id) | (models.Settlement.to_user_id == user_id)
+    ).delete(synchronize_session=False)
     account_ids = [a.id for a in db.query(models.Account.id).filter(models.Account.user_id == user_id)]
     if account_ids:
         db.query(models.Transaction).filter(models.Transaction.account_id.in_(account_ids)).delete(
@@ -80,10 +85,6 @@ def delete_user(db: Session, user_id: str):
     db.query(models.Share).filter((models.Share.owner_id == user_id) | (models.Share.grantee_id == user_id)).delete(
         synchronize_session=False
     )
-    # The payments stay on the other parent's account; the settlement records go with the member
-    db.query(models.Settlement).filter(
-        (models.Settlement.from_user_id == user_id) | (models.Settlement.to_user_id == user_id)
-    ).delete(synchronize_session=False)
     # Splits stop naming the member; parents edit them to add up to 100 again
     for split in db.query(models.Split):
         if user_id in (split.shares or {}):

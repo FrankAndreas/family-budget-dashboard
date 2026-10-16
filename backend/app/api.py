@@ -331,7 +331,7 @@ def update_transaction(
         split_shares = check_shared(db, transaction_update.split_id, db_transaction.account_id, category)
     else:
         split_shares = db_transaction.split_shares
-        if db_transaction.split_id and category.type != models.CategoryType.EXPENSE:
+        if db_transaction.split_shares and category.type != models.CategoryType.EXPENSE:
             raise HTTPException(status_code=400, detail="Only expenses can be shared")
     return crud.update_transaction(db, db_transaction, transaction_update, category, split_shares=split_shares)
 

@@ -157,8 +157,15 @@ def test_three_parents(client, parents, setup):
 
 def test_deleted_split_keeps_balance(client, parents, setup):
     expense = shared(client, parents, setup, 100).json()
-    client.delete(f"{BASE_URL}/splits/{setup['equal']}", headers=parents["mum"])
+    assert client.delete(f"{BASE_URL}/splits/{setup['equal']}", headers=parents["mum"]).status_code == 200
     assert balance_of(client, parents["mum"], parents["mum_id"]) == 50.0
+    # Still a shared expense, with the percentages it was booked with; the deleted split is no longer named
+    [listed] = [
+        e
+        for e in client.get(f"{BASE_URL}/common/expenses", headers=parents["mum"]).json()
+        if e["transaction_id"] == expense["id"]
+    ]
+    assert listed["split_name"] is None and listed["amount"] == 100
     edited = client.put(
         f"{BASE_URL}/transactions/{expense['id']}", json={"description": "Coop"}, headers=parents["mum"]
     )

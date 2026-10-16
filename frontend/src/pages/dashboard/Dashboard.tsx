@@ -31,6 +31,8 @@ interface Transaction {
     category_id: string;
     member_id?: string | null;
     split_id?: string | null;
+    // The percentages a shared expense was booked with (kept when its split is deleted)
+    split_shares?: Record<string, number> | null;
     asset_id?: string | null;
 }
 
@@ -579,7 +581,7 @@ export default function Dashboard() {
                                                             {assetName(transaction.asset_id)}
                                                         </span>
                                                     )}
-                                                    {transaction.split_id && (
+                                                    {(transaction.split_id || transaction.split_shares) && (
                                                         <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300">
                                                             shared
                                                         </span>
