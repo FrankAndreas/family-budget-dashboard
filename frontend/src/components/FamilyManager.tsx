@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import { useFamily } from '../useFamily';
@@ -9,22 +10,15 @@ import { isValidPin } from '../pin';
 
 type MemberType = 'PARENT' | 'ALLOWANCE_CHILD' | 'DEPENDENT_CHILD';
 
-const MEMBER_TYPES: Record<MemberType, string> = {
-    PARENT: 'Parent',
-    ALLOWANCE_CHILD: 'Child with own allowance (Jugendlohn)',
-    DEPENDENT_CHILD: 'Younger child (no own money, no login)'
-};
-
-const describe = (member: FamilyUser) => {
-    if (member.role === 'PARENT') return 'Parent';
-    return member.has_allowance ? 'Own allowance (Jugendlohn)' : 'No own money: costs are household expenses';
-};
+// Labels: family.types.<type> in the locale files
+const MEMBER_TYPES: MemberType[] = ['PARENT', 'ALLOWANCE_CHILD', 'DEPENDENT_CHILD'];
 
 // Everyone who logs in has a PIN; younger children don't log in
 const hasLogin = (member: FamilyUser) => member.role === 'PARENT' || member.has_allowance;
 
 // Parents only: add family members, reset PINs, and switch children between "dependent" and "own allowance"
 export default function FamilyManager() {
+    const { t } = useTranslation();
     const { user, login, refreshUser } = useAuth();
     const { users, reload } = useFamily();
     const [error, setError] = useState('');
@@ -47,6 +41,11 @@ export default function FamilyManager() {
     const [renameMemberId, setRenameMemberId] = useState<string | null>(null);
     const [newMemberName, setNewMemberName] = useState('');
 
+    const describe = (member: FamilyUser) => {
+        if (member.role === 'PARENT') return t('family.parent');
+        return member.has_allowance ? t('family.ownAllowance') : t('family.noOwnMoney');
+    };
+
     const members = [...users].sort((a, b) =>
         a.role === b.role ? a.username.localeCompare(b.username) : a.role === 'PARENT' ? -1 : 1
     );
@@ -61,7 +60,7 @@ export default function FamilyManager() {
         e.preventDefault();
         const name = newName.trim();
         if (newType !== 'DEPENDENT_CHILD' && !isValidPin(newPin)) {
-            setError('The PIN must be exactly 4 digits');
+            setError(t('family.pinDigits'));
             return;
         }
 
@@ -77,10 +76,10 @@ export default function FamilyManager() {
             }
             setNewName('');
             setNewPin('');
-            showResult(newType === 'DEPENDENT_CHILD' ? `Added ${name}.` : `Added ${name}. They can now log in with their PIN.`);
+            showResult(t(newType === 'DEPENDENT_CHILD' ? 'family.added' : 'family.addedWithLogin', { name }));
         } catch (err) {
             setNotice('');
-            setError(errorMessage(err, 'Failed to add family member'));
+            setError(errorMessage(err, t('family.addFailed')));
         }
     };
 
@@ -113,12 +112,12 @@ export default function FamilyManager() {
         try {
             await api.put(`/api/v1/users/${member.id}`, { username: name });
             closeRenameForm();
-            showResult(`Renamed ${member.username} to ${name}.${hasLogin(member) ? ` They log in as ${name} now.` : ''}`);
+            showResult(t(hasLogin(member) ? 'family.renamedWithLogin' : 'family.renamed', { from: member.username, to: name }));
             // The header greets the logged-in user by name
             if (member.id === user?.id) await refreshUser();
         } catch (err) {
             setNotice('');
-            setError(errorMessage(err, 'Failed to rename'));
+            setError(errorMessage(err, t('family.renameFailed')));
         }
     };
 
@@ -138,7 +137,7 @@ export default function FamilyManager() {
     const handlePinSubmit = async (e: React.FormEvent, member: FamilyUser) => {
         e.preventDefault();
         if (!isValidPin(memberPin)) {
-            setError('The PIN must be exactly 4 digits');
+            setError(t('family.pinDigits'));
             return;
         }
 
@@ -148,34 +147,28 @@ export default function FamilyManager() {
             // A new PIN ends all logins of that person; your own: log in again here with the new PIN
             if (member.id === user?.id) await login(member.username, memberPin);
             closePinForm();
-            showResult(pinAction === 'allowance'
-                ? `${member.username} now has an own allowance and logs in with the new PIN.`
-                : `PIN for ${member.username} changed.`);
+            showResult(t(pinAction === 'allowance' ? 'family.allowanceGiven' : 'family.pinChanged', { name: member.username }));
         } catch (err) {
             setNotice('');
-            setError(errorMessage(err, 'Failed to save the PIN'));
+            setError(errorMessage(err, t('family.pinFailed')));
         }
     };
 
     const handleRemoveAllowance = async (member: FamilyUser) => {
-        if (!confirm(`${member.username} will no longer have own money. Their expenses become household expenses. Continue?`)) return;
+        if (!confirm(t('family.confirmRemoveAllowance', { name: member.username }))) return;
         try {
             await api.put(`/api/v1/users/${member.id}`, { has_allowance: false });
-            showResult(`${member.username} no longer has an own allowance.`);
+            showResult(t('family.allowanceRemoved', { name: member.username }));
         } catch (err) {
             setNotice('');
-            setError(errorMessage(err, 'Failed to update child'));
+            setError(errorMessage(err, t('family.updateFailed')));
         }
     };
 
     return (
         <div className="glass-card p-6">
-            <h2 className="text-2xl font-bold mb-2">Family</h2>
-            <p className="text-slate-400 mb-6 text-sm">
-                Parents add everyone here; there is no sign-up page. Younger children have no money of their own: their
-                costs are household expenses you can tag with them. Once a child gets an own allowance (Jugendlohn), they
-                log in with a PIN and manage their own accounts and budgets.
-            </p>
+            <h2 className="text-2xl font-bold mb-2">{t('family.title')}</h2>
+            <p className="text-slate-400 mb-6 text-sm">{t('family.intro')}</p>
 
             {(error || notice) && (
                 <div className={`mb-4 p-3 rounded-lg flex justify-between items-center border ${error
@@ -183,7 +176,7 @@ export default function FamilyManager() {
                     : 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
                     }`}>
                     <span>{error || notice}</span>
-                    <button onClick={() => { setError(''); setNotice(''); }} className="hover:text-white" aria-label="Dismiss message">✕</button>
+                    <button onClick={() => { setError(''); setNotice(''); }} className="hover:text-white" aria-label={t('family.dismiss')}>✕</button>
                 </div>
             )}
 
@@ -194,33 +187,33 @@ export default function FamilyManager() {
                             <div>
                                 <h3 className="font-semibold">
                                     {member.username}
-                                    {member.id === user?.id && <span className="ml-2 text-xs font-normal text-slate-400">(you)</span>}
+                                    {member.id === user?.id && <span className="ml-2 text-xs font-normal text-slate-400">{t('family.you')}</span>}
                                 </h3>
                                 <p className="text-sm text-slate-400">{describe(member)}</p>
                             </div>
                             {pinMemberId !== member.id && renameMemberId !== member.id && removeMemberId !== member.id && (
                                 <div className="flex gap-3 text-sm">
                                     <button onClick={() => openRenameForm(member)} className="text-slate-400 hover:text-white">
-                                        Rename
+                                        {t('family.rename')}
                                     </button>
                                     {hasLogin(member) && (
                                         <button onClick={() => openPinForm(member, 'reset')} className="text-slate-400 hover:text-white">
-                                            {member.id === user?.id ? 'Change my PIN' : 'Reset PIN'}
+                                            {member.id === user?.id ? t('family.changeMyPin') : t('family.resetPin')}
                                         </button>
                                     )}
                                     {member.role === 'CHILD' && member.has_allowance && (
                                         <button onClick={() => handleRemoveAllowance(member)} className="text-slate-400 hover:text-white">
-                                            Remove allowance
+                                            {t('family.removeAllowance')}
                                         </button>
                                     )}
                                     {member.role === 'CHILD' && !member.has_allowance && (
                                         <button onClick={() => openPinForm(member, 'allowance')} className="btn-primary text-sm">
-                                            Give own allowance
+                                            {t('family.giveAllowance')}
                                         </button>
                                     )}
                                     {member.id !== user?.id && (
                                         <button onClick={() => openRemoveForm(member)} className="text-slate-400 hover:text-red-400">
-                                            Remove
+                                            {t('family.remove')}
                                         </button>
                                     )}
                                 </div>
@@ -237,7 +230,7 @@ export default function FamilyManager() {
 
                         {renameMemberId === member.id && (
                             <form onSubmit={(e) => handleRename(e, member)} className="mt-3 flex flex-col gap-2 sm:flex-row">
-                                <label htmlFor={`name-${member.id}`} className="sr-only">New name for {member.username}</label>
+                                <label htmlFor={`name-${member.id}`} className="sr-only">{t('family.newNameFor', { name: member.username })}</label>
                                 <input
                                     id={`name-${member.id}`}
                                     type="text"
@@ -248,9 +241,9 @@ export default function FamilyManager() {
                                     className="flex-1 p-3 rounded-lg bg-slate-800/50 border border-slate-600 text-white focus:outline-none focus:border-blue-400"
                                 />
                                 <div className="flex gap-2">
-                                    <button type="submit" className="btn-primary text-sm" disabled={!newMemberName.trim()}>Save</button>
+                                    <button type="submit" className="btn-primary text-sm" disabled={!newMemberName.trim()}>{t('common.save')}</button>
                                     <button type="button" onClick={closeRenameForm} className="px-3 text-slate-400 hover:text-white text-sm">
-                                        Cancel
+                                        {t('common.cancel')}
                                     </button>
                                 </div>
                             </form>
@@ -259,19 +252,19 @@ export default function FamilyManager() {
                         {pinMemberId === member.id && (
                             <form onSubmit={(e) => handlePinSubmit(e, member)} className="mt-3 flex flex-col gap-2 sm:flex-row">
                                 <div className="flex-1">
-                                    <label htmlFor={`pin-${member.id}`} className="sr-only">New PIN for {member.username}</label>
+                                    <label htmlFor={`pin-${member.id}`} className="sr-only">{t('family.newPinFor', { name: member.username })}</label>
                                     <PinInput
                                         id={`pin-${member.id}`}
                                         value={memberPin}
                                         onChange={setMemberPin}
-                                        placeholder={pinAction === 'allowance' ? 'PIN for logging in (4 digits)' : 'New PIN (4 digits)'}
+                                        placeholder={pinAction === 'allowance' ? t('family.pinForLogin') : t('family.newPin')}
                                         autoComplete="new-password"
                                     />
                                 </div>
                                 <div className="flex gap-2">
-                                    <button type="submit" className="btn-primary text-sm" disabled={!isValidPin(memberPin)}>Save</button>
+                                    <button type="submit" className="btn-primary text-sm" disabled={!isValidPin(memberPin)}>{t('common.save')}</button>
                                     <button type="button" onClick={closePinForm} className="px-3 text-slate-400 hover:text-white text-sm">
-                                        Cancel
+                                        {t('common.cancel')}
                                     </button>
                                 </div>
                             </form>
@@ -280,41 +273,41 @@ export default function FamilyManager() {
                 ))}
             </div>
 
-            <h3 className="text-lg font-semibold mb-3">Add a family member</h3>
+            <h3 className="text-lg font-semibold mb-3">{t('family.addMember')}</h3>
             <form onSubmit={handleAdd} className="space-y-3">
                 <div className="flex flex-col gap-1.5">
-                    <label htmlFor="new-member-name" className="text-sm font-semibold text-slate-300">Name</label>
+                    <label htmlFor="new-member-name" className="text-sm font-semibold text-slate-300">{t('family.name')}</label>
                     <input
                         id="new-member-name"
                         type="text"
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
-                        placeholder="Name they log in with"
+                        placeholder={t('family.namePlaceholder')}
                         className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-600 text-white placeholder-slate-500 focus:outline-none focus:border-blue-400"
                         required
                     />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                    <label htmlFor="new-member-type" className="text-sm font-semibold text-slate-300">Type</label>
+                    <label htmlFor="new-member-type" className="text-sm font-semibold text-slate-300">{t('family.type')}</label>
                     <select
                         id="new-member-type"
                         value={newType}
                         onChange={(e) => setNewType(e.target.value as MemberType)}
                         className="w-full p-3 rounded-lg bg-slate-800/50 border border-slate-600 text-white"
                     >
-                        {(Object.keys(MEMBER_TYPES) as MemberType[]).map(type => (
-                            <option key={type} value={type}>{MEMBER_TYPES[type]}</option>
+                        {MEMBER_TYPES.map(type => (
+                            <option key={type} value={type}>{t(`family.types.${type}`)}</option>
                         ))}
                     </select>
                 </div>
                 {newType !== 'DEPENDENT_CHILD' && (
                     <div className="flex flex-col gap-1.5">
-                        <label htmlFor="new-member-pin" className="text-sm font-semibold text-slate-300">PIN</label>
+                        <label htmlFor="new-member-pin" className="text-sm font-semibold text-slate-300">{t('family.pin')}</label>
                         <PinInput id="new-member-pin" value={newPin} onChange={setNewPin} autoComplete="new-password" />
-                        <small className="text-slate-500">Tell them their PIN; they log in with their name and this PIN.</small>
+                        <small className="text-slate-500">{t('family.pinHint')}</small>
                     </div>
                 )}
-                <button type="submit" className="btn-primary w-full">+ Add {newType === 'PARENT' ? 'Parent' : 'Child'}</button>
+                <button type="submit" className="btn-primary w-full">{newType === 'PARENT' ? t('family.addParent') : t('family.addChild')}</button>
             </form>
         </div>
     );

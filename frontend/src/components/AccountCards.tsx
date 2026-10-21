@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import { money } from '../finance';
@@ -25,6 +26,7 @@ const field = 'w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-w
 export default function AccountCards({
     accounts, transactionCount, selectedAccount, onSelect, ownerOf, canEdit, onChanged, onDeleted, onError
 }: Props) {
+    const { t } = useTranslation();
     const { user } = useAuth();
     const [showAddAccount, setShowAddAccount] = useState(false);
     const [newAccountName, setNewAccountName] = useState('');
@@ -44,7 +46,7 @@ export default function AccountCards({
             onChanged();
         } catch (error) {
             console.error('Failed to create account', error);
-            onError(errorMessage(error, 'Failed to create account'));
+            onError(errorMessage(error, t('accounts.createFailed')));
         }
     };
 
@@ -57,18 +59,18 @@ export default function AccountCards({
             onChanged();
         } catch (error) {
             console.error('Failed to update account', error);
-            onError(errorMessage(error, 'Failed to update account'));
+            onError(errorMessage(error, t('accounts.updateFailed')));
         }
     };
 
     const handleDeleteAccount = async (account: Account) => {
-        if (!confirm(`Delete account "${account.name}" and all its transactions? This cannot be undone.`)) return;
+        if (!confirm(t('accounts.confirmDelete', { name: account.name }))) return;
         try {
             await api.delete(`/api/v1/accounts/${account.id}`);
             onDeleted(account.id);
         } catch (error) {
             console.error('Failed to delete account', error);
-            onError(errorMessage(error, 'Failed to delete account'));
+            onError(errorMessage(error, t('accounts.deleteFailed')));
         }
     };
 
@@ -77,15 +79,15 @@ export default function AccountCards({
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="glass-card p-6">
-                    <h3 className="text-emerald-400 text-lg font-semibold mb-2">My Balance</h3>
+                    <h3 className="text-emerald-400 text-lg font-semibold mb-2">{t('accounts.myBalance')}</h3>
                     <p className="text-3xl font-bold">{money(totalBalance)}</p>
                 </div>
                 <div className="glass-card p-6">
-                    <h3 className="text-sky-400 text-lg font-semibold mb-2">Accounts</h3>
+                    <h3 className="text-sky-400 text-lg font-semibold mb-2">{t('accounts.title')}</h3>
                     <p className="text-3xl font-bold">{accounts.length}</p>
                 </div>
                 <div className="glass-card p-6">
-                    <h3 className="text-indigo-400 text-lg font-semibold mb-2">Transactions in Selected Account</h3>
+                    <h3 className="text-indigo-400 text-lg font-semibold mb-2">{t('accounts.transactionsInSelected')}</h3>
                     <p className="text-3xl font-bold">{transactionCount}</p>
                 </div>
             </div>
@@ -93,9 +95,9 @@ export default function AccountCards({
             {/* Accounts Section */}
             <div className="glass-card p-6">
                 <div className="flex justify-between items-center mb-4">
-                    <h2 className="text-xl font-bold">Accounts</h2>
+                    <h2 className="text-xl font-bold">{t('accounts.title')}</h2>
                     <button onClick={() => setShowAddAccount(!showAddAccount)} className="btn-primary text-sm">
-                        + Add Account
+                        {t('accounts.add')}
                     </button>
                 </div>
 
@@ -103,16 +105,16 @@ export default function AccountCards({
                     <form onSubmit={handleAddAccount} className="mb-4 p-4 bg-slate-800/30 rounded-lg">
                         <input
                             type="text"
-                            placeholder="Account Name"
+                            placeholder={t('accounts.namePlaceholder')}
                             value={newAccountName}
                             onChange={(e) => setNewAccountName(e.target.value)}
                             className={`${field} mb-2`}
                             required
                         />
                         <select value={newAccountType} onChange={(e) => setNewAccountType(e.target.value)} className={`${field} mb-2`}>
-                            {ACCOUNT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                            {ACCOUNT_TYPES.map(type => <option key={type} value={type}>{t(`accounts.types.${type}`)}</option>)}
                         </select>
-                        <button type="submit" className="btn-primary w-full">Create Account</button>
+                        <button type="submit" className="btn-primary w-full">{t('accounts.create')}</button>
                     </form>
                 )}
 
@@ -133,21 +135,21 @@ export default function AccountCards({
                                         value={editingAccount.name}
                                         onChange={(e) => setEditingAccount({ ...editingAccount, name: e.target.value })}
                                         className={field}
-                                        aria-label="Account name"
+                                        aria-label={t('accounts.name')}
                                         required
                                     />
                                     <select
                                         value={editingAccount.type}
                                         onChange={(e) => setEditingAccount({ ...editingAccount, type: e.target.value })}
                                         className={field}
-                                        aria-label="Account type"
+                                        aria-label={t('accounts.type')}
                                     >
-                                        {ACCOUNT_TYPES.map(t => <option key={t.value} value={t.value}>{t.label}</option>)}
+                                        {ACCOUNT_TYPES.map(type => <option key={type} value={type}>{t(`accounts.types.${type}`)}</option>)}
                                     </select>
                                     <div className="flex gap-2">
-                                        <button type="submit" className="btn-primary text-sm flex-1">Save</button>
+                                        <button type="submit" className="btn-primary text-sm flex-1">{t('common.save')}</button>
                                         <button type="button" onClick={() => setEditingAccount(null)} className="px-3 text-sm text-slate-400 hover:text-white">
-                                            Cancel
+                                            {t('common.cancel')}
                                         </button>
                                     </div>
                                 </form>
@@ -155,10 +157,10 @@ export default function AccountCards({
                                 <h3 className="font-semibold text-lg">{account.name}</h3>
                                 {account.user_id !== user?.id && ownerOf(account) && (
                                     <p className="text-xs text-slate-500">
-                                        {ownerOf(account)!.username}{ownerOf(account)!.role === 'CHILD' ? ' (own allowance)' : ''}
+                                        {ownerOf(account)!.username}{ownerOf(account)!.role === 'CHILD' ? t('accounts.ownAllowance') : ''}
                                     </p>
                                 )}
-                                <p className="text-sm text-slate-400">{account.type}</p>
+                                <p className="text-sm text-slate-400">{t(`accounts.types.${account.type as typeof ACCOUNT_TYPES[number]}`)}</p>
                                 <div className="flex justify-between items-end mt-2">
                                     <p className="text-2xl font-bold">{money(account.balance)}</p>
                                     {canEdit(account) && (
@@ -169,9 +171,9 @@ export default function AccountCards({
                                                     setEditingAccount({ id: account.id, name: account.name, type: account.type });
                                                 }}
                                                 className="text-sm text-slate-500 hover:text-blue-400 transition-colors"
-                                                title="Edit account"
+                                                title={t('accounts.editTitle')}
                                             >
-                                                Edit
+                                                {t('common.edit')}
                                             </button>
                                             <button
                                                 onClick={(e) => {
@@ -179,9 +181,9 @@ export default function AccountCards({
                                                     handleDeleteAccount(account);
                                                 }}
                                                 className="text-sm text-slate-500 hover:text-red-400 transition-colors"
-                                                title="Delete account"
+                                                title={t('accounts.deleteTitle')}
                                             >
-                                                Delete
+                                                {t('common.delete')}
                                             </button>
                                         </div>
                                     )}

@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import type { Scope } from '../family';
 
 interface ScopeSelectorProps {
@@ -8,6 +9,7 @@ interface ScopeSelectorProps {
 
 // Switch between the household and children with own allowance; hidden when there is nothing to choose
 export default function ScopeSelector({ scopes, value, onChange }: ScopeSelectorProps) {
+    const { t } = useTranslation();
     if (scopes.length <= 1) return null;
 
     return (
@@ -15,7 +17,7 @@ export default function ScopeSelector({ scopes, value, onChange }: ScopeSelector
             value={value}
             onChange={(e) => onChange(e.target.value)}
             className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-            aria-label="Whose money to show"
+            aria-label={t('scopes.label')}
         >
             {scopes.map(scope => (
                 <option key={scope.key} value={scope.key}>{scope.label}</option>

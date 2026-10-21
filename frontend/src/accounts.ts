@@ -30,9 +30,5 @@ export interface Category {
     system_key?: string | null;
 }
 
-export const ACCOUNT_TYPES = [
-    { value: 'BANK', label: 'Bank Account' },
-    { value: 'CASH', label: 'Cash' },
-    { value: 'SAVINGS', label: 'Savings' },
-    { value: 'CLEARING', label: 'Clearing (Migros, …)' },
-];
+// Labels: accounts.types.<value> in the locale files
+export const ACCOUNT_TYPES = ['BANK', 'CASH', 'SAVINGS', 'CLEARING'] as const;

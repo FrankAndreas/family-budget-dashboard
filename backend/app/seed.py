@@ -4,7 +4,7 @@ import secrets
 from typing import Optional
 
 from sqlalchemy.orm import Session
-from . import auth, models
+from . import auth, i18n, models
 
 # Fixed keys of the categories the code needs (categories.system_key); their names can't change
 TRANSFER = "TRANSFER"
@@ -13,28 +13,29 @@ UNSORTED = "UNSORTED"
 UNKNOWN_EXPENSE = "UNKNOWN_EXPENSE"
 OTHER_INCOME = "OTHER_INCOME"
 
+# "de": the name a new German install gets (DEFAULT_LANGUAGE); the 🔒 ones are translated when shown (i18n.py)
 DEFAULT_CATEGORIES = [
     # Income categories
-    {"name": "Salary", "type": "INCOME", "icon": "💰"},
-    {"name": "Freelance", "type": "INCOME", "icon": "💼"},
-    {"name": "Investment", "type": "INCOME", "icon": "📈"},
-    {"name": "Gift", "type": "INCOME", "icon": "🎁"},
+    {"name": "Salary", "de": "Lohn", "type": "INCOME", "icon": "💰"},
+    {"name": "Freelance", "de": "Nebenerwerb", "type": "INCOME", "icon": "💼"},
+    {"name": "Investment", "de": "Kapitalertrag", "type": "INCOME", "icon": "📈"},
+    {"name": "Gift", "de": "Geschenk", "type": "INCOME", "icon": "🎁"},
     # Also the month check's booking when receipts exceed the money, and the income fallback of imports
     {"name": "Other Income", "type": "INCOME", "icon": "💵", "system_key": OTHER_INCOME},
     # Expense categories
-    {"name": "Groceries", "type": "EXPENSE", "icon": "🛒"},
-    {"name": "Rent", "type": "EXPENSE", "icon": "🏠"},
-    {"name": "Utilities", "type": "EXPENSE", "icon": "💡"},
-    {"name": "Transportation", "type": "EXPENSE", "icon": "🚗"},
-    {"name": "Entertainment", "type": "EXPENSE", "icon": "🎬"},
-    {"name": "Healthcare", "type": "EXPENSE", "icon": "🏥"},
-    {"name": "Education", "type": "EXPENSE", "icon": "📚"},
-    {"name": "Clothing", "type": "EXPENSE", "icon": "👕"},
-    {"name": "Dining Out", "type": "EXPENSE", "icon": "🍽️"},
-    {"name": "Other Expense", "type": "EXPENSE", "icon": "💸"},
+    {"name": "Groceries", "de": "Lebensmittel", "type": "EXPENSE", "icon": "🛒"},
+    {"name": "Rent", "de": "Miete", "type": "EXPENSE", "icon": "🏠"},
+    {"name": "Utilities", "de": "Nebenkosten", "type": "EXPENSE", "icon": "💡"},
+    {"name": "Transportation", "de": "Mobilität", "type": "EXPENSE", "icon": "🚗"},
+    {"name": "Entertainment", "de": "Freizeit", "type": "EXPENSE", "icon": "🎬"},
+    {"name": "Healthcare", "de": "Gesundheit", "type": "EXPENSE", "icon": "🏥"},
+    {"name": "Education", "de": "Bildung", "type": "EXPENSE", "icon": "📚"},
+    {"name": "Clothing", "de": "Kleidung", "type": "EXPENSE", "icon": "👕"},
+    {"name": "Dining Out", "de": "Auswärts essen", "type": "EXPENSE", "icon": "🍽️"},
+    {"name": "Other Expense", "de": "Übrige Ausgaben", "type": "EXPENSE", "icon": "💸"},
     # Fallbacks for imported bookings no rule recognised, and money paid back by others
     {"name": "Unsorted", "type": "EXPENSE", "icon": "❓", "system_key": UNSORTED},
-    {"name": "Reimbursements", "type": "INCOME", "icon": "↩️"},
+    {"name": "Reimbursements", "de": "Rückerstattungen", "type": "INCOME", "icon": "↩️"},
     # The month check's booking for money on a clearing account without receipts
     {"name": "Unknown expense", "type": "EXPENSE", "icon": "🫥", "system_key": UNKNOWN_EXPENSE},
     # Booked only by settling up in the common budget
@@ -49,8 +50,12 @@ def seed_categories(db: Session) -> int:
     a renamed or deleted default doesn't come back. Returns how many were created."""
     created = 0
     if db.query(models.Category).count() == 0:
+        german = i18n.default_language() == "de"
         for cat_data in DEFAULT_CATEGORIES:
-            db.add(models.Category(**cat_data, is_global=True))
+            columns = {k: v for k, v in cat_data.items() if k != "de"}
+            if german and "de" in cat_data:
+                columns["name"] = cat_data["de"]
+            db.add(models.Category(**columns, is_global=True))
         created = len(DEFAULT_CATEGORIES)
     else:
         for cat_data in (c for c in DEFAULT_CATEGORIES if c.get("system_key")):

@@ -18,6 +18,8 @@ export default defineConfig({
         baseURL: FRONTEND,
         ...devices['Desktop Chrome'],
         viewport: { width: 1280, height: 1000 },
+        // The tests find elements by their English texts (one test switches to German itself)
+        locale: 'en-US',
         trace: 'retain-on-failure',
         screenshot: 'only-on-failure',
     },
@@ -31,6 +33,7 @@ export default defineConfig({
                 INITIAL_ADMIN_PIN: '1111',
                 SECRET_KEY: 'e2e-only',
                 CORS_ORIGINS: FRONTEND,
+                DEFAULT_LANGUAGE: 'en',
             },
             reuseExistingServer: false,
             timeout: 60_000,

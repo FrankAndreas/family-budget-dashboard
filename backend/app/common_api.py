@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import auth, crud, database, finance, models, privacy, schemas
+from . import auth, crud, database, finance, models, privacy, schemas, messages
 from .seed import SETTLE_UP, system_category
 
 router = APIRouter()
@@ -17,26 +17,26 @@ MAX_SPLITS = 4
 
 def require_parent(current_user: models.User = Depends(auth.get_current_user_from_token)) -> models.User:
     if current_user.role != models.UserRole.PARENT:
-        raise HTTPException(status_code=403, detail="Only parents can use the common budget")
+        raise messages.api_error(403, "common_parents_only")
     return current_user
 
 
 def get_split(db: Session, split_id: str) -> models.Split:
     split = db.query(models.Split).filter(models.Split.id == split_id).first()
     if not split:
-        raise HTTPException(status_code=400, detail="Split not found")
+        raise messages.api_error(400, "split_not_found")
     return split
 
 
 def validate_split(db: Session, split: schemas.SplitIn, split_id: Optional[str] = None) -> None:
     parent_ids = {p.id for p in privacy.active_parents(db)}
     if set(split.shares) != parent_ids:
-        raise HTTPException(status_code=400, detail="Give every parent a percentage")
+        raise messages.api_error(400, "split_every_parent")
     if sum(split.shares.values()) != 100:
-        raise HTTPException(status_code=400, detail="The percentages must add up to 100")
+        raise messages.api_error(400, "split_sum_100")
     same_name = db.query(models.Split).filter(models.Split.name == split.name, models.Split.id != split_id).first()
     if same_name:
-        raise HTTPException(status_code=400, detail="A split with that name already exists")
+        raise messages.api_error(400, "split_name_taken")
 
 
 @router.get("/splits", response_model=List[schemas.Split])
@@ -49,7 +49,7 @@ def create_split(
     split: schemas.SplitIn, _: models.User = Depends(require_parent), db: Session = Depends(database.get_db)
 ):
     if db.query(models.Split).count() >= MAX_SPLITS:
-        raise HTTPException(status_code=400, detail=f"At most {MAX_SPLITS} splits")
+        raise messages.api_error(400, "max_splits", count=MAX_SPLITS)
     validate_split(db, split)
     db_split = models.Split(name=split.name, shares=split.shares)
     db.add(db_split)
@@ -81,9 +81,7 @@ def delete_split(split_id: str, _: models.User = Depends(require_parent), db: Se
         for model in (models.PlannedCost, models.Asset, models.Wish)
     )
     if in_use:
-        raise HTTPException(
-            status_code=409, detail="In use by a planned cost, investment or wish; change or delete it first"
-        )
+        raise messages.api_error(409, "split_in_use")
     # Shared expenses keep the percentages they were booked with (split_shares); only the link goes
     db.query(models.Transaction).filter(models.Transaction.split_id == split_id).update(
         {models.Transaction.split_id: None}, synchronize_session=False
@@ -142,7 +140,7 @@ def common_expenses(_: models.User = Depends(require_parent), db: Session = Depe
 def parent_account(db: Session, account_id: str, user_id: str) -> models.Account:
     account = crud.get_account(db, account_id)
     if not account or account.user_id != user_id:
-        raise HTTPException(status_code=400, detail="Pick an account of each parent")
+        raise messages.api_error(400, "settle_pick_accounts")
     return account
 
 
@@ -161,7 +159,7 @@ def create_settlement(
     parent_ids = {p.id for p in db.query(models.User.id).filter(models.User.role == models.UserRole.PARENT)}
     between = {settlement.from_user_id, settlement.to_user_id}
     if settlement.from_user_id == settlement.to_user_id or not between <= parent_ids:
-        raise HTTPException(status_code=400, detail="Settling up is between two parents")
+        raise messages.api_error(400, "settle_two_parents")
     from_account = parent_account(db, settlement.from_account_id, settlement.from_user_id)
     to_account = parent_account(db, settlement.to_account_id, settlement.to_user_id)
     category = system_category(db, SETTLE_UP)
@@ -196,7 +194,7 @@ def delete_settlement(
 ):
     db_settlement = db.query(models.Settlement).filter(models.Settlement.id == settlement_id).first()
     if not db_settlement:
-        raise HTTPException(status_code=404, detail="Settlement not found")
+        raise messages.api_error(404, "settlement_not_found")
     transaction_ids = (db_settlement.from_transaction_id, db_settlement.to_transaction_id)
     # The record points to its two transactions, so it goes first
     db.delete(db_settlement)
@@ -226,11 +224,11 @@ def visible_owner(
 
 def check_owner(db: Session, current_user: models.User, owner_id: Optional[str], split_id: Optional[str]) -> None:
     if bool(owner_id) == bool(split_id):
-        raise HTTPException(status_code=400, detail="Choose either an owner or a split")
+        raise messages.api_error(400, "owner_or_split")
     if split_id:
         get_split(db, split_id)
     elif not visible_owner(db, current_user, owner_id, None, write=True):
-        raise HTTPException(status_code=403, detail="You can't manage that person's items")
+        raise messages.api_error(403, "cant_manage_items")
 
 
 def monthly_shares(db: Session, monthly: float, owner_id: Optional[str], split_id: Optional[str]) -> dict[str, float]:
@@ -259,17 +257,17 @@ def planned_cost_out(db: Session, cost: models.PlannedCost) -> dict:
 def validate_planned_cost(db: Session, current_user: models.User, cost: schemas.PlannedCostIn) -> None:
     check_owner(db, current_user, cost.owner_id, cost.split_id)
     if cost.frequency == "YEARLY" and not cost.due_month:
-        raise HTTPException(status_code=400, detail="Choose the month the bill is due")
+        raise messages.api_error(400, "bill_due_month")
     if cost.frequency == "MONTHLY" and not cost.split_id:
-        raise HTTPException(status_code=400, detail="Monthly planned costs are common costs; choose a split")
+        raise messages.api_error(400, "monthly_costs_need_split")
     if not db.query(models.Category).filter(models.Category.id == cost.category_id).first():
-        raise HTTPException(status_code=400, detail="Category not found")
+        raise messages.api_error(400, "category_not_found")
 
 
 def get_planned_cost(db: Session, current_user: models.User, cost_id: str, write: bool = False) -> models.PlannedCost:
     cost = db.query(models.PlannedCost).filter(models.PlannedCost.id == cost_id).first()
     if not cost or not visible_owner(db, current_user, cost.owner_id, cost.split_id, write):
-        raise HTTPException(status_code=404, detail="Planned cost not found")
+        raise messages.api_error(404, "planned_cost_not_found")
     return cost
 
 
@@ -360,7 +358,7 @@ def asset_out(db: Session, asset: models.Asset) -> dict:
 def get_asset(db: Session, current_user: models.User, asset_id: str, write: bool = False) -> models.Asset:
     asset = db.query(models.Asset).filter(models.Asset.id == asset_id).first()
     if not asset or not visible_owner(db, current_user, asset.owner_id, asset.split_id, write):
-        raise HTTPException(status_code=404, detail="Investment not found")
+        raise messages.api_error(404, "investment_not_found")
     return asset
 
 
@@ -466,7 +464,7 @@ def apply_item_decisions(db: Session, user_id: str, decisions: list[schemas.Item
     decided = {(d.kind, d.id): d.to for d in decisions if (d.kind, d.id) in owned}
     undecided = [item for item in owned_items(db, user_id) if (item["kind"], item["id"]) not in decided]
     if undecided:
-        raise HTTPException(status_code=409, detail={"message": "Decide where their items go", "items": undecided})
+        raise HTTPException(status_code=409, detail={"message": messages.text("decide_items"), "items": undecided})
     # Only yearly bills and investments have an owner (monthly planned costs are always common)
     for target in decided.values():
         kind, _, target_id = target.partition(":")
@@ -480,7 +478,7 @@ def apply_item_decisions(db: Session, user_id: str, decisions: list[schemas.Item
             )
         )
         if not valid:
-            raise HTTPException(status_code=400, detail=f"Can't move an item to {target}")
+            raise messages.api_error(400, "cant_move_item", target=target)
     for (kind, item_id), target in decided.items():
         item = find_item(db, kind, item_id)
         if target == "delete":

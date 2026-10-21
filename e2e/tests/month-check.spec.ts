@@ -13,7 +13,8 @@ test('month check books the gap of a clearing account', async ({ page, request }
     await page.getByPlaceholder('Account Name').fill('Migros');
     await page.locator('form select').selectOption('CLEARING');
     await page.getByRole('button', { name: 'Create Account' }).click();
-    await expect(page.getByText('CLEARING', { exact: true })).toBeVisible();
+    // The card shows the account type by its name in the person's language (#50)
+    await expect(page.getByText('Clearing (Migros, …)', { exact: true })).toBeVisible();
 
     const accounts = await call(request, parent, 'GET', '/accounts');
     const migros = accounts.find((a: { name: string }) => a.name === 'Migros');

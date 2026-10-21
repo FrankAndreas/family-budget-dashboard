@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { PIN_LENGTH } from '../pin';
 
 interface PinInputProps {
@@ -17,10 +18,11 @@ export default function PinInput({
     value,
     onChange,
     onBlur,
-    placeholder = '4-digit PIN',
+    placeholder,
     hasError = false,
     autoComplete = 'current-password',
 }: PinInputProps) {
+    const { t } = useTranslation();
     const [showPin, setShowPin] = useState(false);
 
     return (
@@ -36,7 +38,7 @@ export default function PinInput({
                     if (/^\d*$/.test(e.target.value)) onChange(e.target.value);
                 }}
                 onBlur={onBlur}
-                placeholder={placeholder}
+                placeholder={placeholder ?? t('pin.placeholder')}
                 aria-invalid={hasError}
                 className={`w-full p-3 pr-12 rounded-lg bg-slate-800/50 border text-white tracking-widest placeholder:tracking-normal placeholder-slate-500 focus:outline-none ${
                     hasError ? 'border-red-400 focus:border-red-400' : 'border-slate-600 focus:border-blue-400'
@@ -45,7 +47,7 @@ export default function PinInput({
             <button
                 type="button"
                 onClick={() => setShowPin(!showPin)}
-                aria-label={showPin ? 'Hide PIN' : 'Show PIN'}
+                aria-label={showPin ? t('pin.hide') : t('pin.show')}
                 className="absolute inset-y-0 right-0 px-3 text-lg text-slate-400 hover:text-white"
             >
                 {showPin ? '🙈' : '👁️'}

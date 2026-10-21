@@ -16,6 +16,7 @@ from . import (
     import_rules,
     reports,
     categories_api,
+    i18n,
 )
 from .seed import seed_admin, seed_categories
 
@@ -34,7 +35,11 @@ if initial_pin:
     )
 
 app = FastAPI(
-    title="Family Budget Dashboard API", description="Backend for the Family Budget Dashboard", version="0.1.0"
+    title="Family Budget Dashboard API",
+    description="Backend for the Family Budget Dashboard",
+    version="0.1.0",
+    # Every request starts in the browser's language; a checked login switches to the person's own
+    dependencies=[Depends(i18n.language_from_header)],
 )
 
 app.include_router(api.router, prefix="/api/v1")

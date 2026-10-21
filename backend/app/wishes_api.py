@@ -6,11 +6,11 @@ Who sees and changes a wish follows the rules for its owner's money; common wish
 from datetime import date
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import auth, database, finance, models, privacy, schemas
+from . import auth, database, finance, models, privacy, schemas, messages
 from .common_api import get_split
 
 router = APIRouter()
@@ -61,21 +61,21 @@ def wish_out(db: Session, user: models.User, wish: models.Wish) -> dict:
 def get_wish(db: Session, user: models.User, wish_id: str, write: bool = False) -> models.Wish:
     wish = db.query(models.Wish).filter(models.Wish.id == wish_id).first()
     if not wish or not can_see(db, user, wish.owner_id, wish.split_id):
-        raise HTTPException(status_code=404, detail="Wish not found")
+        raise messages.api_error(404, "wish_not_found")
     if write and not can_see(db, user, wish.owner_id, wish.split_id, write=True):
-        raise HTTPException(status_code=403, detail="You can't change this wish")
+        raise messages.api_error(403, "cant_change_wish")
     return wish
 
 
 def check_owner(db: Session, user: models.User, wish: schemas.WishIn) -> None:
     if bool(wish.owner_id) == bool(wish.split_id):
-        raise HTTPException(status_code=400, detail="Choose either an owner or a split")
+        raise messages.api_error(400, "owner_or_split")
     if wish.split_id:
         if not is_parent(user):
-            raise HTTPException(status_code=403, detail="Only parents can add common wishes")
+            raise messages.api_error(403, "common_wish_parents_only")
         get_split(db, wish.split_id)
     elif not can_see(db, user, wish.owner_id, None, write=True):
-        raise HTTPException(status_code=403, detail="You can't manage that person's wishes")
+        raise messages.api_error(403, "cant_manage_wishes")
 
 
 def same_owner(owner_id: Optional[str], split_id: Optional[str]):
@@ -147,7 +147,7 @@ def delete_wish(
 
 def require_parent(user: models.User) -> None:
     if not is_parent(user):
-        raise HTTPException(status_code=403, detail="Only parents have a family plan")
+        raise messages.api_error(403, "family_plan_parents_only")
 
 
 @router.get("/wishes/family-plan", response_model=List[schemas.FamilyPlanRow])
@@ -177,10 +177,10 @@ def move_wish(
     # The own list needs the right to change the owner's wishes; the family plan is decided by all parents
     wish = get_wish(db, current_user, wish_id, write=not family)
     if wish.bought_on:
-        raise HTTPException(status_code=400, detail="Bought wishes can't be moved")
+        raise messages.api_error(400, "bought_wish_fixed")
     key = "family_position" if family else "position"
     if family and wish.family_position is None:
-        raise HTTPException(status_code=400, detail="Not in the family plan")
+        raise messages.api_error(400, "not_in_family_plan")
     query = db.query(models.Wish).filter(models.Wish.id != wish.id, models.Wish.bought_on.is_(None))
     if family:
         query = query.filter(models.Wish.family_position.isnot(None))
@@ -225,7 +225,7 @@ def remove_from_family_plan(
     require_parent(current_user)
     wish = get_wish(db, current_user, wish_id, write=True)
     if wish.split_id:
-        raise HTTPException(status_code=400, detail="Common wishes are always in the family plan")
+        raise messages.api_error(400, "common_wish_in_plan")
     wish.family_position = None
     db.commit()
     db.refresh(wish)

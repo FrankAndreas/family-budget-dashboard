@@ -40,6 +40,10 @@ Bookings come in by hand, or in bulk from bank and Migros exports through small 
   The first start logs the `Admin` PIN (or set `INITIAL_ADMIN_PIN`). The database is `backend/data/budget.db`
   unless `DATABASE_URL` says otherwise.
 
+  The app speaks German and English: each person picks a language in **Settings → Logins**. `DEFAULT_LANGUAGE`
+  (`de` if unset, or `en`) is the language of people who haven't picked one, of the login screen when the browser
+  asks for neither, and of a new database's default categories.
+
 ## Tests
 
 - **Backend:** `pip install -r tests/requirements.txt`, then `pytest` from the repository root (about 30 s).

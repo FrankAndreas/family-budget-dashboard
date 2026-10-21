@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import { useFamily } from '../useFamily';
@@ -15,6 +16,7 @@ interface Props {
 
 // Removing a family member: decide where each of their investments and yearly bills goes, then confirm
 export default function RemoveMember({ member, onDone, onCancel }: Props) {
+    const { t } = useTranslation();
     const { user } = useAuth();
     const { users } = useFamily();
     const { splits } = useSplits();
@@ -25,17 +27,17 @@ export default function RemoveMember({ member, onDone, onCancel }: Props) {
     useEffect(() => {
         api.get(`/api/v1/users/${member.id}/items`)
             .then(response => setItems(response.data))
-            .catch(err => setError(errorMessage(err, 'Failed to load their items')));
-    }, [member.id]);
+            .catch(err => setError(errorMessage(err, t('removeMember.loadFailed'))));
+    }, [member.id, t]);
 
     // Where items can go: another family member, common with a split, or nowhere
     const options = [
         ...users.filter(u => u.id !== member.id).map(u => ({
             value: `owner:${u.id}`,
-            label: u.id === user?.id ? 'Me' : u.username
+            label: u.id === user?.id ? t('removeMember.me') : u.username
         })),
-        ...splits.map(s => ({ value: `split:${s.id}`, label: `Common: ${s.name}` })),
-        { value: 'delete', label: 'Delete' }
+        ...splits.map(s => ({ value: `split:${s.id}`, label: t('removeMember.common', { name: s.name }) })),
+        { value: 'delete', label: t('removeMember.delete') }
     ];
     const keyOf = (item: OwnedItem) => `${item.kind}:${item.id}`;
     const allDecided = !!items && items.every(item => targets[keyOf(item)]);
@@ -49,9 +51,9 @@ export default function RemoveMember({ member, onDone, onCancel }: Props) {
         const decisions = items.map(item => ({ kind: item.kind, id: item.id, to: targets[keyOf(item)] }));
         try {
             await api.delete(`/api/v1/users/${member.id}`, { data: { items: decisions } });
-            onDone(`Removed ${member.username}.`);
+            onDone(t('removeMember.removed', { name: member.username }));
         } catch (err) {
-            setError(errorMessage(err, 'Failed to remove'));
+            setError(errorMessage(err, t('removeMember.removeFailed')));
         }
     };
 
@@ -59,18 +61,16 @@ export default function RemoveMember({ member, onDone, onCancel }: Props) {
 
     return (
         <form onSubmit={remove} className="mt-3 p-4 rounded-lg border border-red-500/40 bg-red-500/10 space-y-3">
-            <p className="font-semibold">Remove {member.username} from the family?</p>
-            <p className="text-sm text-slate-300">
-                Their accounts, transactions, budgets and wishes are deleted. This can't be undone.
-            </p>
-            {items === null && !error && <p className="text-sm text-slate-400">Loading their items…</p>}
+            <p className="font-semibold">{t('removeMember.question', { name: member.username })}</p>
+            <p className="text-sm text-slate-300">{t('removeMember.warning')}</p>
+            {items === null && !error && <p className="text-sm text-slate-400">{t('removeMember.loading')}</p>}
             {items && items.length > 0 && (
                 <div className="space-y-2">
-                    <p className="text-sm text-slate-300">Where should their investments and yearly bills go?</p>
+                    <p className="text-sm text-slate-300">{t('removeMember.where')}</p>
                     <label className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                        <span className="text-slate-400">Move all to</span>
-                        <select className={select} defaultValue="" onChange={(e) => moveAll(e.target.value)} aria-label="Move all to">
-                            <option value="" disabled>Choose…</option>
+                        <span className="text-slate-400">{t('removeMember.moveAll')}</span>
+                        <select className={select} defaultValue="" onChange={(e) => moveAll(e.target.value)} aria-label={t('removeMember.moveAll')}>
+                            <option value="" disabled>{t('removeMember.choose')}</option>
                             {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                     </label>
@@ -81,10 +81,10 @@ export default function RemoveMember({ member, onDone, onCancel }: Props) {
                                 className={select}
                                 value={targets[keyOf(item)] ?? ''}
                                 onChange={(e) => setTargets({ ...targets, [keyOf(item)]: e.target.value })}
-                                aria-label={`Where ${item.name} goes`}
+                                aria-label={t('removeMember.whereItem', { name: item.name })}
                                 required
                             >
-                                <option value="" disabled>Choose…</option>
+                                <option value="" disabled>{t('removeMember.choose')}</option>
                                 {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                         </label>
@@ -98,9 +98,9 @@ export default function RemoveMember({ member, onDone, onCancel }: Props) {
                     className="px-4 py-2 rounded-lg bg-red-500/80 hover:bg-red-500 text-white font-semibold disabled:opacity-50"
                     disabled={!allDecided}
                 >
-                    Remove {member.username}
+                    {t('removeMember.remove', { name: member.username })}
                 </button>
-                <button type="button" onClick={onCancel} className="px-4 text-slate-400 hover:text-white">Cancel</button>
+                <button type="button" onClick={onCancel} className="px-4 text-slate-400 hover:text-white">{t('common.cancel')}</button>
             </div>
         </form>
     );

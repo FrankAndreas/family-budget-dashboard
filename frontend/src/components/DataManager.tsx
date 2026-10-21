@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import api, { errorMessage, fetchAllTransactions } from '../api';
 import { useAuth } from '../AuthContext';
 import type { FamilyUser } from '../family';
@@ -44,6 +45,7 @@ const today = () => new Date().toISOString().split('T')[0];
 
 // onDataChanged: an import or restore added accounts and transactions the rest of the app should reload
 export default function DataManager({ onDataChanged }: { onDataChanged?: () => void }) {
+    const { t } = useTranslation();
     const { user, refreshUser } = useAuth();
     // Bumped after an import, which may have saved new import rules
     const [rulesVersion, setRulesVersion] = useState(0);
@@ -90,10 +92,10 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
                 family: family.map(({ id, username, role, has_allowance }) => ({ id, username, role, has_allowance }))
             };
             downloadBlob(new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' }), `budget-export-${today()}.json`);
-            setStatus({ kind: 'success', text: `Exported ${allTransactions.length} transactions.` });
+            setStatus({ kind: 'success', text: t('data.exported', { count: allTransactions.length }) });
         } catch (error) {
             console.error('Failed to export data', error);
-            setStatus({ kind: 'error', text: errorMessage(error, 'Failed to export data') });
+            setStatus({ kind: 'error', text: errorMessage(error, t('data.exportFailed')) });
         }
     };
 
@@ -101,10 +103,10 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
         try {
             const res = await api.get('/api/v1/export/analysis.zip', { responseType: 'blob' });
             downloadBlob(res.data, `budget-analysis-${today()}.zip`);
-            setStatus({ kind: 'success', text: 'Exported the data for analysis.' });
+            setStatus({ kind: 'success', text: t('data.exportedAnalysis') });
         } catch (error) {
             console.error('Failed to export data for analysis', error);
-            setStatus({ kind: 'error', text: errorMessage(error, 'Failed to export data') });
+            setStatus({ kind: 'error', text: errorMessage(error, t('data.exportFailed')) });
         }
     };
 
@@ -213,12 +215,12 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
             setStatus({
                 kind: skipped > 0 ? 'error' : 'success',
                 text: skipped > 0
-                    ? `Imported ${imported} budgets and transactions; ${skipped} could not be imported (unknown account or category).`
-                    : `Imported ${imported} budgets and transactions.`
+                    ? t('data.restoredSkipped', { count: imported, skipped })
+                    : t('data.restored', { count: imported })
             });
         } catch (error) {
             console.error('Failed to import data', error);
-            setStatus({ kind: 'error', text: 'Failed to import data. Please check the file format.' });
+            setStatus({ kind: 'error', text: t('data.restoreFailed') });
         } finally {
             setImporting(false);
             // Allow importing the same file again
@@ -234,10 +236,10 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
             });
             setPrivacyEnabled(!privacyEnabled);
             await refreshUser();
-            setStatus({ kind: 'success', text: `Privacy mode ${!privacyEnabled ? 'enabled' : 'disabled'}.` });
+            setStatus({ kind: 'success', text: !privacyEnabled ? t('data.privacyEnabled') : t('data.privacyDisabled') });
         } catch (error) {
             console.error('Failed to update privacy settings', error);
-            setStatus({ kind: 'error', text: errorMessage(error, 'Failed to update privacy settings') });
+            setStatus({ kind: 'error', text: errorMessage(error, t('data.privacyFailed')) });
         } finally {
             setSavingPrivacy(false);
         }
@@ -245,7 +247,7 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
 
     return (
         <div className="glass-card p-6">
-            <h2 className="text-2xl font-bold mb-6">Data Management</h2>
+            <h2 className="text-2xl font-bold mb-6">{t('data.title')}</h2>
 
             {status && (
                 <div className={`mb-6 p-3 rounded-lg flex justify-between items-center border ${status.kind === 'success'
@@ -253,25 +255,24 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
                     : 'bg-red-500/20 border-red-500/50 text-red-300'
                     }`}>
                     <span>{status.text}</span>
-                    <button onClick={() => setStatus(null)} className="hover:text-white" aria-label="Dismiss message">✕</button>
+                    <button onClick={() => setStatus(null)} className="hover:text-white" aria-label={t('data.dismiss')}>✕</button>
                 </div>
             )}
 
             {/* Export Section */}
             <div className="mb-8">
-                <h3 className="text-lg font-semibold mb-4">Export Data</h3>
+                <h3 className="text-lg font-semibold mb-4">{t('data.exportTitle')}</h3>
                 <p className="text-slate-400 mb-4">
-                    <strong>For analysis:</strong> a ZIP of CSV files (transactions, shared costs, investments, bills, ...) with a
-                    README explaining every column, for pandas, Jupyter or a local AI.
+                    <strong>{t('data.forAnalysis')}</strong>{t('data.forAnalysisText')}
                     <br />
-                    <strong>Backup:</strong> your accounts, budgets and transactions as JSON, to restore below.
+                    <strong>{t('data.backup')}</strong>{t('data.backupText')}
                 </p>
                 <div className="flex flex-wrap gap-4 items-center">
                     <button onClick={handleAnalysisExport} className="btn-primary">
-                        📊 Export for analysis (.zip)
+                        {t('data.exportAnalysis')}
                     </button>
                     <button onClick={handleExport} className="btn-primary">
-                        📥 Backup (JSON)
+                        {t('data.exportBackup')}
                     </button>
                 </div>
             </div>
@@ -281,14 +282,10 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
 
             {/* Restore Section */}
             <div className="mb-8">
-                <h3 className="text-lg font-semibold mb-4">Restore Backup</h3>
-                <p className="text-slate-400 mb-4">
-                    Restore accounts, budgets and transactions from a JSON backup made above.
-                </p>
+                <h3 className="text-lg font-semibold mb-4">{t('data.restoreTitle')}</h3>
+                <p className="text-slate-400 mb-4">{t('data.restoreIntro')}</p>
                 <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg mb-4">
-                    <p className="text-yellow-400 text-sm">
-                        ⚠️ Warning: Restoring adds new accounts and transactions. Restoring the same backup twice creates everything twice.
-                    </p>
+                    <p className="text-yellow-400 text-sm">{t('data.restoreWarning')}</p>
                 </div>
                 <input
                     type="file"
@@ -304,20 +301,18 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
             file:cursor-pointer cursor-pointer"
                 />
                 {importing && (
-                    <p className="mt-2 text-blue-400">Importing data...</p>
+                    <p className="mt-2 text-blue-400">{t('data.importing')}</p>
                 )}
             </div>
 
             {/* Privacy Settings */}
             <div className="pt-8 border-t border-slate-700">
-                <h3 className="text-lg font-semibold mb-4">Privacy & Security</h3>
+                <h3 className="text-lg font-semibold mb-4">{t('data.privacyTitle')}</h3>
                 <div className="space-y-4">
                     <div className="p-4 bg-slate-800/30 rounded-lg">
-                        <h4 className="font-semibold mb-2">Child Account Privacy</h4>
+                        <h4 className="font-semibold mb-2">{t('data.childPrivacy')}</h4>
                         <p className="text-sm text-slate-400 mb-3">
-                            {user?.role === 'CHILD'
-                                ? 'When enabled, parents cannot view your transactions and balances.'
-                                : 'Only a child with own allowance can turn this on, for their own data.'}
+                            {user?.role === 'CHILD' ? t('data.childPrivacyChild') : t('data.childPrivacyParent')}
                         </p>
                         {user?.role === 'CHILD' && (
                             <label className="flex items-center gap-2 cursor-pointer">
@@ -328,31 +323,25 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
                                     onChange={handlePrivacyToggle}
                                     disabled={savingPrivacy}
                                 />
-                                <span>Enable privacy mode {savingPrivacy && '(Saving...)'}</span>
+                                <span>{t('data.enablePrivacy')}{savingPrivacy && t('data.saving')}</span>
                             </label>
                         )}
                         {user?.role === 'PARENT' && (
-                            <p className="text-sm text-slate-500 italic">
-                                As a parent, you can view all child accounts that don't have privacy enabled.
-                            </p>
+                            <p className="text-sm text-slate-500 italic">{t('data.parentPrivacy')}</p>
                         )}
                     </div>
 
                     <div className="p-4 bg-slate-800/30 rounded-lg">
-                        <h4 className="font-semibold mb-2">Data Retention</h4>
-                        <p className="text-sm text-slate-400">
-                            All data is stored locally in your database. You can export and backup your data at any time.
-                        </p>
+                        <h4 className="font-semibold mb-2">{t('data.retentionTitle')}</h4>
+                        <p className="text-sm text-slate-400">{t('data.retention')}</p>
                     </div>
 
                     <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                        <h4 className="font-semibold mb-2 text-blue-400">🔒 Privacy Rules</h4>
+                        <h4 className="font-semibold mb-2 text-blue-400">{t('data.rulesTitle')}</h4>
                         <ul className="text-sm text-slate-400 space-y-1">
-                            <li>• Each parent's accounts and budgets are private unless shared in Settings → Sharing (view or manage)</li>
-                            <li>• The Common tab (shared costs, investments, yearly bills) is visible to both parents</li>
-                            <li>• Parents can view children's own-allowance data (if privacy is off); a child can let a parent manage it</li>
-                            <li>• Children can only view their own data</li>
-                            <li>• Privacy mode hides all account and transaction data from parents</li>
+                            {(['parents', 'common', 'children', 'own', 'privacy'] as const).map(rule => (
+                                <li key={rule}>• {t(`data.rules.${rule}`)}</li>
+                            ))}
                         </ul>
                     </div>
                 </div>
