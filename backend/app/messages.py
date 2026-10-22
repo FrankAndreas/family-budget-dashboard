@@ -128,6 +128,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "duplicate_reference_booked": "Same reference, booked on {date}",
         "duplicate_reference_line": "Same reference as line {line}",
         "duplicate_booked": "Already booked on {date}",
+        "only_parents_tags": "Only parents can manage tags",
+        "tag_name_taken": "A tag with that name already exists",
+        "tag_not_found": "Tag not found",
+        "tag_in_budget": "A budget uses this tag; delete the budget first",
     },
     "de": {
         "not_logged_in": "Anmeldung ungültig, bitte melde dich neu an",
@@ -249,6 +253,10 @@ MESSAGES: dict[str, dict[str, str]] = {
         "duplicate_reference_booked": "Gleiche Referenz, gebucht am {date}",
         "duplicate_reference_line": "Gleiche Referenz wie Zeile {line}",
         "duplicate_booked": "Schon gebucht am {date}",
+        "only_parents_tags": "Nur Eltern können Tags verwalten",
+        "tag_name_taken": "Einen Tag mit diesem Namen gibt es schon",
+        "tag_not_found": "Tag nicht gefunden",
+        "tag_in_budget": "Ein Budget verwendet diesen Tag; lösche zuerst das Budget",
     },
 }
 

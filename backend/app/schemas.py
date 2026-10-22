@@ -114,6 +114,25 @@ class CategoryUpdate(BaseModel):
     icon: Optional[str] = Field(default=None, max_length=8)
 
 
+class TagCreate(BaseModel):
+    name: CategoryName
+    icon: Optional[str] = Field(default=None, max_length=8)
+
+
+class TagUpdate(BaseModel):
+    name: Optional[CategoryName] = None
+    icon: Optional[str] = Field(default=None, max_length=8)
+
+
+class Tag(BaseModel):
+    id: str
+    name: str
+    icon: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class Category(CategoryBase):
     id: str
     is_global: bool = True
