@@ -21,6 +21,7 @@ from . import (
     categories_api,
     tags_api,
     attachments,
+    receipt_ai,
     i18n,
 )
 from .seed import seed_admin, seed_categories
@@ -76,6 +77,7 @@ app.include_router(reports.router, prefix="/api/v1")
 app.include_router(categories_api.router, prefix="/api/v1")
 app.include_router(tags_api.router, prefix="/api/v1")
 app.include_router(attachments.router, prefix="/api/v1")
+app.include_router(receipt_ai.router, prefix="/api/v1")
 
 # Configure CORS
 app.add_middleware(

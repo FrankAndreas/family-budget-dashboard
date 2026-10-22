@@ -142,6 +142,13 @@ MESSAGES: dict[str, dict[str, str]] = {
         "attachment_too_large": "The file is larger than 10 MB",
         "file_type_unsupported": "This file can't be read",
         "attachment_not_found": "Attachment not found",
+        "receipt_ai_off": "Reading receipts is not set up",
+        "receipt_ai_unavailable": "The AI service can't be reached right now",
+        "receipt_ai_unreadable": "The AI's answer could not be read",
+        "receipt_reads_used_up_one": "You have used up your receipt reads for this hour. Try again in {count} minute.",
+        "receipt_reads_used_up_other": (
+            "You have used up your receipt reads for this hour." " Try again in {count} minutes."
+        ),
     },
     "de": {
         "not_logged_in": "Anmeldung ungültig, bitte melde dich neu an",
@@ -277,6 +284,15 @@ MESSAGES: dict[str, dict[str, str]] = {
         "attachment_too_large": "Die Datei ist grösser als 10 MB",
         "file_type_unsupported": "Diese Datei kann nicht gelesen werden",
         "attachment_not_found": "Anhang nicht gefunden",
+        "receipt_ai_off": "Das Lesen von Belegen ist nicht eingerichtet",
+        "receipt_ai_unavailable": "Der KI-Dienst ist gerade nicht erreichbar",
+        "receipt_ai_unreadable": "Die Antwort der KI konnte nicht gelesen werden",
+        "receipt_reads_used_up_one": (
+            "Du hast deine Beleg-Lesungen für diese Stunde aufgebraucht." " Versuche es in {count} Minute wieder."
+        ),
+        "receipt_reads_used_up_other": (
+            "Du hast deine Beleg-Lesungen für diese Stunde aufgebraucht." " Versuche es in {count} Minuten wieder."
+        ),
     },
 }
 
