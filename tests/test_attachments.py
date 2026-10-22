@@ -140,3 +140,22 @@ def test_sweep_removes_old_pending_attachments(client, attachments_dir):
         assert [a.id for a in db.query(models.Attachment)] == [recent]
     assert os.listdir(attachments_dir) == [recent]
     del old
+
+
+def test_removing_the_uploader_keeps_the_receipt_on_someone_elses_booking(client):
+    from helpers import admin_headers, user_id
+
+    admin = admin_headers(client)
+    mum = register(client, "mum")
+    # Admin shares their finances with mum ("view and manage"), so mum can attach to admin's booking
+    client.put(f"{BASE_URL}/shares/{user_id(client, admin, 'mum')}", json={"level": "EDIT"}, headers=admin)
+    tx = booking(client, admin)
+    stored = upload(client, mum, tx["id"], "beleg.png", PNG).json()
+    assert "id" in stored, stored
+    removed = client.request(
+        "DELETE", f"{BASE_URL}/users/{user_id(client, admin, 'mum')}", json={"items": []}, headers=admin
+    )
+    assert removed.status_code == 200
+    listed = client.get(f"{BASE_URL}/accounts/{tx['account_id']}/transactions", headers=admin).json()
+    assert [a["id"] for a in listed[0]["attachments"]] == [stored["id"]]
+    assert client.get(f"{BASE_URL}/attachments/{stored['id']}", headers=admin).content == PNG

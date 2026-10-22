@@ -174,8 +174,9 @@ class Attachment(Base):
     transaction_id: Mapped[Optional[str]] = mapped_column(
         String, ForeignKey("transactions.id", ondelete="CASCADE"), nullable=True, index=True
     )
-    # Who uploaded it; a pending attachment can only be booked by them
-    owner_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"))
+    # Who uploaded it; a pending attachment can only be booked by them. Removing that person keeps the receipts
+    # on other people's bookings (their own bookings go with them anyway).
+    owner_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     filename: Mapped[str] = mapped_column(String)
     content_type: Mapped[str] = mapped_column(String)
     size: Mapped[int] = mapped_column(Integer)

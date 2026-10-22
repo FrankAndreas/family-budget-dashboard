@@ -38,7 +38,7 @@ def upgrade() -> None:
         "attachments",
         sa.Column("id", sa.String(), primary_key=True),
         sa.Column("transaction_id", sa.String(), sa.ForeignKey("transactions.id", ondelete="CASCADE"), nullable=True),
-        sa.Column("owner_id", sa.String(), sa.ForeignKey("users.id", ondelete="CASCADE"), nullable=False),
+        sa.Column("owner_id", sa.String(), sa.ForeignKey("users.id", ondelete="SET NULL"), nullable=True),
         sa.Column("filename", sa.String(), nullable=False),
         sa.Column("content_type", sa.String(), nullable=False),
         sa.Column("size", sa.Integer(), nullable=False),
