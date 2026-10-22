@@ -27,6 +27,12 @@ services:
       # de or en: language of people who haven't picked one, and of a new
       # database's default categories
       - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE:-de}
+      # Reading receipts with the Infomaniak AI (issue #56); empty token or
+      # product ID = the feature is off. See README_DOCKER.md
+      - INFOMANIAK_AI_TOKEN=${INFOMANIAK_AI_TOKEN:-}
+      - INFOMANIAK_AI_PRODUCT_ID=${INFOMANIAK_AI_PRODUCT_ID:-}
+      - RECEIPT_AI_MODEL=${RECEIPT_AI_MODEL:-}
+      - RECEIPT_AI_READS_PER_HOUR=${RECEIPT_AI_READS_PER_HOUR:-}
     restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1" ]
