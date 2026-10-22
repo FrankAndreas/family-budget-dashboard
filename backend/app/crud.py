@@ -268,7 +268,11 @@ def get_budgets(db: Session, user_id: str):
 
 def create_budget(db: Session, budget: schemas.BudgetCreate, user_id: str):
     db_budget = models.Budget(
-        user_id=user_id, category_id=budget.category_id, limit=to_cents(budget.limit), period=budget.period
+        user_id=user_id,
+        category_id=budget.category_id,
+        tag_id=budget.tag_id,
+        limit=to_cents(budget.limit),
+        period=budget.period,
     )
     db.add(db_budget)
     db.commit()

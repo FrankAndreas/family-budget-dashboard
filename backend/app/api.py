@@ -473,8 +473,10 @@ def create_budget(
     owner = privacy.check_user_access(db, current_user, budget.user_id, write=True) if budget.user_id else current_user
     if is_dependent(owner):
         raise messages.api_error(403, "no_budgets_without_allowance")
-    if not crud.get_category(db, budget.category_id):
+    if budget.category_id is not None and not crud.get_category(db, budget.category_id):
         raise messages.api_error(400, "category_not_found")
+    if budget.tag_id is not None and not db.query(models.Tag).filter(models.Tag.id == budget.tag_id).first():
+        raise messages.api_error(400, "tag_not_found")
     return reports.budget_out(db, crud.create_budget(db, budget=budget, user_id=owner.id))
 
 

@@ -253,7 +253,9 @@ class Transaction(TransactionBase):
 
 # Budget Schemas
 class BudgetBase(BaseModel):
-    category_id: str
+    # A budget is for a category or for a tag (issue #56): exactly one of the two
+    category_id: Optional[str] = None
+    tag_id: Optional[str] = None
     limit: float
     period: str = "MONTHLY"
 
@@ -263,6 +265,12 @@ class BudgetCreate(BudgetBase):
     period: Literal["MONTHLY", "YEARLY"] = "MONTHLY"
     # Set to create the budget for someone who shared their finances with EDIT
     user_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def category_or_tag(self) -> "BudgetCreate":
+        if (self.category_id is None) == (self.tag_id is None):
+            raise ValueError("a budget is for either a category or a tag")
+        return self
 
 
 class BudgetUpdate(BaseModel):
