@@ -199,6 +199,7 @@ def signed_amount(amount: float, category: models.Category) -> float:
 def create_transaction(
     db: Session, transaction: schemas.TransactionCreate, category: models.Category, split_shares=None, commit=True
 ):
+    assert transaction.amount is not None, "a plain booking has an amount (items go through items.apply)"
     amount = signed_amount(transaction.amount, category)
     db_transaction = models.Transaction(
         account_id=transaction.account_id,
@@ -231,7 +232,8 @@ def update_transaction(
     split_shares=None,
 ):
     old_amount = db_transaction.amount
-    update_data = update.model_dump(exclude_unset=True)
+    # Items are set by items.apply, never as a plain attribute
+    update_data = update.model_dump(exclude_unset=True, exclude={"items"})
 
     if update_data.get("date"):
         update_data["date"] = to_naive_utc(update_data["date"])
@@ -252,6 +254,8 @@ def get_transaction(db: Session, transaction_id: str):
 
 
 def delete_transaction(db: Session, db_transaction: models.Transaction):
+    # Loaded now: the response shows the deleted booking with its items
+    db_transaction.items
     db.delete(db_transaction)
     db.commit()
     return db_transaction

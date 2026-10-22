@@ -3,10 +3,10 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
 import math
-from datetime import timedelta
+from datetime import datetime, timedelta
 from fastapi import Body
 
-from . import crud, schemas, auth, database, models, privacy, reports, i18n, messages
+from . import crud, schemas, auth, database, models, privacy, reports, i18n, items, messages
 from .common_api import apply_item_decisions, visible_owner
 from .seed import SETTLE_UP
 
@@ -316,6 +316,10 @@ def create_transaction(
 ):
     # Check if user has access to this account (with privacy enforcement)
     privacy.check_account_access(db, current_user, transaction.account_id, write=True)
+    if transaction.items is not None:
+        return create_receipt(db, current_user, transaction)
+    # Without items the schema requires both (TransactionCreate.plain_needs_amount_and_category)
+    assert transaction.category_id is not None and transaction.amount is not None
     category = crud.get_category(db, transaction.category_id)
     if not category:
         raise messages.api_error(400, "category_not_found")
@@ -325,6 +329,48 @@ def create_transaction(
     split_shares = check_shared(db, transaction.split_id, transaction.account_id, category)
     check_asset(db, current_user, transaction.asset_id)
     return crud.create_transaction(db, transaction=transaction, category=category, split_shares=split_shares)
+
+
+def create_receipt(db: Session, user: models.User, data: schemas.TransactionCreate) -> models.Transaction:
+    """A booking with items (issue #56): amount and category come from the items."""
+    transaction = models.Transaction(
+        account_id=data.account_id,
+        description=data.description,
+        date=crud.to_naive_utc(data.date) if data.date else datetime.utcnow(),
+        split_id=data.split_id,
+        asset_id=data.asset_id,
+        reference=data.reference,
+    )
+    items.apply(db, user, transaction, data.items or [])
+    category = crud.get_category(db, transaction.category_id)
+    transaction.split_shares = check_shared(db, data.split_id, data.account_id, category)
+    check_asset(db, user, data.asset_id)
+    db.add(transaction)
+    db.commit()
+    db.refresh(transaction)
+    return transaction
+
+
+def update_receipt(
+    db: Session, user: models.User, transaction: models.Transaction, update: schemas.TransactionUpdate
+) -> models.Transaction:
+    """Change a booking's items, and with them its amount and category; the split's percents stay as booked."""
+    fields = update.model_fields_set
+    if "description" in fields:
+        transaction.description = update.description
+    if update.date:
+        transaction.date = crud.to_naive_utc(update.date)
+    items.apply(db, user, transaction, update.items or [])
+    category = crud.get_category(db, transaction.category_id)
+    if "split_id" in fields and update.split_id != transaction.split_id:
+        transaction.split_shares = check_shared(db, update.split_id, transaction.account_id, category)
+        transaction.split_id = update.split_id
+    if "asset_id" in fields:
+        check_asset(db, user, update.asset_id)
+        transaction.asset_id = update.asset_id
+    db.commit()
+    db.refresh(transaction)
+    return transaction
 
 
 @router.put("/transactions/{transaction_id}", response_model=schemas.Transaction)
@@ -341,7 +387,24 @@ def update_transaction(
 
     current = crud.get_category(db, db_transaction.category_id)
     if current.type == models.CategoryType.TRANSFER:
+        if transaction_update.items:
+            raise messages.api_error(400, "items_need_expense_category")
         return update_transfer(db, db_transaction, transaction_update, current)
+    fields = transaction_update.model_fields_set
+    if transaction_update.items:
+        return update_receipt(db, current_user, db_transaction, transaction_update)
+    if db_transaction.items:
+        if "items" not in fields:
+            # Amount and category follow the items; only text and date can change on their own
+            if fields - {"description", "date"}:
+                raise messages.api_error(400, "edit_items_instead")
+            return crud.update_transaction(
+                db, db_transaction, transaction_update, current, split_shares=db_transaction.split_shares
+            )
+        # items: [] turns the receipt back into a plain booking with the amount and category sent
+        if transaction_update.amount is None or transaction_update.category_id is None:
+            raise messages.api_error(400, "edit_items_instead")
+        db_transaction.items = []
     category = crud.get_category(db, transaction_update.category_id or db_transaction.category_id)
     if not category:
         raise messages.api_error(400, "category_not_found")
@@ -350,7 +413,6 @@ def update_transaction(
     check_member_tag(db, transaction_update.member_id, db_transaction.account_id)
     # The split's percents are read again only when the split itself changes; otherwise the
     # booked copy stays (also when that split was deleted since)
-    fields = transaction_update.model_fields_set
     if "asset_id" in fields:
         check_asset(db, current_user, transaction_update.asset_id)
     if "split_id" in fields and transaction_update.split_id != db_transaction.split_id:

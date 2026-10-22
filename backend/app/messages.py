@@ -132,6 +132,13 @@ MESSAGES: dict[str, dict[str, str]] = {
         "tag_name_taken": "A tag with that name already exists",
         "tag_not_found": "Tag not found",
         "tag_in_budget": "A budget uses this tag; delete the budget first",
+        "items_need_expense_category": "Items need an expense category",
+        "item_tag_not_found": "Unknown tag for an item",
+        "item_person_not_found": "Unknown person for an item",
+        "items_sum_positive": "The items must add up to more than 0",
+        "edit_items_instead": "Change the items instead",
+        "used_items_one": "{count} receipt item",
+        "used_items_other": "{count} receipt items",
     },
     "de": {
         "not_logged_in": "Anmeldung ungültig, bitte melde dich neu an",
@@ -257,6 +264,13 @@ MESSAGES: dict[str, dict[str, str]] = {
         "tag_name_taken": "Einen Tag mit diesem Namen gibt es schon",
         "tag_not_found": "Tag nicht gefunden",
         "tag_in_budget": "Ein Budget verwendet diesen Tag; lösche zuerst das Budget",
+        "items_need_expense_category": "Positionen brauchen eine Ausgaben-Kategorie",
+        "item_tag_not_found": "Unbekannter Tag bei einer Position",
+        "item_person_not_found": "Unbekannte Person bei einer Position",
+        "items_sum_positive": "Die Positionen müssen zusammen mehr als 0 ergeben",
+        "edit_items_instead": "Ändere stattdessen die Positionen",
+        "used_items_one": "{count} Belegposition",
+        "used_items_other": "{count} Belegpositionen",
     },
 }
 

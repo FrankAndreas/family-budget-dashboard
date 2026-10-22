@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
+from pydantic import BaseModel, Field, StringConstraints, computed_field, field_validator, model_validator
 from typing import Annotated, Optional, Literal
 from datetime import date, datetime, timezone
 from .models import UserRole, AccountType, CategoryType, ShareLevel
@@ -167,11 +167,54 @@ def _reject_zero(value: Optional[float]) -> Optional[float]:
     return value
 
 
-class TransactionCreate(TransactionBase):
-    account_id: str
+# A receipt's line (issue #56): what it is (category), what for (tags), for whom (person)
+ItemName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+MAX_ITEMS = 100
+
+
+class ItemIn(BaseModel):
+    name: ItemName
+    # Positive = cost, negative = discount or deposit refund
+    amount: float
     category_id: str
+    person_id: Optional[str] = None
+    tag_ids: list[str] = []
 
     _amount_not_zero = field_validator("amount")(_reject_zero)
+
+
+class ItemOut(BaseModel):
+    id: str
+    position: int
+    name: str
+    amount: float
+    category_id: str
+    person_id: Optional[str] = None
+    tags: list[Tag] = Field(default=[], exclude=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def tag_ids(self) -> list[str]:
+        return [t.id for t in self.tags]
+
+    class Config:
+        from_attributes = True
+
+
+class TransactionCreate(TransactionBase):
+    account_id: str
+    # Required for a plain booking; with items, both come from the items
+    amount: Optional[float] = None  # type: ignore[assignment]
+    category_id: Optional[str] = None
+    items: Optional[list[ItemIn]] = Field(default=None, max_length=MAX_ITEMS)
+
+    _amount_not_zero = field_validator("amount")(_reject_zero)
+
+    @model_validator(mode="after")
+    def plain_needs_amount_and_category(self) -> "TransactionCreate":
+        if self.items is None and (self.amount is None or self.category_id is None):
+            raise ValueError("amount and category_id are required without items")
+        return self
 
 
 class TransactionUpdate(BaseModel):
@@ -184,6 +227,8 @@ class TransactionUpdate(BaseModel):
     # Send null to stop sharing / unlink
     split_id: Optional[str] = None
     asset_id: Optional[str] = None
+    # Replaces the items; [] turns a receipt back into a plain booking (then amount and category_id are needed)
+    items: Optional[list[ItemIn]] = Field(default=None, max_length=MAX_ITEMS)
 
     _amount_not_zero = field_validator("amount")(_reject_zero)
 
@@ -194,6 +239,7 @@ class Transaction(TransactionBase):
     category_id: str
     date: datetime
     split_shares: Optional[dict[str, int]] = None
+    items: list[ItemOut] = []
 
     # Dates are stored as naive UTC; mark them as UTC so clients convert to local time correctly
     @field_validator("date")
