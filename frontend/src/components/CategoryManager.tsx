@@ -3,12 +3,12 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import type { Category } from '../accounts';
 
-type Usage = Record<string, { transactions: number; budgets: number; planned_costs: number; import_rules: number }>;
+type Usage = Record<string, { transactions: number; budgets: number; planned_costs: number; import_rules: number; items: number }>;
 
 // Labels: categories.groups.<type> in the locale files
 const GROUPS = ['INCOME', 'EXPENSE', 'TRANSFER'] as const;
 
-const USES = ['transactions', 'budgets', 'planned_costs', 'import_rules'] as const;
+const USES = ['transactions', 'budgets', 'planned_costs', 'import_rules', 'items'] as const;
 
 const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
 

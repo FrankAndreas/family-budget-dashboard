@@ -5,10 +5,13 @@ import { money } from '../finance';
 import { useFamily } from '../useFamily';
 import type { Scope } from '../family';
 import ScopeSelector from './ScopeSelector';
+import { useTags } from '../receipts';
 
 interface Budget {
     id: string;
-    category_id: string;
+    // A budget is for a category or for a tag (issue #56)
+    category_id: string | null;
+    tag_id?: string | null;
     limit: number;
     period: string;
     // Spent in the current month (MONTHLY) or year (YEARLY), and as a percentage of the limit
@@ -42,6 +45,12 @@ async function loadBudgetsWithSpending(scope: Scope): Promise<BudgetWithCategory
 export default function BudgetManager() {
     const { t } = useTranslation();
     const { scopes } = useFamily();
+    const { tags } = useTags();
+    // A tag budget shows the tag's icon and name, a category budget the category's name
+    const budgetName = (budget: BudgetWithCategory) => {
+        const tag = budget.tag_id ? tags.find(x => x.id === budget.tag_id) : undefined;
+        return tag ? `${tag.icon ? `${tag.icon} ` : ''}${tag.name}` : budget.category?.name;
+    };
     const [scopeKey, setScopeKey] = useState('');
     const [budgets, setBudgets] = useState<BudgetWithCategory[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
@@ -82,8 +91,12 @@ export default function BudgetManager() {
     const handleAddBudget = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
+            // The select's value is a category id or "tag:<tag id>"
+            const target = newBudget.category_id.startsWith('tag:')
+                ? { tag_id: newBudget.category_id.slice(4) }
+                : { category_id: newBudget.category_id };
             await api.post('/api/v1/budgets', {
-                category_id: newBudget.category_id,
+                ...target,
                 limit: parseFloat(newBudget.limit),
                 period: newBudget.period,
                 user_id: activeScope?.budgetOwnerId
@@ -115,7 +128,7 @@ export default function BudgetManager() {
     };
 
     const handleDeleteBudget = async (budget: BudgetWithCategory) => {
-        if (!confirm(t('budgets.confirmDelete', { category: budget.category?.name ?? t('budgets.thisCategory') }))) return;
+        if (!confirm(t('budgets.confirmDelete', { category: budgetName(budget) ?? t('budgets.thisCategory') }))) return;
 
         try {
             await api.delete(`/api/v1/budgets/${budget.id}`);
@@ -177,9 +190,18 @@ export default function BudgetManager() {
                         required
                     >
                         <option value="">{t('budgets.selectCategory')}</option>
-                        {categories.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
+                        <optgroup label={t('budgets.categories')}>
+                            {categories.map(cat => (
+                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                        </optgroup>
+                        {tags.length > 0 && (
+                            <optgroup label={t('budgets.tags')}>
+                                {tags.map(tag => (
+                                    <option key={tag.id} value={`tag:${tag.id}`}>{tag.icon ? `${tag.icon} ` : ''}{tag.name}</option>
+                                ))}
+                            </optgroup>
+                        )}
                     </select>
                     <input
                         type="number"
@@ -211,7 +233,7 @@ export default function BudgetManager() {
                         <div key={budget.id} className="p-4 bg-slate-800/30 rounded-lg">
                             <div className="flex justify-between items-center mb-2">
                                 <div>
-                                    <h3 className="font-semibold text-lg">{budget.category?.name}</h3>
+                                    <h3 className="font-semibold text-lg">{budgetName(budget)}</h3>
                                     <p className="text-sm text-slate-400">{budget.period === 'YEARLY' ? t('budgets.thisYear') : t('budgets.thisMonth')}</p>
                                 </div>
                                 <div className="text-right">
