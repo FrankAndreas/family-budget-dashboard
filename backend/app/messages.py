@@ -139,6 +139,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "edit_items_instead": "Change the items instead",
         "used_items_one": "{count} receipt item",
         "used_items_other": "{count} receipt items",
+        "attachment_too_large": "The file is larger than 10 MB",
+        "file_type_unsupported": "This file can't be read",
+        "attachment_not_found": "Attachment not found",
     },
     "de": {
         "not_logged_in": "Anmeldung ungültig, bitte melde dich neu an",
@@ -271,6 +274,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "edit_items_instead": "Ändere stattdessen die Positionen",
         "used_items_one": "{count} Belegposition",
         "used_items_other": "{count} Belegpositionen",
+        "attachment_too_large": "Die Datei ist grösser als 10 MB",
+        "file_type_unsupported": "Diese Datei kann nicht gelesen werden",
+        "attachment_not_found": "Anhang nicht gefunden",
     },
 }
 

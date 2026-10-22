@@ -254,8 +254,8 @@ def get_transaction(db: Session, transaction_id: str):
 
 
 def delete_transaction(db: Session, db_transaction: models.Transaction):
-    # Loaded now: the response shows the deleted booking with its items
-    db_transaction.items
+    # Loaded now: the response shows the deleted booking with its items and attachments
+    db_transaction.items, db_transaction.attachments
     db.delete(db_transaction)
     db.commit()
     return db_transaction

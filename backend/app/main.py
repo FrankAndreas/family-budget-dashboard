@@ -1,5 +1,8 @@
+import asyncio
 import logging
 import os
+from contextlib import asynccontextmanager
+from typing import AsyncIterator
 
 from fastapi import FastAPI, Depends
 from fastapi.middleware.cors import CORSMiddleware
@@ -17,6 +20,7 @@ from . import (
     reports,
     categories_api,
     tags_api,
+    attachments,
     i18n,
 )
 from .seed import seed_admin, seed_categories
@@ -26,16 +30,34 @@ database_setup.setup(database.engine)
 
 logger = logging.getLogger(__name__)
 
-# Make sure a fresh database has categories (transactions need one) and a first parent to log in with
+# Make sure a fresh database has categories (transactions need one) and a first parent to log in with;
+# receipts read but never booked are removed after a day (issue #56)
 with database.SessionLocal() as db:
     seed_categories(db)
     initial_pin = seed_admin(db)
+    attachments.sweep(db)
 if initial_pin:
     logger.warning(
         "Created the first parent 'Admin' with INITIAL PIN %s. Log in and change it in Settings > Family.", initial_pin
     )
 
+
+async def sweep_daily() -> None:
+    while True:
+        await asyncio.sleep(24 * 60 * 60)
+        with database.SessionLocal() as session:
+            attachments.sweep(session)
+
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
+    task = asyncio.create_task(sweep_daily())
+    yield
+    task.cancel()
+
+
 app = FastAPI(
+    lifespan=lifespan,
     title="Family Budget Dashboard API",
     description="Backend for the Family Budget Dashboard",
     version="0.1.0",
@@ -53,6 +75,7 @@ app.include_router(import_rules.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(categories_api.router, prefix="/api/v1")
 app.include_router(tags_api.router, prefix="/api/v1")
+app.include_router(attachments.router, prefix="/api/v1")
 
 # Configure CORS
 app.add_middleware(

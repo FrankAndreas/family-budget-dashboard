@@ -201,8 +201,20 @@ class ItemOut(BaseModel):
         from_attributes = True
 
 
+class AttachmentOut(BaseModel):
+    id: str
+    filename: str
+    content_type: str
+    size: int
+
+    class Config:
+        from_attributes = True
+
+
 class TransactionCreate(TransactionBase):
     account_id: str
+    # The person's own pending uploads (e.g. the receipt just read) to keep with the booking
+    attachment_ids: list[str] = []
     # Required for a plain booking; with items, both come from the items
     amount: Optional[float] = None  # type: ignore[assignment]
     category_id: Optional[str] = None
@@ -229,6 +241,8 @@ class TransactionUpdate(BaseModel):
     asset_id: Optional[str] = None
     # Replaces the items; [] turns a receipt back into a plain booking (then amount and category_id are needed)
     items: Optional[list[ItemIn]] = Field(default=None, max_length=MAX_ITEMS)
+    # More of the person's pending uploads to keep with the booking
+    attachment_ids: list[str] = []
 
     _amount_not_zero = field_validator("amount")(_reject_zero)
 
@@ -240,6 +254,7 @@ class Transaction(TransactionBase):
     date: datetime
     split_shares: Optional[dict[str, int]] = None
     items: list[ItemOut] = []
+    attachments: list[AttachmentOut] = []
 
     # Dates are stored as naive UTC; mark them as UTC so clients convert to local time correctly
     @field_validator("date")

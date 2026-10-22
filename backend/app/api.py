@@ -6,7 +6,7 @@ import math
 from datetime import datetime, timedelta
 from fastapi import Body
 
-from . import crud, schemas, auth, database, models, privacy, reports, i18n, items, messages
+from . import attachments, crud, schemas, auth, database, models, privacy, reports, i18n, items, messages
 from .common_api import apply_item_decisions, visible_owner
 from .seed import SETTLE_UP
 
@@ -328,7 +328,17 @@ def create_transaction(
     check_member_tag(db, transaction.member_id, transaction.account_id)
     split_shares = check_shared(db, transaction.split_id, transaction.account_id, category)
     check_asset(db, current_user, transaction.asset_id)
-    return crud.create_transaction(db, transaction=transaction, category=category, split_shares=split_shares)
+    created = crud.create_transaction(db, transaction=transaction, category=category, split_shares=split_shares)
+    return with_attachments(db, current_user, created, transaction.attachment_ids)
+
+
+def with_attachments(db: Session, user: models.User, transaction: models.Transaction, ids: list[str]):
+    """Keep the person's pending uploads with the booking (issue #56)."""
+    if ids:
+        attachments.link(db, user, transaction, ids)
+        db.commit()
+        db.refresh(transaction)
+    return transaction
 
 
 def create_receipt(db: Session, user: models.User, data: schemas.TransactionCreate) -> models.Transaction:
@@ -346,6 +356,8 @@ def create_receipt(db: Session, user: models.User, data: schemas.TransactionCrea
     transaction.split_shares = check_shared(db, data.split_id, data.account_id, category)
     check_asset(db, user, data.asset_id)
     db.add(transaction)
+    db.flush()
+    attachments.link(db, user, transaction, data.attachment_ids)
     db.commit()
     db.refresh(transaction)
     return transaction
@@ -368,6 +380,7 @@ def update_receipt(
     if "asset_id" in fields:
         check_asset(db, user, update.asset_id)
         transaction.asset_id = update.asset_id
+    attachments.link(db, user, transaction, update.attachment_ids)
     db.commit()
     db.refresh(transaction)
     return transaction
@@ -379,6 +392,16 @@ def update_transaction(
     transaction_update: schemas.TransactionUpdate,
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
+):
+    updated = change_transaction(db, current_user, transaction_id, transaction_update)
+    # update_receipt links them itself, inside its own commit
+    if transaction_update.items:
+        return updated
+    return with_attachments(db, current_user, updated, transaction_update.attachment_ids)
+
+
+def change_transaction(
+    db: Session, current_user: models.User, transaction_id: str, transaction_update: schemas.TransactionUpdate
 ):
     db_transaction = crud.get_transaction(db, transaction_id)
     if not db_transaction:
@@ -449,7 +472,10 @@ def delete_transaction(
     privacy.check_account_access(db, current_user, db_transaction.account_id, write=True)
     if crud.get_category(db, db_transaction.category_id).system_key == SETTLE_UP:
         raise messages.api_error(400, "undo_settlement_in_common")
-    return crud.delete_transaction(db, db_transaction)
+    files = [a.id for a in db_transaction.attachments]
+    deleted = crud.delete_transaction(db, db_transaction)
+    attachments.remove_files(files)
+    return deleted
 
 
 # Budget Routes
