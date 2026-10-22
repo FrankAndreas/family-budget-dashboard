@@ -37,12 +37,12 @@ def usage_counts(db: Session) -> dict[str, dict[str, int]]:
         models.TransactionItemTag.tag_id
     ):
         usage[tag_id]["items"] = count
-    for tag_id, count in (
+    for budget_tag_id, count in (
         db.query(models.Budget.tag_id, func.count())
         .filter(models.Budget.tag_id.isnot(None))
         .group_by(models.Budget.tag_id)
     ):
-        usage[tag_id]["budgets"] = count
+        usage[str(budget_tag_id)]["budgets"] = count
     return usage
 
 
