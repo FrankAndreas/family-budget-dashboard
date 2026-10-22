@@ -171,6 +171,7 @@ export default function Dashboard() {
                             isParentAccount={ownerOf(selectedAccountObj)?.role === 'PARENT'}
                             isParent={isParent}
                             children={dependents(users)}
+                            people={users.filter(u => u.is_active !== false)}
                             splits={splits}
                             assets={assets}
                             onChanged={refresh}
