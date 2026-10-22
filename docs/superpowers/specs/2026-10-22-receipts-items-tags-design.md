@@ -34,7 +34,8 @@ spending by purpose and by person, not only by category.
 - Hierarchical tags. A tag may later get one parent tag ("Sport" = Velo + Ski); not now.
 - Tags the AI invents. The AI only picks from the family's own tag list; new tags are created by people.
 - Items in CSV/JSON imports, in the JSON backup/restore and in the converter. (The analysis ZIP does get them.)
-- A mailbox the app polls for forwarded receipts. E-mails come in as uploaded `.eml` files.
+- Receiving receipt mails automatically (forwarding to an address, Cloudflare Email Worker like in family-job-tracking):
+  issue #57. In this version e-mails come in as `.eml` files uploaded by hand, like photos and PDFs.
 - Attachments in the analysis ZIP or the JSON backup (they live in the NAS data folder, see section 6).
 - Income receipts. Items are expenses only.
 - Reading bank statements or PDFs with the AI.
@@ -55,6 +56,8 @@ spending by purpose and by person, not only by category.
 - One booking per receipt; items each with their own category; flat tags from a pre-configured list only; a person per
   item from the family members (parents included, e.g. "Dad", "Andreas").
 - The receipt (photo, PDF or e-mail) is stored with the booking.
+- E-mails are uploaded by hand as `.eml` files for now; the automatic route by forwarding is issue #57.
+- The number of AI reads per person and hour is configurable (`RECEIPT_AI_READS_PER_HOUR`), the same for everyone.
 - Budgets per tag are part of the first version.
 - An item can have several tags; each tag counts it in full, and tag totals are never summed.
 - A spending cap is set on the AI product in the Infomaniak Manager (outside the app).
@@ -137,7 +140,9 @@ New module `app/receipt_ai.py`, endpoint `POST /api/v1/receipts/read` (multipart
   saved): `shop`, `date`, `total`, `items`, and `difference` (total minus sum of items, if not 0).
 - **Errors** in the person's language (messages catalog): AI not configured, image too large/not an image, AI service
   unreachable or timed out, answer not readable. The person can always fill the form by hand instead.
-- **Limits:** only logged-in people; at most 30 reads per person per hour (protects the spending cap).
+- **Limits:** only logged-in people; at most `RECEIPT_AI_READS_PER_HOUR` reads per person per hour (environment,
+  default 30; the same allowance for every person; `0` turns reading off while keeping the token). Over the limit →
+  429 with a message in the person's language saying when the next read is possible. Protects the spending cap.
 - **The file is kept for saving:** `receipts/read` stores it as a *pending* attachment (no booking yet) and returns its
   `attachment_id` with the draft. Booking the receipt links it; pending attachments older than 24 h are deleted (on
   start and once a day). A receipt can also be attached without the AI (feature off, or the person types it).
@@ -183,7 +188,7 @@ New module `app/receipt_ai.py`, endpoint `POST /api/v1/receipts/read` (multipart
 
 ## 6. Deployment and secrets
 
-- NAS: `INFOMANIAK_AI_TOKEN`, `INFOMANIAK_AI_PRODUCT_ID`, `RECEIPT_AI_MODEL` in the NAS `.env` (like `SECRET_KEY`),
+- NAS: `INFOMANIAK_AI_TOKEN`, `INFOMANIAK_AI_PRODUCT_ID`, `RECEIPT_AI_MODEL`, `RECEIPT_AI_READS_PER_HOUR` in the NAS `.env` (like `SECRET_KEY`),
   passed through `docker-compose.yml`; documented in `.env.example` and `README_DOCKER.md` (empty = feature off).
 - The deploy script copies the values from `pass` into the NAS `.env` without printing them, only if the user asks
   for it (otherwise they edit `.env` on the NAS themselves).
@@ -210,12 +215,10 @@ New module `app/receipt_ai.py`, endpoint `POST /api/v1/receipts/read` (multipart
 
 ## Calls made by the builder (to check)
 
-- E-mails come in as `.eml` uploads, not through a mailbox the app polls.
 - Attachments are not in the analysis ZIP or the JSON backup; they rely on the NAS backup of `data/`.
 - Pending attachments (read but not booked) are deleted after 24 h.
 - Tags are family-wide and managed by parents, like categories; everyone who can book can use them.
 - An itemized booking's own category is its largest item's category ("main category").
-- Up to 30 AI reads per person and hour.
 
 ## Left to the builder
 
