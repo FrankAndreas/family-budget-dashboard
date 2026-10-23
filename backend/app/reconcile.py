@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from . import auth, crud, database, messages, models, privacy, schemas
 from .crud import to_cents
@@ -91,7 +91,12 @@ def summary(db: Session, account: models.Account) -> dict:
     covered = covered_until(db, account.id)
     if account.type not in WITH_STATES or covered is None:
         return {"open_points": 0, "not_confirmed": 0.0}
-    bookings = db.query(models.Transaction).filter(models.Transaction.account_id == account.id).all()
+    bookings = (
+        db.query(models.Transaction)
+        .filter(models.Transaction.account_id == account.id)
+        .options(selectinload(models.Transaction.bank_rows), selectinload(models.Transaction.attachments))
+        .all()
+    )
     found = [(t, state(t, account, covered)) for t in bookings]
     unconfirmed = sum(t.amount for t, s in found if s["confirmation"] in ("not_confirmed", "no_payment"))
     return {

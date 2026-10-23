@@ -163,3 +163,22 @@ def test_toggle_receipt_expected(client):
     ).json()
     response = client.put(f"{BASE_URL}/transactions/{receipt['id']}", json={"receipt_expected": True}, headers=mum)
     assert response.status_code == 200, response.text
+
+
+def test_accounts_list_loads_states_in_few_queries(client):
+    from sqlalchemy import event
+
+    mum, account_id = setup(client)
+    statement(client, mum, *[line(f"Zahlung {i}", "-5", booked=f"2026-09-{i + 1:02d}") for i in range(25)])
+    for i in range(25):
+        typed(client, mum, account_id, amount=1 + i)
+    queries = []
+    listener = lambda *args: queries.append(1)  # noqa: E731
+    event.listen(database.engine, "before_cursor_execute", listener)
+    try:
+        assert client.get(ACCOUNTS, headers=mum).status_code == 200
+        assert client.get(f"{ACCOUNTS}/{account_id}/transactions", params={"open": 1}, headers=mum).status_code == 200
+    finally:
+        event.remove(database.engine, "before_cursor_execute", listener)
+    # Not one query per booking (50 bookings here)
+    assert len(queries) < 40

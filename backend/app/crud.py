@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from . import auth, ibans, messages, models, schemas
 from datetime import datetime, timezone
 
@@ -183,6 +183,12 @@ def get_transactions(db: Session, account_id: str, skip: int = 0, limit: Optiona
     return (
         db.query(models.Transaction)
         .filter(models.Transaction.account_id == account_id)
+        # Everything the list shows, in a few queries instead of a few per booking
+        .options(
+            selectinload(models.Transaction.items).selectinload(models.TransactionItem.tags),
+            selectinload(models.Transaction.attachments),
+            selectinload(models.Transaction.bank_rows),
+        )
         .order_by(models.Transaction.date.desc())
         .offset(skip)
         .limit(limit)
