@@ -5,11 +5,12 @@ import json
 import re
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from . import auth, database, i18n, models, messages
-from .seed import OTHER_INCOME, SETTLE_UP, UNSORTED
+from .seed import OTHER_INCOME, SETTLE_UP, TRANSFER as TRANSFER_KEY, UNSORTED
 
 router = APIRouter()
 
@@ -125,8 +126,87 @@ def rule_out(rule: models.ImportRule) -> dict:
         "text": rule.text,
         "category": i18n.category_name(rule.category),
         "category_type": rule.category.type.value,
+        "category_id": rule.category_id,
+        "receipt_expected": bool(rule.receipt_expected),
         "toml": toml_block(rule.text, rule.category),
     }
+
+
+class RuleIn(BaseModel):
+    text: str
+    category_id: str
+    receipt_expected: bool = False
+
+
+class RuleUpdate(BaseModel):
+    text: Optional[str] = None
+    category_id: Optional[str] = None
+    receipt_expected: Optional[bool] = None
+
+
+def checked_text(db: Session, text: str, rule_id: Optional[str] = None) -> str:
+    problem = remember_problem(text)
+    if problem:
+        raise HTTPException(status_code=400, detail=problem)
+    if any(key(r.text) == key(text) and r.id != rule_id for r in load(db)):
+        raise messages.api_error(400, "rule_exists")
+    return text.strip()
+
+
+def checked_category(db: Session, category_id: str) -> models.Category:
+    """Income, expense or the Transfer category; Settle up and the like are booked by the app itself."""
+    category = db.query(models.Category).filter(models.Category.id == category_id).first()
+    if not category:
+        raise messages.api_error(404, "category_not_found")
+    plain = category.type in (models.CategoryType.INCOME, models.CategoryType.EXPENSE)
+    if not plain and category.system_key != TRANSFER_KEY:
+        raise messages.api_error(400, "rule_category_invalid")
+    return category
+
+
+def get_rule(db: Session, rule_id: str) -> models.ImportRule:
+    rule = db.query(models.ImportRule).filter(models.ImportRule.id == rule_id).first()
+    if not rule:
+        raise messages.api_error(404, "rule_not_found")
+    return rule
+
+
+@router.post("/import/rules")
+def create_rule(
+    rule_in: RuleIn,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    require_parent(current_user)
+    rule = models.ImportRule(
+        text=checked_text(db, rule_in.text),
+        category_id=checked_category(db, rule_in.category_id).id,
+        receipt_expected=rule_in.receipt_expected,
+    )
+    db.add(rule)
+    db.commit()
+    db.refresh(rule)
+    return rule_out(rule)
+
+
+@router.put("/import/rules/{rule_id}")
+def update_rule(
+    rule_id: str,
+    update: RuleUpdate,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    require_parent(current_user)
+    rule = get_rule(db, rule_id)
+    if update.text is not None:
+        rule.text = checked_text(db, update.text, rule.id)
+    if update.category_id is not None:
+        rule.category_id = checked_category(db, update.category_id).id
+    if update.receipt_expected is not None:
+        rule.receipt_expected = update.receipt_expected
+    db.commit()
+    db.refresh(rule)
+    return rule_out(rule)
 
 
 @router.get("/import/rules")
@@ -144,9 +224,7 @@ def delete_rule(
     db: Session = Depends(database.get_db),
 ):
     require_parent(current_user)
-    rule = db.query(models.ImportRule).filter(models.ImportRule.id == rule_id).first()
-    if not rule:
-        raise messages.api_error(404, "rule_not_found")
+    rule = get_rule(db, rule_id)
     db.delete(rule)
     db.commit()
     return {"deleted": rule_id}

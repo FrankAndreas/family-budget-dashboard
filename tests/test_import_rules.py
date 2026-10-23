@@ -232,3 +232,83 @@ class TestMatching:
         add_rule("Muster", "Groceries", 2)
         add_rule("muster", "Clothing", 1)
         assert booked_as(client, mum, "Bäckerei Muster") == ["Clothing"]
+
+
+RULES = f"{BASE_URL}/import/rules"
+
+
+class TestManage:
+    def test_create_list_update_delete_rule(self, client, mum):
+        groceries, clothing = category_id(client, "Groceries"), category_id(client, "Clothing")
+        response = client.post(RULES, json={"text": " Coop ", "category_id": groceries}, headers=mum)
+        assert response.status_code == 200, response.text
+        rule = response.json()
+        assert (rule["text"], rule["category_id"], rule["category"], rule["receipt_expected"]) == (
+            "Coop",
+            groceries,
+            "Groceries",
+            False,
+        )
+        assert [r["id"] for r in rules(client, mum)] == [rule["id"]]
+        changed = client.put(
+            f"{RULES}/{rule['id']}",
+            json={"text": "Coop City", "category_id": clothing, "receipt_expected": True},
+            headers=mum,
+        ).json()
+        assert (changed["text"], changed["category"], changed["receipt_expected"]) == ("Coop City", "Clothing", True)
+        assert client.put(f"{RULES}/{rule['id']}", json={"receipt_expected": False}, headers=mum).json()["text"] == (
+            "Coop City"
+        )
+        assert client.delete(f"{RULES}/{rule['id']}", headers=mum).status_code == 200
+        assert rules(client, mum) == []
+        assert client.put(f"{RULES}/{rule['id']}", json={"text": "x y"}, headers=mum).status_code == 404
+
+    def test_rule_text_unique_ignoring_case(self, client, mum):
+        groceries = category_id(client, "Groceries")
+        client.post(RULES, json={"text": "Coop", "category_id": groceries}, headers=mum)
+        response = client.post(RULES, json={"text": "COOP", "category_id": groceries}, headers=mum)
+        assert response.status_code == 400
+        assert response.json()["detail"] == "There is already a rule for this text"
+        other = client.post(RULES, json={"text": "Denner", "category_id": groceries}, headers=mum).json()
+        assert client.put(f"{RULES}/{other['id']}", json={"text": "coop"}, headers=mum).status_code == 400
+        # Its own text in other spelling is fine
+        assert client.put(f"{RULES}/{other['id']}", json={"text": "DENNER"}, headers=mum).status_code == 200
+
+    def test_rule_text_length(self, client, mum):
+        groceries = category_id(client, "Groceries")
+        for text in ("a", "  a  ", "x" * 121):
+            assert client.post(RULES, json={"text": text, "category_id": groceries}, headers=mum).status_code == 400
+
+    def test_rule_categories(self, client, mum):
+        ok = client.post(RULES, json={"text": "Übertrag", "category_id": category_id(client, "Transfer")}, headers=mum)
+        assert ok.status_code == 200
+        assert ok.json()["category_type"] == "TRANSFER"
+        settle = client.post(
+            RULES, json={"text": "Ausgleich", "category_id": category_id(client, "Settle up")}, headers=mum
+        )
+        assert settle.status_code == 400
+        assert settle.json()["detail"] == "Rules can only set income, expense or Transfer categories"
+        assert client.post(RULES, json={"text": "Lohn AG", "category_id": "nope"}, headers=mum).status_code == 404
+
+    def test_rules_parents_only(self, client, mum):
+        kid = register(client, "kid", role="CHILD", by=mum)
+        groceries = category_id(client, "Groceries")
+        rule = client.post(RULES, json={"text": "Coop", "category_id": groceries}, headers=mum).json()
+        assert client.post(RULES, json={"text": "Migros", "category_id": groceries}, headers=kid).status_code == 403
+        assert client.put(f"{RULES}/{rule['id']}", json={"text": "Migros"}, headers=kid).status_code == 403
+
+    def test_remember_keeps_receipt_expected(self, client, mum):
+        groceries = category_id(client, "Groceries")
+        rule = client.post(
+            RULES, json={"text": "Bäckerei", "category_id": groceries, "receipt_expected": True}, headers=mum
+        ).json()
+        response = send(
+            client,
+            mum,
+            csv("2026-09-06,Bank,Other Income,5.00,,Bäckerei Gutschrift,bank:9"),
+            {"2": {"category": "Salary", "remember": "bäckerei"}},
+            path="import",
+        )
+        assert response.status_code == 200, response.text
+        [saved] = rules(client, mum)
+        assert (saved["id"], saved["category"], saved["receipt_expected"]) == (rule["id"], "Salary", True)
