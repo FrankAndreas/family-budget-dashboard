@@ -91,6 +91,9 @@ class Account(AccountBase):
     id: str
     user_id: str
     balance: float
+    # Reconciliation (reconcile.summary): open bookings and bank lines, and the sum of the unconfirmed bookings
+    open_points: int = 0
+    not_confirmed: float = 0
 
     class Config:
         from_attributes = True
@@ -246,6 +249,9 @@ class TransactionCreate(TransactionBase):
 
 
 class TransactionUpdate(BaseModel):
+    # Reconciliation flags; can change on any booking
+    receipt_expected: Optional[bool] = None
+    difference_accepted: Optional[bool] = None
     amount: Optional[float] = None
     description: Optional[str] = None
     date: Optional[datetime] = None
@@ -263,6 +269,17 @@ class TransactionUpdate(BaseModel):
     _amount_not_zero = field_validator("amount")(_reject_zero)
 
 
+class BankRowOut(BaseModel):
+    id: str
+    booked_on: date
+    valuta_on: Optional[date] = None
+    text: str
+    amount: float
+
+    class Config:
+        from_attributes = True
+
+
 class Transaction(TransactionBase):
     id: str
     account_id: str
@@ -271,6 +288,12 @@ class Transaction(TransactionBase):
     split_shares: Optional[dict[str, int]] = None
     items: list[ItemOut] = []
     attachments: list[AttachmentOut] = []
+    # Reconciliation (bank import, part 2): the statement lines that paid it, and its state (reconcile.state)
+    bank_rows: list[BankRowOut] = []
+    receipt_expected: bool = False
+    difference: Optional[float] = None
+    difference_accepted: bool = False
+    state: Optional[dict] = None
 
     # Dates are stored as naive UTC; mark them as UTC so clients convert to local time correctly
     @field_validator("date")

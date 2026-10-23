@@ -1,6 +1,6 @@
 from typing import Optional
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 from . import auth, ibans, messages, models, schemas
 from datetime import datetime, timezone
 
@@ -156,6 +156,7 @@ def update_account(db: Session, db_account: models.Account, update: schemas.Acco
 
 
 def delete_account(db: Session, db_account: models.Account):
+    db.query(models.BankRow).filter(models.BankRow.account_id == db_account.id).delete(synchronize_session=False)
     db.query(models.Transaction).filter(models.Transaction.account_id == db_account.id).delete(
         synchronize_session=False
     )
@@ -178,10 +179,16 @@ def create_category(db: Session, category: schemas.CategoryCreate):
 
 
 # Transaction CRUD
-def get_transactions(db: Session, account_id: str, skip: int = 0, limit: int = 100):
+def get_transactions(db: Session, account_id: str, skip: int = 0, limit: Optional[int] = 100):
     return (
         db.query(models.Transaction)
         .filter(models.Transaction.account_id == account_id)
+        # Everything the list shows, in a few queries instead of a few per booking
+        .options(
+            selectinload(models.Transaction.items).selectinload(models.TransactionItem.tags),
+            selectinload(models.Transaction.attachments),
+            selectinload(models.Transaction.bank_rows),
+        )
         .order_by(models.Transaction.date.desc())
         .offset(skip)
         .limit(limit)
@@ -272,8 +279,8 @@ def get_transaction(db: Session, transaction_id: str):
 
 
 def delete_transaction(db: Session, db_transaction: models.Transaction):
-    # Loaded now: the response shows the deleted booking with its items and attachments
-    db_transaction.items, db_transaction.attachments
+    # Loaded now: the response shows the deleted booking with its items, attachments and bank lines
+    db_transaction.items, db_transaction.attachments, db_transaction.bank_rows
     db.delete(db_transaction)
     db.commit()
     return db_transaction

@@ -6,7 +6,7 @@ import math
 from datetime import datetime, timedelta
 from fastapi import Body
 
-from . import attachments, crud, schemas, auth, database, models, privacy, reports, i18n, items, messages
+from . import attachments, crud, schemas, auth, database, models, privacy, reconcile, reports, i18n, items, messages
 from .common_api import apply_item_decisions, visible_owner
 from .seed import SETTLE_UP
 
@@ -250,7 +250,11 @@ def get_accounts(
     current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
 ):
     # Return all accounts the user has access to (own, the other parents', children without privacy)
-    return privacy.get_accessible_accounts(db, current_user)
+    accounts = privacy.get_accessible_accounts(db, current_user)
+    for account in accounts:
+        for name, value in reconcile.summary(db, account).items():
+            setattr(account, name, value)
+    return accounts
 
 
 @router.post("/accounts", response_model=schemas.Account)
@@ -304,12 +308,17 @@ def get_transactions(
     account_id: str,
     skip: int = 0,
     limit: int = 100,
+    open: bool = False,
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     # Check if user has access to this account (with privacy enforcement)
     privacy.check_account_access(db, current_user, account_id)
-    return crud.get_transactions(db, account_id=account_id, skip=skip, limit=limit)
+    if open:
+        # All open points, however old: they are what is left to do
+        everything = reconcile.annotate(db, crud.get_transactions(db, account_id=account_id, skip=0, limit=None))
+        return [t for t in everything if reconcile.is_open(t.state)]
+    return reconcile.annotate(db, crud.get_transactions(db, account_id=account_id, skip=skip, limit=limit))
 
 
 @router.post("/transactions", response_model=schemas.Transaction)
@@ -377,6 +386,8 @@ def update_receipt(
     if update.date:
         transaction.date = crud.to_naive_utc(update.date)
     items.apply(db, user, transaction, update.items or [])
+    # On a booking the bank confirmed, the receipt keeps the bank's amount (the difference becomes an item)
+    reconcile.fit(db, transaction)
     category = crud.get_category(db, transaction.category_id)
     if "split_id" in fields and update.split_id != transaction.split_id:
         transaction.split_shares = check_shared(db, update.split_id, transaction.account_id, category)
@@ -397,11 +408,24 @@ def update_transaction(
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
+    flags = {"receipt_expected", "difference_accepted"} & transaction_update.model_fields_set
+    if flags:
+        db_transaction = crud.get_transaction(db, transaction_id)
+        if not db_transaction:
+            raise messages.api_error(404, "transaction_not_found")
+        privacy.check_account_access(db, current_user, db_transaction.account_id, write=True)
+        for flag in flags:
+            setattr(db_transaction, flag, bool(getattr(transaction_update, flag)))
+        db.commit()
+        rest = transaction_update.model_dump(exclude_unset=True, exclude=flags)
+        if not rest:
+            return reconcile.annotate(db, [db_transaction])[0]
+        transaction_update = schemas.TransactionUpdate(**rest)
     updated = change_transaction(db, current_user, transaction_id, transaction_update)
     # update_receipt links them itself, inside its own commit
-    if transaction_update.items:
-        return updated
-    return with_attachments(db, current_user, updated, transaction_update.attachment_ids)
+    if not transaction_update.items:
+        updated = with_attachments(db, current_user, updated, transaction_update.attachment_ids)
+    return reconcile.annotate(db, [updated])[0]
 
 
 def change_transaction(

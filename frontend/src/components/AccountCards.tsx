@@ -190,6 +190,12 @@ export default function AccountCards({
                                 )}
                                 <p className="text-sm text-slate-400">{t(`accounts.types.${account.type as typeof ACCOUNT_TYPES[number]}`)}</p>
                                 {isParent && account.iban && <p className="text-xs text-slate-500 font-mono">{groupedIban(account.iban)}</p>}
+                                {(account.not_confirmed ?? 0) !== 0 && (
+                                    <p className="text-xs text-slate-400">{t('reconcile.ofWhichNotConfirmed', { amount: money(account.not_confirmed ?? 0) })}</p>
+                                )}
+                                {(account.open_points ?? 0) > 0 && (
+                                    <p className="text-xs text-amber-300">{t('reconcile.openPoints', { count: account.open_points })}</p>
+                                )}
                                 <div className="flex justify-between items-end mt-2">
                                     <p className="text-2xl font-bold">{money(account.balance)}</p>
                                     {canEdit(account) && (

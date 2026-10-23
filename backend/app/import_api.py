@@ -9,14 +9,29 @@ import io
 import json
 import math
 import re
-from datetime import datetime
+from datetime import datetime, time
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from . import auth, bank_csv, crud, database, i18n, ibans, import_rules, models, privacy, receipt_ai, schemas, messages
+from . import (
+    auth,
+    bank_csv,
+    crud,
+    database,
+    i18n,
+    ibans,
+    import_rules,
+    models,
+    privacy,
+    receipt_ai,
+    reconcile,
+    schemas,
+    messages,
+)
 from .api import check_asset, check_member_tag, check_shared, is_dependent
 from .common_api import visible_owner
 from .seed import OTHER_INCOME, SETTLE_UP, system_category
@@ -149,7 +164,15 @@ class Lookups:
 
         visible = [a.id for a in accounts if levels.get(a.user_id)]
         existing = db.query(models.Transaction).filter(models.Transaction.account_id.in_(visible)).all()
-        self.references = {t.reference: t for t in existing if t.reference}
+        self.references: dict[str, Any] = {t.reference: t for t in existing if t.reference}
+        # Imported bank lines are known by their own reference, also when linked to another booking (a receipt) or
+        # to none any more
+        by_id = {t.id: t for t in existing}
+        for row in db.query(models.BankRow).filter(models.BankRow.account_id.in_(visible)):
+            twin = by_id.get(row.transaction_id or "")
+            self.references.setdefault(
+                row.reference, twin or SimpleNamespace(id=None, date=datetime.combine(row.booked_on, time(12)))
+            )
         self.bookings = {(t.account_id, t.date.date(), t.amount, t.category_id): t for t in existing}
 
     def account(self, name: str, owner: str) -> tuple[Optional[models.Account], Optional[str]]:
@@ -332,9 +355,10 @@ def source(raw: dict, change: Optional[dict], rule: Optional[str]) -> Optional[s
 
 
 def check_file(
-    db: Session, user: models.User, file: UploadFile, changes: Optional[dict] = None
+    db: Session, user: models.User, file: UploadFile, changes: Optional[dict] = None, matches: Optional[dict] = None
 ) -> tuple[list[dict], bool]:
-    """The checked rows, and whether the file is a bank export."""
+    """The checked rows, and whether the file is a bank export. matches: {line: booking id or "new"}, the parent's
+    choice of which booking a bank line confirms."""
     raw_rows, bank = parse_file(file.filename or "", file.file.read(MAX_BYTES + 1))
     if bank and user.role != models.UserRole.PARENT:
         raise messages.api_error(403, "only_parents_import_bank")
@@ -371,14 +395,70 @@ def check_file(
             source=source(raw, change, rule),
             _account=raw.get("_account"),
             _booked=raw.get("_booked"),
+            _valuta=raw.get("_valuta"),
+            # The rule that booked it expects a receipt (reconciliation)
+            _receipt_expected=any(r.text == rule and r.receipt_expected for r in rules) if rule else False,
             _balance=raw.get("_balance"),
         )
         rows.append(out)
+    if bank:
+        match_bookings(db, rows, matches or {})
     return rows, bank
 
 
-def balances(rows: list[dict]) -> list[dict]:
-    """Per account in a bank file: the balance of its latest line, next to the app's after booking the ok rows."""
+def signed(row: dict) -> float:
+    transaction, category, _ = row["_create"]
+    return crud.signed_amount(transaction.amount, category)
+
+
+def match_bookings(db: Session, rows: list[dict], matches: dict) -> None:
+    """Each bookable bank line gets the bookings it could confirm ("matches") and the one it will ("match"): the
+    parent's choice, else the best one no earlier line took. A booking is confirmed by one line at most."""
+    chosen = {line: target for line, target in matches.items() if target != "new"}
+    taken = set(chosen.values())
+    for row in rows:
+        if row["status"] != "ok" or row.get("_account") is None:
+            continue
+        mine = chosen.get(row["line"])
+        found = reconcile.candidates_for_line(
+            db, row["_account"], row["_booked"], signed(row), taken - {mine} if mine else taken
+        )
+        row["matches"] = [
+            {"id": t.id, "description": t.description, "date": t.date.date().isoformat(), "amount": t.amount}
+            for t in found
+        ]
+        ids = {t.id: t for t in found}
+        if row["line"] in matches and matches[row["line"]] == "new":
+            target = None
+        elif mine:
+            if mine not in ids:
+                row["errors"].append(messages.text("match_unknown"))
+                row["status"] = "error"
+                continue
+            target = ids[mine]
+        else:
+            target = found[0] if found else None
+        if target is not None:
+            taken.add(target.id)
+        row["match"] = target.id if target is not None else None
+        row["_match"] = target
+
+
+def parse_matches(text: str) -> dict[int, str]:
+    """{line: booking id or "new"} from the form field."""
+    if not text:
+        return {}
+    try:
+        raw = json.loads(text)
+        found = {int(line): str(target) for line, target in raw.items()}
+    except ValueError, AttributeError, TypeError:
+        raise messages.api_error(400, "matches_not_json")
+    return found
+
+
+def balances(db: Session, rows: list[dict]) -> list[dict]:
+    """Per account in a bank file: the balance of its latest line, next to the app's after the import: the bookings
+    the bank confirmed, plus the ok rows (new or confirming one)."""
     latest: dict[str, tuple] = {}
     added: dict[str, float] = {}
     for row in rows:
@@ -390,21 +470,41 @@ def balances(rows: list[dict]) -> list[dict]:
             if account.id not in latest or when > latest[account.id][0]:
                 latest[account.id] = (when, row["_balance"])
         if row["status"] == "ok":
-            transaction, category, _ = row["_create"]
-            added[account.id] = added.get(account.id, 0.0) + crud.signed_amount(transaction.amount, category)
+            added[account.id] = added.get(account.id, 0.0) + signed(row)
     accounts = {row["_account"].id: row["_account"] for row in rows if row.get("_account") is not None}
+
+    def confirmed(account_id: str) -> float:
+        bookings = db.query(models.Transaction).filter(
+            models.Transaction.account_id == account_id, models.Transaction.bank_rows.any()
+        )
+        return sum(t.amount for t in bookings)
+
     return [
         {
             "account_id": account.id,
             "account": account.name,
             "file_balance": latest[account.id][1] if account.id in latest else None,
-            "app_balance": round((account.balance or 0) + added.get(account.id, 0.0), 2),
+            "app_balance": round(confirmed(account.id) + added.get(account.id, 0.0), 2),
         }
         for account in accounts.values()
     ]
 
 
-def public(rows: list[dict], bank: bool = False) -> dict:
+def bank_row(row: dict, booking: models.Transaction) -> models.BankRow:
+    """The statement line behind a booked bank row, kept as the proof that the money moved."""
+    return models.BankRow(
+        account_id=booking.account_id,
+        transaction_id=booking.id,
+        booked_on=row["_booked"] or booking.date.date(),
+        valuta_on=row["_valuta"],
+        text=row["description"],
+        amount=signed(row),
+        balance=row["_balance"],
+        reference=row["reference"],
+    )
+
+
+def public(db: Session, rows: list[dict], bank: bool = False) -> dict:
     statuses = ("ok", "duplicate", "error", "skipped")
     counts = {status: sum(r["status"] == status for r in rows) for status in statuses}
     result = {
@@ -415,7 +515,7 @@ def public(rows: list[dict], bank: bool = False) -> dict:
         "skipped": counts["skipped"],
     }
     if bank:
-        result["balances"] = balances(rows)
+        result["balances"] = balances(db, rows)
     return result
 
 
@@ -424,13 +524,15 @@ def preview_import(
     file: UploadFile = File(...),
     changes: str = Form(""),
     ai: str = Form(""),
+    matches: str = Form(""),
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     changed = import_rules.parse_changes(changes)
-    rows, bank = check_file(db, current_user, file, changed)
+    chosen = parse_matches(matches)
+    rows, bank = check_file(db, current_user, file, changed, chosen)
     if not (bank and ai == "1"):
-        return public(rows, bank)
+        return public(db, rows, bank)
     # The first preview of a bank file asks the AI once; the frontend sends its answers back as changes
     # Only rows that will be booked: an already booked one needs no suggestion
     open_rows = [r for r in rows if r.get("source") == "fallback" and r["status"] == "ok"]
@@ -446,8 +548,10 @@ def preview_import(
     }
     if suggestions:
         file.file.seek(0)
-        rows, bank = check_file(db, current_user, file, {**changed, **{int(k): v for k, v in suggestions.items()}})
-    return {**public(rows, bank), "ai": {"status": status, "message": message, "suggestions": suggestions}}
+        rows, bank = check_file(
+            db, current_user, file, {**changed, **{int(k): v for k, v in suggestions.items()}}, chosen
+        )
+    return {**public(db, rows, bank), "ai": {"status": status, "message": message, "suggestions": suggestions}}
 
 
 @router.post("/import")
@@ -455,19 +559,36 @@ def run_import(
     file: UploadFile = File(...),
     include_duplicates: str = Form(""),
     changes: str = Form(""),
+    matches: str = Form(""),
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
     changed = import_rules.parse_changes(changes)
-    rows, bank = check_file(db, current_user, file, changed)
+    rows, bank = check_file(db, current_user, file, changed, parse_matches(matches))
     if any(row["status"] == "error" for row in rows):
-        raise HTTPException(status_code=400, detail={"message": messages.text("file_has_errors"), **public(rows, bank)})
+        raise HTTPException(
+            status_code=400, detail={"message": messages.text("file_has_errors"), **public(db, rows, bank)}
+        )
     included = {int(line) for line in include_duplicates.split(",") if line.strip().isdigit()}
     chosen = [row for row in rows if row["status"] == "ok" or row["line"] in included]
     try:
+        known = {r.reference for r in db.query(models.BankRow.reference)} if bank else set()
         for row in chosen:
+            if row.get("_match") is not None:
+                # The line confirms a booking that exists (a receipt typed in before the statement came)
+                booking = row["_match"]
+                db.add(bank_row(row, booking))
+                db.flush()
+                db.refresh(booking)
+                reconcile.fit(db, booking)
+                continue
             transaction, category, split_shares = row["_create"]
-            crud.create_transaction(db, transaction, category, split_shares=split_shares, commit=False)
+            created = crud.create_transaction(db, transaction, category, split_shares=split_shares, commit=False)
+            created.receipt_expected = row.get("_receipt_expected", False)
+            # A line booked again on purpose (a duplicate included) keeps its first bank row
+            if bank and row["reference"] not in known:
+                db.add(bank_row(row, created))
+                known.add(row["reference"])
         # Remembered rules are saved with the bookings, so a failed import saves none
         categories = categories_by_name(db)
         for row in rows:
