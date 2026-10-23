@@ -386,6 +386,8 @@ def update_receipt(
     if update.date:
         transaction.date = crud.to_naive_utc(update.date)
     items.apply(db, user, transaction, update.items or [])
+    # On a booking the bank confirmed, the receipt keeps the bank's amount (the difference becomes an item)
+    reconcile.fit(db, transaction)
     category = crud.get_category(db, transaction.category_id)
     if "split_id" in fields and update.split_id != transaction.split_id:
         transaction.split_shares = check_shared(db, update.split_id, transaction.account_id, category)
