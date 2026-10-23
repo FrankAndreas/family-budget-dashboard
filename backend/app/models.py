@@ -212,10 +212,8 @@ class InboxMail(Base):
     message_id: Mapped[str] = mapped_column(String, unique=True)
     attachment_names: Mapped[Any] = mapped_column(JSON, default=list)
     size: Mapped[int] = mapped_column(Integer)
-    # The pending attachment of the latest release; booking it marks the entry booked
-    attachment_id: Mapped[Optional[str]] = mapped_column(
-        String, ForeignKey("attachments.id", ondelete="SET NULL"), nullable=True
-    )
+    # Booking any release of the mail (an attachment with the same content) marks the entry booked
+    sha256: Mapped[str] = mapped_column(String, index=True)
     booked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 

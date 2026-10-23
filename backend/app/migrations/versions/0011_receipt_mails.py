@@ -28,12 +28,14 @@ def upgrade() -> None:
         sa.Column("message_id", sa.String(), nullable=False, unique=True),
         sa.Column("attachment_names", sa.JSON(), nullable=False),
         sa.Column("size", sa.Integer(), nullable=False),
-        sa.Column("attachment_id", sa.String(), sa.ForeignKey("attachments.id", ondelete="SET NULL"), nullable=True),
+        sa.Column("sha256", sa.String(), nullable=False),
         sa.Column("booked_at", sa.DateTime(), nullable=True),
     )
+    op.create_index("ix_inbox_mails_sha256", "inbox_mails", ["sha256"])
 
 
 def downgrade() -> None:
+    op.drop_index("ix_inbox_mails_sha256", "inbox_mails")
     op.drop_table("inbox_mails")
     op.drop_index("ix_user_emails_user_id", "user_emails")
     op.drop_table("user_emails")

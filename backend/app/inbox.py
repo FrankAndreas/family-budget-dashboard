@@ -14,20 +14,21 @@ import hmac
 import logging
 import os
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from . import attachments, database, emails_api, messages, models
+from . import attachments, auth, database, emails_api, messages, models, privacy, receipt_ai
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 MAX_BYTES = attachments.MAX_BYTES
 PATH = "/inbound"
+KEEP_DAYS = 30
 
 
 def inbox_dir() -> Path:
@@ -99,6 +100,7 @@ def receive(db: Session, raw: bytes) -> Optional[models.InboxMail]:
         message_id=mail.message_id,
         attachment_names=mail.attachment_names,
         size=len(raw),
+        sha256=hashlib.sha256(raw).hexdigest(),
     )
     db.add(entry)
     db.flush()
@@ -133,3 +135,125 @@ async def receive_mail(request: Request, db: Session = Depends(database.get_db))
         return {"status": "duplicate"}
     logger.info("%s: mail stored in the inbox", PATH)
     return {"status": "stored", "id": entry.id}
+
+
+def require_parent(user: models.User) -> None:
+    if user.role != models.UserRole.PARENT:
+        raise messages.api_error(403, "only_parents_inbox")
+
+
+def get_entry(db: Session, entry_id: str) -> models.InboxMail:
+    entry = (
+        db.query(models.InboxMail).filter(models.InboxMail.id == entry_id, models.InboxMail.booked_at.is_(None)).first()
+    )
+    if not entry:
+        raise messages.api_error(404, "inbox_not_found")
+    return entry
+
+
+def writable(db: Session, user: models.User, account: models.Account) -> bool:
+    owner = db.query(models.User).filter(models.User.id == account.user_id).first()
+    return owner is not None and privacy.can_write(privacy.access_level(db, user, owner))
+
+
+def suggested_account(db: Session, releaser: models.User, forwarder: Optional[models.User]) -> Optional[str]:
+    """The forwarder's account of their latest receipt (a booking with items), else their first account; only if the
+    releasing parent may book on it."""
+    if forwarder is None:
+        return None
+    latest = (
+        db.query(models.Transaction)
+        .join(models.Account, models.Account.id == models.Transaction.account_id)
+        .filter(models.Account.user_id == forwarder.id, models.Transaction.items.any())
+        .order_by(models.Transaction.date.desc())
+        .first()
+    )
+    if latest is not None:
+        account = db.query(models.Account).filter(models.Account.id == latest.account_id).first()
+    else:
+        account = (
+            db.query(models.Account)
+            .filter(models.Account.user_id == forwarder.id)
+            .order_by(models.Account.name)
+            .first()
+        )
+    return account.id if account is not None and writable(db, releaser, account) else None
+
+
+def sweep(db: Session, now: Optional[datetime] = None) -> int:
+    """Delete mails nobody released within 30 days, and waiting files without an entry. Returns how many went."""
+    cutoff = (now or datetime.utcnow()) - timedelta(days=KEEP_DAYS)
+    old = db.query(models.InboxMail).filter(models.InboxMail.booked_at.is_(None), models.InboxMail.received_at < cutoff)
+    removed = 0
+    for entry in old.all():
+        db.delete(entry)
+        removed += 1
+    db.commit()
+    waiting = {e.id for e in db.query(models.InboxMail.id).filter(models.InboxMail.booked_at.is_(None))}
+    for path in inbox_dir().iterdir():
+        if path.is_file() and path.name not in waiting:
+            path.unlink()
+    return removed
+
+
+@router.get("/inbox")
+def list_inbox(
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+) -> list[dict]:
+    require_parent(current_user)
+    entries = (
+        db.query(models.InboxMail)
+        .filter(models.InboxMail.booked_at.is_(None))
+        .order_by(models.InboxMail.received_at.desc())
+        .all()
+    )
+    people = {u.id: u for u in db.query(models.User)}
+    rows = []
+    for entry in entries:
+        forwarder = people.get(entry.person_id or "")
+        rows.append(
+            {
+                "id": entry.id,
+                "person_id": entry.person_id,
+                "person_name": forwarder.username if forwarder else None,
+                "from_addr": entry.from_addr,
+                "subject": entry.subject,
+                "sent_at": entry.sent_at,
+                "received_at": entry.received_at,
+                "attachment_names": entry.attachment_names or [],
+                "size": entry.size,
+                "suggested_account_id": suggested_account(db, current_user, forwarder),
+            }
+        )
+    return rows
+
+
+@router.delete("/inbox/{entry_id}")
+def delete_entry(
+    entry_id: str,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+) -> dict:
+    require_parent(current_user)
+    entry = get_entry(db, entry_id)
+    db.delete(entry)
+    db.commit()
+    (inbox_dir() / entry_id).unlink(missing_ok=True)
+    return {"deleted": entry_id}
+
+
+@router.post("/inbox/{entry_id}/release")
+def release(
+    entry_id: str,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+) -> dict:
+    """A parent opens the mail: the AI reads it (if set up) into a draft, and it becomes their pending attachment."""
+    require_parent(current_user)
+    entry = get_entry(db, entry_id)
+    raw = (inbox_dir() / entry.id).read_bytes()
+    filename = (entry.subject.replace("/", "-").replace("\\", "-")[:100] or "beleg") + ".eml"
+    if receipt_ai.Settings.from_env().enabled:
+        return receipt_ai.read(db, current_user, filename, raw)
+    attachment = attachments.store(db, current_user, filename, raw, None)
+    return {"draft": None, "attachment_id": attachment.id}

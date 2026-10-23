@@ -34,11 +34,12 @@ database_setup.setup(database.engine)
 logger = logging.getLogger(__name__)
 
 # Make sure a fresh database has categories (transactions need one) and a first parent to log in with;
-# receipts read but never booked are removed after a day (issue #56)
+# receipts read but never booked are removed after a day (issue #56), unreleased receipt mails after 30 (#57)
 with database.SessionLocal() as db:
     seed_categories(db)
     initial_pin = seed_admin(db)
     attachments.sweep(db)
+    inbox.sweep(db)
 logger.info(
     "Receipt mails: %s", "configured" if os.getenv("INBOUND_SECRET") else "not configured (INBOUND_SECRET empty)"
 )
@@ -53,6 +54,7 @@ async def sweep_daily() -> None:
         await asyncio.sleep(24 * 60 * 60)
         with database.SessionLocal() as session:
             attachments.sweep(session)
+            inbox.sweep(session)
 
 
 @asynccontextmanager
