@@ -5,6 +5,7 @@ import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import { downloadBlob } from '../download';
 import { money } from '../finance';
+import { formatDate } from '../format';
 
 interface PreviewRow {
     line: number;
@@ -25,6 +26,9 @@ interface PreviewRow {
     rule: string | null;
     // Bank statements only: where the category came from
     source?: 'rule' | 'ai' | 'change' | 'fallback' | null;
+    // Bank statements: the bookings this line could confirm, and the one it will (null: a new booking)
+    matches?: { id: string; description: string | null; date: string; amount: number }[];
+    match?: string | null;
 }
 
 // Bank statements: the bank's balance after the file's latest line, and the app's after the import
@@ -65,7 +69,9 @@ const STATUS_STYLE: Record<PreviewRow['status'], string> = {
 
 // The file, the duplicates the user chose to book anyway and the changed categories, as the import endpoints expect them
 // (ai: the first preview of a bank statement asks the AI for the rows no rule knows)
-const formData = (file: File, include: number[] = [], changes: Record<number, Change> = {}, ai = false) => {
+const formData = (
+    file: File, include: number[] = [], changes: Record<number, Change> = {}, ai = false, matches: Record<number, string> = {},
+) => {
     const data = new FormData();
     data.append('file', file);
     data.append('include_duplicates', include.join(','));
@@ -73,6 +79,7 @@ const formData = (file: File, include: number[] = [], changes: Record<number, Ch
         ([line, c]) => [line, { category: c.category, remember: c.remember ? c.text : '', ...(c.source ? { source: c.source } : {}) }]
     ))));
     if (ai) data.append('ai', '1');
+    if (Object.keys(matches).length) data.append('matches', JSON.stringify(matches));
     return data;
 };
 
@@ -90,6 +97,8 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
     const [preview, setPreview] = useState<Preview | null>(null);
     const [included, setIncluded] = useState<Set<number>>(new Set());
     const [changes, setChanges] = useState<Record<number, Change>>({});
+    // The parent's choice of which booking a bank line confirms ("new": none)
+    const [matches, setMatches] = useState<Record<number, string>>({});
     const [categories, setCategories] = useState<Category[]>([]);
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState<Status | null>(null);
@@ -108,6 +117,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
         setPreview(null);
         setIncluded(new Set());
         setChanges({});
+        setMatches({});
         setAiMessage(null);
     };
 
@@ -132,7 +142,22 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
         setChanges(next);
         setBusy(true);
         try {
-            const res = await api.post('/api/v1/import/preview', formData(file, [], next));
+            const res = await api.post('/api/v1/import/preview', formData(file, [], next, false, matches));
+            setPreview(res.data);
+        } catch (error) {
+            setStatus({ kind: 'error', text: errorMessage(error, t('importing.changeFailed')) });
+        } finally {
+            setBusy(false);
+        }
+    };
+
+    const chooseMatch = async (line: number, target: string) => {
+        if (!file) return;
+        const next = { ...matches, [line]: target };
+        setMatches(next);
+        setBusy(true);
+        try {
+            const res = await api.post('/api/v1/import/preview', formData(file, [], changes, false, next));
             setPreview(res.data);
         } catch (error) {
             setStatus({ kind: 'error', text: errorMessage(error, t('importing.changeFailed')) });
@@ -184,7 +209,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
         if (!file) return;
         setBusy(true);
         try {
-            const res = await api.post('/api/v1/import', formData(file, [...included], changes));
+            const res = await api.post('/api/v1/import', formData(file, [...included], changes, false, matches));
             const { imported, skipped } = res.data;
             setStatus({
                 kind: 'success',
@@ -312,7 +337,23 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                             {row.source === 'ai' && <div className="text-xs text-sky-400">{t('importing.byAi')}</div>}
                                             {changes[row.line] && row.source !== 'ai' && <div className="text-xs text-slate-500">{t('importing.was')}<s>{row.file_category}</s></div>}
                                             {row.rule && <div className="text-xs text-emerald-400">{t('importing.byRule', { rule: row.rule })}</div>}
-                                            {row.source === 'fallback' && row.status !== 'error' && <div className="text-xs text-slate-500">{t('importing.byFallback')}</div>}
+                                            {row.source === 'fallback' && row.status !== 'error' && !row.match && <div className="text-xs text-slate-500">{t('importing.byFallback')}</div>}
+                                            {row.matches && row.matches.length > 0 && (
+                                                <select
+                                                    value={row.match ?? 'new'}
+                                                    onChange={(e) => chooseMatch(row.line, e.target.value)}
+                                                    disabled={busy}
+                                                    aria-label={t('importing.matchOfLine', { line: row.line })}
+                                                    className="mt-1 p-1 rounded bg-slate-800/50 border border-sky-600 text-white text-xs"
+                                                >
+                                                    {row.matches.map(m => (
+                                                        <option key={m.id} value={m.id}>
+                                                            {t('importing.confirms', { description: m.description || '–', date: formatDate(m.date), amount: money(m.amount) })}
+                                                        </option>
+                                                    ))}
+                                                    <option value="new">{t('importing.newBooking')}</option>
+                                                </select>
+                                            )}
                                             {isParent && changes[row.line] && (
                                                 <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                                                     <label className="flex items-center gap-1 cursor-pointer">

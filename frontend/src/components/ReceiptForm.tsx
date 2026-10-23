@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import type { Account, Category, Transaction } from '../accounts';
@@ -67,6 +67,16 @@ export default function ReceiptForm({ account, categories, people, aiEnabled, tr
     const [error, setError] = useState('');
 
     const sum = rows.reduce((s, r) => s + (parseFloat(r.amount) || 0), 0);
+    // A new receipt may belong to a bank booking imported before it (bank import, part 2)
+    const [found, setFound] = useState<Transaction[]>([]);
+    const [onto, setOnto] = useState('');
+    const canMatch = !transaction && sum > 0 && /^\d{4}-\d{2}-\d{2}$/.test(date);
+    useEffect(() => {
+        if (!canMatch) return;
+        api.get(`/api/v1/accounts/${account.id}/payments`, { params: { date, total: Math.round(sum * 100) / 100 } })
+            .then(res => setFound(res.data)).catch(() => setFound([]));
+    }, [account.id, canMatch, sum, date]);
+    const payments = canMatch ? found : [];
     const difference = total === null ? 0 : Math.round((total - sum) * 100) / 100;
     const defaultCategory = categories.find(c => c.system_key === 'UNSORTED')?.id ?? categories[0]?.id ?? '';
 
@@ -127,6 +137,8 @@ export default function ReceiptForm({ account, categories, people, aiEnabled, tr
         const body = { description, date: `${date}T12:00:00`, items, attachment_ids: pendingIds };
         try {
             if (transaction) await api.put(`/api/v1/transactions/${transaction.id}`, body);
+            // Onto the bank booking: it keeps the bank's amount, the receipt gives its items
+            else if (onto && payments.some(p => p.id === onto)) await api.put(`/api/v1/transactions/${onto}`, body);
             else await api.post('/api/v1/transactions', { ...body, account_id: account.id });
             onSaved();
         } catch (err) {
@@ -214,6 +226,20 @@ export default function ReceiptForm({ account, categories, people, aiEnabled, tr
                 {total !== null && <span className="text-slate-400">{t('receipt.total', { amount: money(total) })}</span>}
                 {difference !== 0 && <span className="text-red-400">{t('receipt.difference', { amount: money(difference) })}</span>}
             </p>
+            {payments.length > 0 && (
+                <label className="block text-sm">
+                    {t('reconcile.ontoPayment')}
+                    <select value={onto} onChange={e => setOnto(e.target.value)} aria-label={t('reconcile.ontoPayment')}
+                        className={`${field} block mt-1`}>
+                        <option value="">{t('reconcile.newBooking')}</option>
+                        {payments.map(p => (
+                            <option key={p.id} value={p.id}>
+                                {(p.bank_rows?.[0]?.text ?? p.description) || '–'} · {(p.bank_rows?.[0]?.booked_on ?? p.date).slice(0, 10)} · {money(p.amount)}
+                            </option>
+                        ))}
+                    </select>
+                </label>
+            )}
             <div className="flex gap-2">
                 <button type="submit" className="btn-primary" disabled={reading || sum <= 0}>{t('receipt.book')}</button>
                 <button type="button" onClick={onCancel} className="px-4 text-slate-400 hover:text-white">{t('common.cancel')}</button>

@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { money, type Asset, type Split } from '../finance';
 import { formatDate } from '../format';
-import type { Account, Category, Transaction } from '../accounts';
+import type { Account, BankRow, Category, Transaction } from '../accounts';
 import type { FamilyUser } from '../family';
 import { openAttachment, useReceiptReading, useTags } from '../receipts';
 import ReceiptForm from './ReceiptForm';
@@ -55,6 +55,52 @@ export default function Transactions({
     const tagLabel = (id: string) => {
         const tag = tags.find(x => x.id === id);
         return tag ? `${tag.icon ? `${tag.icon} ` : ''}${tag.name}` : '';
+    };
+    // Open points (bank import, part 2): the bookings and bank lines still to sort out
+    const [openOnly, setOpenOnly] = useState(false);
+    const [openBookings, setOpenBookings] = useState<Transaction[]>([]);
+    const [unlinked, setUnlinked] = useState<BankRow[]>([]);
+    // Category chosen to book a bank line without booking, per line
+    const [bookAs, setBookAs] = useState<Record<string, string>>({});
+    useEffect(() => {
+        // Reloaded whenever the list changes (after every action), so both views stay in step
+        api.get(`/api/v1/accounts/${account.id}/bank-rows`, { params: { unlinked: 1 } })
+            .then(res => setUnlinked(res.data)).catch(() => setUnlinked([]));
+        if (openOnly) {
+            api.get(`/api/v1/accounts/${account.id}/transactions`, { params: { open: 1 } })
+                .then(res => setOpenBookings(res.data)).catch(() => setOpenBookings([]));
+        }
+    }, [account.id, transactions, openOnly]);
+    const shown = openOnly ? openBookings : transactions;
+    const act = async (call: () => Promise<unknown>) => {
+        try {
+            await call();
+            onChanged();
+        } catch (error) {
+            onError(errorMessage(error, t('transactions.saveFailed')));
+        }
+    };
+    const linkRow = (transactionId: string, rowId: string) =>
+        act(() => api.post(`/api/v1/transactions/${transactionId}/bank-rows/${rowId}`));
+    const unlinkRow = (transactionId: string, rowId: string) =>
+        act(() => api.delete(`/api/v1/transactions/${transactionId}/bank-rows/${rowId}`));
+    const setFlag = (transaction: Transaction, flag: 'receipt_expected' | 'difference_accepted', value: boolean) =>
+        act(() => api.put(`/api/v1/transactions/${transaction.id}`, { [flag]: value }));
+    const bookRow = (row: BankRow) =>
+        act(() => api.post(`/api/v1/bank-rows/${row.id}/book`, { category_id: bookAs[row.id] }));
+    const badges = (transaction: Transaction) => {
+        const state = transaction.state;
+        if (!state) return [];
+        const found: { text: string; warn: boolean }[] = [];
+        if (state.confirmation === 'not_confirmed') found.push({ text: t('reconcile.notConfirmed'), warn: false });
+        if (state.confirmation === 'no_payment') found.push({ text: t('reconcile.noPayment'), warn: true });
+        if (state.confirmation === 'partly_paid') {
+            const paid = (transaction.bank_rows ?? []).reduce((sum, r) => sum + r.amount, 0);
+            found.push({ text: t('reconcile.partlyPaid', { paid: money(paid), total: money(transaction.amount) }), warn: true });
+        }
+        if (state.receipt_missing) found.push({ text: t('reconcile.receiptMissing'), warn: true });
+        if (state.differs) found.push({ text: t('reconcile.differs', { amount: money(transaction.difference ?? 0) }), warn: true });
+        return found;
     };
     const [showForm, setShowForm] = useState(false);
     const [form, setForm] = useState(emptyForm);
@@ -136,7 +182,15 @@ export default function Transactions({
     return (
         <div className="glass-card p-6">
             <div className="flex justify-between items-center mb-4">
-                <h2 className="text-xl font-bold">{t('transactions.title')}</h2>
+                <h2 className="text-xl font-bold">
+                    {t('transactions.title')}
+                    {(account.open_points ?? 0) > 0 && (
+                        <button onClick={() => setOpenOnly(!openOnly)}
+                            className={`ml-3 text-sm font-normal px-2 py-0.5 rounded-full ${openOnly ? 'bg-amber-500/40 text-white' : 'bg-amber-500/20 text-amber-300'}`}>
+                            {openOnly ? t('reconcile.showAll') : t('reconcile.openPoints', { count: account.open_points })}
+                        </button>
+                    )}
+                </h2>
                 {canEdit && (
                     <div className="flex gap-2">
                         <button onClick={() => { closeForm(); setReceiptFor(receiptFor ? null : 'new'); }} className="btn-primary text-sm">
@@ -254,11 +308,36 @@ export default function Transactions({
                 </form>
             )}
 
+            {openOnly && unlinked.length > 0 && (
+                <div className="mb-4 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 text-sm space-y-2">
+                    <h3 className="font-semibold">{t('reconcile.rowsWithoutBooking')}</h3>
+                    {unlinked.map(row => (
+                        <div key={row.id} className="flex flex-wrap items-center gap-2">
+                            <span className="flex-1 min-w-40">{formatDate(row.booked_on)} · {row.text}</span>
+                            <span className="w-24 text-right">{money(row.amount)}</span>
+                            {canEdit && (<>
+                                <select value={bookAs[row.id] ?? ''} onChange={e => setBookAs({ ...bookAs, [row.id]: e.target.value })}
+                                    aria-label={t('reconcile.bookAs', { text: row.text })}
+                                    className="p-1 rounded bg-slate-800/50 border border-slate-600 text-white">
+                                    <option value="">{t('reconcile.chooseCategory')}</option>
+                                    {[...(row.amount < 0 ? expenseCategories : incomeCategories), ...categories.filter(c => c.system_key === 'TRANSFER')]
+                                        // Not the ones the app books itself
+                                        .filter(c => c.system_key !== 'UNKNOWN_EXPENSE')
+                                        .map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                </select>
+                                <button disabled={!bookAs[row.id]} onClick={() => bookRow(row)}
+                                    className="text-sky-400 hover:underline disabled:opacity-40">{t('reconcile.book')}</button>
+                            </>)}
+                        </div>
+                    ))}
+                </div>
+            )}
+
             <div className="space-y-2">
-                {transactions.length === 0 ? (
+                {shown.length === 0 ? (
                     <p className="text-slate-400 text-center py-8">{t('transactions.none')}</p>
                 ) : (
-                    transactions.map(transaction => (
+                    shown.map(transaction => (
                         <div key={transaction.id} className="p-3 bg-slate-800/30 rounded-lg">
                         <div className="flex justify-between items-center">
                             <div>
@@ -279,13 +358,21 @@ export default function Transactions({
                                             {t('transactions.sharedBadge')}
                                         </span>
                                     )}
+                                    {badges(transaction).map(badge => (
+                                        <span key={badge.text} className={`ml-2 text-xs font-normal px-2 py-0.5 rounded-full ${badge.warn
+                                            ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-500/20 text-slate-300'}`}>
+                                            {badge.text}
+                                        </span>
+                                    ))}
                                 </p>
                                 <p className="text-sm text-slate-400">
                                     {formatDate(transaction.date)}
-                                    {(transaction.items?.length || transaction.attachments?.length) ? (
+                                    {(transaction.items?.length || transaction.attachments?.length || transaction.bank_rows?.length || transaction.state) ? (
                                         <button onClick={() => toggleExpanded(transaction.id)} className="ml-3 text-sky-400 hover:underline">
                                             {transaction.items?.length ? t('receipt.items', { count: transaction.items.length }) : ''}
                                             {transaction.attachments?.length ? ` ${t('receipt.attachmentsCount', { count: transaction.attachments.length })}` : ''}
+                                            {transaction.bank_rows?.length ? ` ${t('reconcile.bankLines', { count: transaction.bank_rows.length })}` : ''}
+                                            {!transaction.items?.length && !transaction.attachments?.length && !transaction.bank_rows?.length ? t('reconcile.more') : ''}
                                         </button>
                                     ) : null}
                                 </p>
@@ -349,6 +436,41 @@ export default function Transactions({
                                         📎 {a.filename}
                                     </button>
                                 ))}
+                                {transaction.bank_rows?.map(row => (
+                                    <div key={row.id} className="flex flex-wrap items-center gap-x-3 text-slate-300">
+                                        <span className="flex-1 min-w-32">🏦 {formatDate(row.booked_on)} · {row.text}</span>
+                                        <span className="w-24 text-right">{money(row.amount)}</span>
+                                        {canEdit && (
+                                            <button onClick={() => unlinkRow(transaction.id, row.id)} className="text-slate-500 hover:text-red-400">
+                                                {t('reconcile.unlink')}
+                                            </button>
+                                        )}
+                                    </div>
+                                ))}
+                                {canEdit && transaction.state && (
+                                    <div className="flex flex-wrap items-center gap-3 pt-1">
+                                        {unlinked.length > 0 && (
+                                            <select value="" onChange={e => e.target.value && linkRow(transaction.id, e.target.value)}
+                                                aria-label={t('reconcile.linkLine')}
+                                                className="p-1 rounded bg-slate-800/50 border border-slate-600 text-white">
+                                                <option value="">{t('reconcile.linkLine')}</option>
+                                                {unlinked.map(row => (
+                                                    <option key={row.id} value={row.id}>{formatDate(row.booked_on)} · {row.text} · {money(row.amount)}</option>
+                                                ))}
+                                            </select>
+                                        )}
+                                        <label className="flex items-center gap-1">
+                                            <input type="checkbox" checked={!!transaction.receipt_expected}
+                                                onChange={e => setFlag(transaction, 'receipt_expected', e.target.checked)} />
+                                            {t('reconcile.receiptExpected')}
+                                        </label>
+                                        {transaction.state.differs && (
+                                            <button onClick={() => setFlag(transaction, 'difference_accepted', true)} className="text-sky-400 hover:underline">
+                                                {t('reconcile.acceptDifference')}
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
                         </div>
