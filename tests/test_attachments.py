@@ -127,7 +127,8 @@ def test_deleting_an_account_and_sweep(client, attachments_dir):
     assert client.delete(f"{BASE_URL}/accounts/{tx['account_id']}", headers=mum).status_code == 200
     with database.SessionLocal() as db:
         assert db.query(models.Attachment).count() == 0
-        # The bulk delete leaves the file; the sweep removes files without a row
+        # The bulk delete leaves the file; the sweep removes files without a row (once they are an hour old)
+        age(attachments_dir, hours=2)
         assert attachments.sweep(db) == 1
     assert os.listdir(attachments_dir) == []
 
@@ -179,3 +180,23 @@ def test_upload_a_pending_attachment_checks_the_file(client):
     mum = register(client, "mum")
     response = client.post(f"{BASE_URL}/attachments", files={"file": ("beleg.txt", b"hello")}, headers=mum)
     assert response.status_code == 400 and response.json()["detail"] == "This file can't be read"
+
+
+def age(folder, hours):
+    """Make the files in the folder look older, as if written some hours ago."""
+    then = (datetime.now() - timedelta(hours=hours)).timestamp()
+    for path in folder.iterdir():
+        if path.is_file():
+            os.utime(path, (then, then))
+
+
+def test_sweep_keeps_a_fresh_file_without_row(client, attachments_dir):
+    """A file is written a moment before its row is committed; the sweep must not take it in between (issue #75)."""
+    with database.SessionLocal() as db:
+        attachments.directory()
+        (attachments_dir / "being-stored").write_bytes(PNG)
+        assert attachments.sweep(db) == 0
+        assert os.listdir(attachments_dir) == ["being-stored"]
+        age(attachments_dir, hours=2)
+        assert attachments.sweep(db) == 1
+    assert os.listdir(attachments_dir) == []
