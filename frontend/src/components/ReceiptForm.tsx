@@ -16,6 +16,9 @@ interface Props {
     aiEnabled: boolean;
     // Editing an existing booking (its items, or splitting a plain expense into items)
     transaction?: Transaction;
+    // A released receipt mail (issue #57): the AI's draft (if any) and the mail as a pending attachment
+    draft?: Draft | null;
+    attachment?: AttachmentInfo;
     onSaved: () => void;
     onCancel: () => void;
 }
@@ -43,20 +46,23 @@ async function shrink(file: File): Promise<Blob> {
 const toRow = (item: Item): Row => ({ ...item, amount: item.amount.toFixed(2), person_id: item.person_id ?? null });
 
 // A receipt as one booking with its items (issue #56): read by the AI or typed in, checked here, then booked
-export default function ReceiptForm({ account, categories, people, aiEnabled, transaction, onSaved, onCancel }: Props) {
+export default function ReceiptForm({ account, categories, people, aiEnabled, transaction, draft, attachment, onSaved, onCancel }: Props) {
     const { t } = useTranslation();
     const { tags } = useTags();
     const existing = transaction?.items?.length ? transaction.items : undefined;
     const [rows, setRows] = useState<Row[]>(
         existing?.map(toRow)
+        ?? draft?.items.map(toRow)
         ?? (transaction ? [{ name: transaction.description || '', amount: Math.abs(transaction.amount).toFixed(2),
             category_id: transaction.category_id, person_id: null, tag_ids: [] }] : [])
     );
-    const [description, setDescription] = useState(transaction?.description ?? '');
-    const [date, setDate] = useState(transaction ? transaction.date.slice(0, 10) : today());
-    const [total, setTotal] = useState<number | null>(null);
-    const [attachments, setAttachments] = useState<AttachmentInfo[]>(transaction?.attachments ?? []);
-    const [pendingIds, setPendingIds] = useState<string[]>([]);
+    const [description, setDescription] = useState(transaction?.description ?? draft?.shop ?? '');
+    const [date, setDate] = useState(transaction ? transaction.date.slice(0, 10)
+        : draft && /^\d{4}-\d{2}-\d{2}$/.test(draft.date) ? draft.date : today());
+    const [total, setTotal] = useState<number | null>(draft?.total ?? null);
+    const [attachments, setAttachments] = useState<AttachmentInfo[]>(
+        transaction?.attachments ?? (attachment ? [attachment] : []));
+    const [pendingIds, setPendingIds] = useState<string[]>(attachment ? [attachment.id] : []);
     const [reading, setReading] = useState(false);
     const [error, setError] = useState('');
 
@@ -84,11 +90,11 @@ export default function ReceiptForm({ account, categories, people, aiEnabled, tr
             body.append('file', await shrink(file), file.name);
             if (aiEnabled) {
                 const response = await api.post('/api/v1/receipts/read', body);
-                const draft: Draft = response.data.draft;
-                setRows(draft.items.map(toRow));
-                setDescription(draft.shop || description);
-                if (/^\d{4}-\d{2}-\d{2}$/.test(draft.date)) setDate(draft.date);
-                setTotal(draft.total);
+                const read: Draft = response.data.draft;
+                setRows(read.items.map(toRow));
+                setDescription(read.shop || description);
+                if (/^\d{4}-\d{2}-\d{2}$/.test(read.date)) setDate(read.date);
+                setTotal(read.total);
                 setPendingIds(ids => [...ids, response.data.attachment_id]);
                 setAttachments(list => [...list, { id: response.data.attachment_id, filename: file.name,
                     content_type: file.type, size: file.size }]);

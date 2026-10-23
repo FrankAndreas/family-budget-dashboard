@@ -19,6 +19,8 @@ import { useAssets, useSplits } from '../../finance';
 import type { Account, Category, Transaction } from '../../accounts';
 import AccountCards from '../../components/AccountCards';
 import Transactions from '../../components/Transactions';
+import Inbox from '../../components/Inbox';
+import { useReceiptReading } from '../../receipts';
 import { useFamily } from '../../useFamily';
 import { accessTo, canWrite, dependents } from '../../family';
 
@@ -37,6 +39,7 @@ export default function Dashboard() {
     // Bumped after any change to load accounts and the selected account's transactions again
     const [dataVersion, setDataVersion] = useState(0);
     const refresh = () => setDataVersion(v => v + 1);
+    const aiEnabled = useReceiptReading();
 
     useEffect(() => {
         api.get('/api/v1/categories')
@@ -137,6 +140,17 @@ export default function Dashboard() {
             {/* Tab Content */}
             {activeTab === 'overview' && (
                 <div className="space-y-6">
+                    {/* Receipt mails forwarded by the family, for parents to release (issue #57) */}
+                    {isParent && (
+                        <Inbox
+                            accounts={accounts.filter(canEdit)}
+                            categories={categories.filter(c => c.type === 'EXPENSE')}
+                            people={users.filter(u => u.is_active !== false)}
+                            aiEnabled={aiEnabled}
+                            version={dataVersion}
+                            onBooked={refresh}
+                        />
+                    )}
                     <AccountCards
                         accounts={accounts}
                         transactionCount={shownTransactions.length}
