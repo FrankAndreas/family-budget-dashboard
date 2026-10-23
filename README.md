@@ -47,7 +47,8 @@ Bookings come in by hand, or in bulk from bank and Migros exports through small 
 
   Reading receipts with the Infomaniak AI (optional): `scripts/dev-backend.sh` starts the backend with the token
   and product ID from `pass` (`andreas/infomaniak_ai_api_token`, `andreas/infomaniak_ai_product_id`); see
-  README_DOCKER.md for the settings.
+  README_DOCKER.md for the settings. Receipt mails forwarded to the app (Cloudflare Email Worker in
+  `cloudflare/email-worker`) are set up as described in README_DOCKER.md, "Receipt mails".
 
 ## Tests
 

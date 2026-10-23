@@ -133,3 +133,12 @@ def test_secret_never_in_response_or_log(client, caplog):
         ]
     for text in [r.text for r in responses] + [caplog.text]:
         assert SECRET not in text
+
+
+def test_compose_passes_the_secret():
+    """The NAS setup hands INBOUND_SECRET from .env to the backend (README_DOCKER, "Receipt mails")."""
+    from pathlib import Path
+
+    root = Path(__file__).resolve().parent.parent
+    assert "- INBOUND_SECRET=${INBOUND_SECRET:-}" in (root / "docker-compose.yml").read_text()
+    assert "INBOUND_SECRET=" in (root / ".env.example").read_text()
