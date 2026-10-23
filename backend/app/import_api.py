@@ -16,10 +16,10 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from . import auth, bank_csv, crud, database, i18n, ibans, import_rules, models, privacy, schemas, messages
+from . import auth, bank_csv, crud, database, i18n, ibans, import_rules, models, privacy, receipt_ai, schemas, messages
 from .api import check_asset, check_member_tag, check_shared, is_dependent
 from .common_api import visible_owner
-from .seed import SETTLE_UP
+from .seed import OTHER_INCOME, SETTLE_UP, system_category
 
 router = APIRouter()
 
@@ -423,10 +423,30 @@ def public(rows: list[dict], bank: bool = False) -> dict:
 def preview_import(
     file: UploadFile = File(...),
     changes: str = Form(""),
+    ai: str = Form(""),
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
-    return public(*check_file(db, current_user, file, import_rules.parse_changes(changes)))
+    changed = import_rules.parse_changes(changes)
+    rows, bank = check_file(db, current_user, file, changed)
+    if not (bank and ai == "1"):
+        return public(rows, bank)
+    # The first preview of a bank file asks the AI once; the frontend sends its answers back as changes
+    open_rows = [r for r in rows if r.get("source") == "fallback" and r["status"] != "error"]
+    income = i18n.category_name(system_category(db, OTHER_INCOME))
+    money_in = {r["line"] for r in open_rows if r["category"] == income}
+    texts_out = list(dict.fromkeys(r["description"] for r in open_rows if r["line"] not in money_in))
+    texts_in = list(dict.fromkeys(r["description"] for r in open_rows if r["line"] in money_in))
+    found, status, message = receipt_ai.suggest(db, current_user, texts_out, texts_in)
+    suggestions = {
+        str(r["line"]): {"category": found[r["description"]], "source": "ai"}
+        for r in open_rows
+        if r["description"] in found
+    }
+    if suggestions:
+        file.file.seek(0)
+        rows, bank = check_file(db, current_user, file, {**changed, **{int(k): v for k, v in suggestions.items()}})
+    return {**public(rows, bank), "ai": {"status": status, "message": message, "suggestions": suggestions}}
 
 
 @router.post("/import")

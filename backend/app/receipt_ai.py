@@ -32,6 +32,10 @@ DEFAULT_READS_PER_HOUR = 30
 TIMEOUT_SECONDS = 60
 MAX_ITEMS = 100
 MAX_NAME = 120
+# Distinct bank texts per upload; more are left to the fallback
+MAX_TEXTS = 200
+# Where the bank texts start in the prompt (the browser tests' fake client finds them by it)
+TEXT_MARKER = "TEXTS:"
 ENDPOINT = "/chat/completions"
 
 
@@ -102,9 +106,14 @@ class InfomaniakClient:
 
 
 class FakeClient:
-    """A fixed receipt for the browser tests (RECEIPT_AI_FAKE=1); never used in production."""
+    """A fixed receipt for the browser tests (RECEIPT_AI_FAKE=1); never used in production. Bank texts: money out
+    is Groceries, money in Salary."""
 
     def complete(self, content: list[dict]) -> str:
+        question = content[0].get("text", "") if content else ""
+        if TEXT_MARKER in question:
+            texts = json.loads(question.split(TEXT_MARKER, 1)[1])
+            return json.dumps({**{t: "Groceries" for t in texts["out"]}, **{t: "Salary" for t in texts["in"]}})
         return json.dumps(
             {
                 "shop": "Migros",
@@ -146,6 +155,95 @@ Rules:
 - total is the receipt's final amount.
 - Leave out loyalty card numbers (Cumulus, Supercard), card numbers and payment details.""",
 }
+
+
+TEXT_PROMPTS = {
+    "de": """Du ordnest Buchungstexte eines Schweizer Kontoauszugs Kategorien zu.
+Gib NUR JSON zurück: ein Objekt, das jeden Text genau wie angegeben auf einen Kategorienamen abbildet.
+- Texte unter "out" (Geld ausgegeben) bekommen genau eine dieser Ausgaben-Kategorien: {expense}
+- Texte unter "in" (Geld erhalten) bekommen genau eine dieser Einnahmen-Kategorien: {income}
+- Wenn du unsicher bist, lass den Text weg.
+""",
+    "en": """You assign categories to booking texts from a Swiss bank statement.
+Return ONLY JSON: an object mapping each text exactly as given to one category name.
+- Texts under "out" (money spent) get exactly one of these expense categories: {expense}
+- Texts under "in" (money received) get exactly one of these income categories: {income}
+- If you are unsure, leave the text out.
+""",
+}
+
+
+def text_prompt(expense: list[str], income: list[str], texts_out: list[str], texts_in: list[str], lang: str) -> str:
+    question = TEXT_PROMPTS.get(lang, TEXT_PROMPTS["de"]).format(expense=", ".join(expense), income=", ".join(income))
+    return question + TEXT_MARKER + json.dumps({"out": texts_out, "in": texts_in}, ensure_ascii=False)
+
+
+def parse_texts(
+    answer: str,
+    allowed_out: dict[str, str],
+    allowed_in: dict[str, str],
+    texts_out: list[str],
+    texts_in: list[str],
+) -> dict[str, str]:
+    """{text: category name} from the AI's answer; names of the wrong kind or unknown ones are dropped. The allowed
+    dicts map every name (casefolded, both languages) to the name to show. Raises ValueError for a broken answer."""
+    match = re.search(r"\{.*\}", answer, re.S)
+    if not match:
+        raise ValueError("no JSON object")
+    data = json.loads(match.group(0))
+    if not isinstance(data, dict):
+        raise ValueError("not an object")
+    out: dict[str, str] = {}
+    for texts, allowed in ((texts_out, allowed_out), (texts_in, allowed_in)):
+        for text in texts:
+            name = allowed.get(str(data.get(text) or "").strip().casefold())
+            if name:
+                out[text] = name
+    return out
+
+
+def plain_categories(db: Session, kind: models.CategoryType) -> list[models.Category]:
+    """The family's own and default categories of a kind; not the ones the app books itself (Unsorted, ...)."""
+    return [c for c in db.query(models.Category) if c.type == kind and not c.system_key]
+
+
+def suggest(
+    db: Session, user: models.User, texts_out: list[str], texts_in: list[str]
+) -> tuple[dict[str, str], str, Optional[str]]:
+    """Categories for bank texts no rule knows: (suggestions, status, message). One call, counted as one read;
+    status off / ok / capped / limit / failed. Only the texts and the category names are sent."""
+    settings = Settings.from_env()
+    if not settings.enabled:
+        return {}, "off", None
+    status, message = "ok", None
+    if len(texts_out) + len(texts_in) > MAX_TEXTS:
+        texts_out = texts_out[:MAX_TEXTS]
+        texts_in = texts_in[: MAX_TEXTS - len(texts_out)]
+        status, message = "capped", messages.text("bank_ai_capped", count=MAX_TEXTS)
+    if not texts_out and not texts_in:
+        return {}, status, message
+    expense, income = plain_categories(db, models.CategoryType.EXPENSE), plain_categories(
+        db, models.CategoryType.INCOME
+    )
+
+    def allowed(categories):
+        return {name.casefold(): i18n.category_name(c) for c in categories for name in i18n.all_names(c)}
+
+    def shown(categories):
+        return sorted({i18n.category_name(c) for c in categories}, key=str.casefold)
+
+    try:
+        take_read(db, user.id, settings.reads_per_hour)
+    except HTTPException as error:
+        if error.status_code != 429:
+            raise
+        return {}, "limit", str(error.detail)
+    question = text_prompt(shown(expense), shown(income), texts_out, texts_in, i18n.current())
+    try:
+        answer = client_for(settings).complete([{"type": "text", "text": question}])
+        return parse_texts(answer, allowed(expense), allowed(income), texts_out, texts_in), status, message
+    except AiUnavailable, ValueError, json.JSONDecodeError:
+        return {}, "failed", messages.text("bank_ai_failed")
 
 
 def prompt(categories: list[str], tags: list[str], lang: str) -> str:
