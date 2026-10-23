@@ -229,17 +229,11 @@ def status(_user: models.User = Depends(auth.get_current_user_from_token)) -> di
     return {"enabled": Settings.from_env().enabled}
 
 
-@router.post("/receipts/read")
-async def read_receipt(
-    file: UploadFile = File(...),
-    current_user: models.User = Depends(auth.get_current_user_from_token),
-    db: Session = Depends(database.get_db),
-) -> dict:
+def read(db: Session, user: models.User, filename: str, data: bytes) -> dict:
+    """Read a receipt file with the AI: the draft, and the file kept as the user's pending attachment."""
     settings = Settings.from_env()
     if not settings.enabled:
         raise messages.api_error(400, "receipt_ai_off")
-    data = await file.read(attachments.MAX_BYTES + 1)
-    filename = file.filename or ""
     # The file is checked before a read is counted or anything is stored
     try:
         content = receipt_files.ai_content(attachments.check(data, filename), data)
@@ -252,9 +246,9 @@ async def read_receipt(
     all_tags = db.query(models.Tag).all()
     unsorted = next((c.id for c in expense if c.system_key == "UNSORTED"), expense[0].id if expense else "")
 
-    take_read(db, current_user.id, settings.reads_per_hour)
+    take_read(db, user.id, settings.reads_per_hour)
     # Kept as a pending attachment: booking the receipt links it, otherwise the sweep removes it after a day
-    attachment = attachments.store(db, current_user, filename, data, None)
+    attachment = attachments.store(db, user, filename, data, None)
     question = [{"type": "text", "text": prompt(shown, sorted(t.name for t in all_tags), i18n.current())}]
     try:
         answer = client_for(settings).complete(question + content)
@@ -265,3 +259,15 @@ async def read_receipt(
     except ValueError, json.JSONDecodeError:
         raise messages.api_error(502, "receipt_ai_unreadable")
     return {"draft": draft, "attachment_id": attachment.id}
+
+
+@router.post("/receipts/read")
+async def read_receipt(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+) -> dict:
+    if not Settings.from_env().enabled:
+        raise messages.api_error(400, "receipt_ai_off")
+    data = await file.read(attachments.MAX_BYTES + 1)
+    return read(db, current_user, file.filename or "", data)

@@ -95,6 +95,18 @@ def link(db: Session, user: models.User, transaction: models.Transaction, ids: l
         if not attachment or attachment.owner_id != user.id or attachment.transaction_id is not None:
             raise messages.api_error(400, "attachment_not_found")
         attachment.transaction_id = transaction.id
+        if attachment.content_type == "message/rfc822":
+            booked_from_inbox(db, attachment.sha256)
+
+
+def booked_from_inbox(db: Session, sha256: str) -> None:
+    """A receipt mail from the inbox (issue #57) is booked: its entry stays as booked (so the same mail isn't taken
+    again) and its waiting file goes; the booking has the mail as attachment."""
+    for entry in db.query(models.InboxMail).filter(
+        models.InboxMail.sha256 == sha256, models.InboxMail.booked_at.is_(None)
+    ):
+        entry.booked_at = datetime.utcnow()
+        (directory() / "inbox" / entry.id).unlink(missing_ok=True)
 
 
 def remove_files(ids: list[str]) -> None:

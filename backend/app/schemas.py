@@ -124,6 +124,19 @@ class TagUpdate(BaseModel):
     icon: Optional[str] = Field(default=None, max_length=8)
 
 
+class EmailCreate(BaseModel):
+    address: str = Field(max_length=254)
+
+
+class Email(BaseModel):
+    id: str
+    user_id: str
+    address: str
+
+    class Config:
+        from_attributes = True
+
+
 class Tag(BaseModel):
     id: str
     name: str

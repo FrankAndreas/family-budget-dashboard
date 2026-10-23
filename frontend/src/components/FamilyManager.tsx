@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
@@ -6,6 +6,8 @@ import { useFamily } from '../useFamily';
 import type { FamilyUser } from '../family';
 import PinInput from './PinInput';
 import RemoveMember from './RemoveMember';
+import EmailAddresses from './EmailAddresses';
+import type { PersonEmail } from '../inbox';
 import { isValidPin } from '../pin';
 
 type MemberType = 'PARENT' | 'ALLOWANCE_CHILD' | 'DEPENDENT_CHILD';
@@ -36,6 +38,15 @@ export default function FamilyManager() {
 
     // Member being removed (form that decides where their items go)
     const [removeMemberId, setRemoveMemberId] = useState<string | null>(null);
+
+    // Addresses receipt mails are taken from (issue #57)
+    const [emails, setEmails] = useState<PersonEmail[]>([]);
+    const loadEmails = useCallback(() => {
+        api.get('/api/v1/emails')
+            .then(response => setEmails(response.data))
+            .catch(err => setError(errorMessage(err, t('emails.failed'))));
+    }, [t]);
+    useEffect(loadEmails, [loadEmails]);
 
     // Member being renamed, and the new name
     const [renameMemberId, setRenameMemberId] = useState<string | null>(null);
@@ -219,6 +230,9 @@ export default function FamilyManager() {
                                 </div>
                             )}
                         </div>
+
+                        <EmailAddresses member={member} addresses={emails.filter(e => e.user_id === member.id)}
+                            onChanged={loadEmails} />
 
                         {removeMemberId === member.id && (
                             <RemoveMember

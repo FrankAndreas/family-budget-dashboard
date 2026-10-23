@@ -98,6 +98,72 @@ local LLM; a README inside explains the columns) and imports transactions in bul
 for example one written by a receipt-reading tool. The import format is described in
 [`docs/import-format.md`](docs/import-format.md).
 
+### Receipt mails (Cloudflare Email Worker, optional)
+
+Parents forward receipt mails (webshop orders, invoices) to e.g. `invoice@<domain>`. They wait unopened in an inbox
+on the **Accounts** tab; a parent picks the account and **releases** one, then the AI reads it (if set up) and the
+usual receipt form opens. Mails are taken only
+
+- if Cloudflare found them authentic (`dmarc=pass`; the worker checks this), and
+- from an address registered for a family member in **Settings → Family** (the app checks this).
+
+Everything else is rejected, and the sender gets a bounce. The app stays home-network only: the tunnel opens just
+the one path the worker posts to, behind Cloudflare Access. Unreleased mails are deleted after 30 days.
+
+The setup is the same as family-job-tracking's "Incoming e-mails", with these names. Cloudflare renames dashboard
+menus from time to time.
+
+1. **Secret for the app.** Add it to `.env`, then restart:
+   ```bash
+   echo "INBOUND_SECRET=$(openssl rand -hex 32)" | sudo tee -a .env
+   sudo docker-compose up -d
+   ```
+   The backend log says `Receipt mails: configured`.
+2. **Tunnel route for the worker only.** In **Zero Trust → Networks → Connectors → Cloudflare Tunnels**, open the
+   NAS's tunnel → **Published application routes** → **Add**:
+   - subdomain e.g. `budget-inbound`, your domain, **path `^/api/v1/inbound$`**
+   - service `HTTP`, URL `<NAS_IP>:8081` (the frontend container passes `/api` on to the backend)
+
+   Every other path on this hostname has no route and gets a 404 from the tunnel; the app itself is not
+   reachable from outside.
+3. **Service token.** **Access controls → Service credentials → Service Tokens → Create Service Token**, name
+   `family-budget-inbound`, **Non-expiring**; note the Client ID and Client Secret (shown once).
+4. **Policy.** **Access controls → Policies → Add a policy**: name `family-budget-inbound-token`, action
+   **Service Auth**, include **Service Token** = `family-budget-inbound`.
+5. **Access application.** **Access controls → Applications → Create new application → Public DNS**: subdomain
+   `budget-inbound`, your domain, path `api/v1/inbound`, policy `family-budget-inbound-token`; optionally turn on
+   **401 Response for Service Auth policies**. Check both layers:
+   ```bash
+   # without token: 302 or 401 from Cloudflare
+   curl -s -o /dev/null -w "%{http_code}\n" -X POST https://budget-inbound.<domain>/api/v1/inbound
+   # with token but without the secret: 401 from the app
+   curl -s -o /dev/null -w "%{http_code}\n" -X POST -H "CF-Access-Client-Id: <id>" \
+     -H "CF-Access-Client-Secret: <secret>" https://budget-inbound.<domain>/api/v1/inbound
+   ```
+6. **Deploy the worker** from a checkout of this repository, then set its secrets from environment variables, so
+   they stay out of the shell history:
+   ```bash
+   cd cloudflare/email-worker
+   npm ci
+   npx wrangler login
+   npx wrangler deploy
+   # APP_URL=https://budget-inbound.<domain>, INBOUND_SECRET from step 1, the token from step 3
+   for name in APP_URL INBOUND_SECRET CF_ACCESS_CLIENT_ID CF_ACCESS_CLIENT_SECRET; do
+     printf %s "${!name}" | npx wrangler secret put "$name"
+   done
+   ```
+   Optional: `FALLBACK_ADDRESS`, a verified Email Routing destination outside the domain, gets a mail when the app
+   can't take it (NAS down, mail over 10 MB) instead of a bounce. Mails from unregistered senders never go there.
+7. **Route the address to the worker.** In the regular dashboard: your domain → **Email → Email Routing → Routing
+   rules → Custom addresses → Create address** `invoice`, action **Send to a Worker**, `family-budget-inbound`.
+8. **Register the addresses** you forward from in **Settings → Family** (one or more per person).
+9. **Test:** forward a receipt mail from your registered mailbox to `invoice@<domain>`; it shows on the Accounts tab
+   within a few seconds. A mail from an unregistered address must bounce. The first accepted mail also proves that
+   Cloudflare puts its check result (`mx.cloudflare.net; … dmarc=pass`) on mails it hands to the worker: without it
+   the worker rejects every mail with "Absender nicht bestätigt" (see `npx wrangler tail` while you send one).
+
+The waiting mails are files in `data/attachments/inbox`; they are part of the attachments backup.
+
 ## Updates
 New images are published as `latest` whenever a change is pushed to `main` and CI passes.
 Set up [Automatic Updates](#automatic-updates) to install them nightly, or update by hand:

@@ -38,6 +38,8 @@ export default defineConfig({
                 RECEIPT_AI_FAKE: '1',
                 INFOMANIAK_AI_TOKEN: 'fake',
                 INFOMANIAK_AI_PRODUCT_ID: 'fake',
+                // Receipt mails as the Cloudflare Email Worker delivers them (issue #57)
+                INBOUND_SECRET: 'e2e-inbound',
             },
             reuseExistingServer: false,
             timeout: 60_000,

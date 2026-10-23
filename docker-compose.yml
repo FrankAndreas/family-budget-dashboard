@@ -33,6 +33,9 @@ services:
       - INFOMANIAK_AI_PRODUCT_ID=${INFOMANIAK_AI_PRODUCT_ID:-}
       - RECEIPT_AI_MODEL=${RECEIPT_AI_MODEL:-}
       - RECEIPT_AI_READS_PER_HOUR=${RECEIPT_AI_READS_PER_HOUR:-}
+      # Receipt mails forwarded through the Cloudflare Email Worker (issue #57);
+      # empty = receiving is off. See README_DOCKER.md, "Receipt mails"
+      - INBOUND_SECRET=${INBOUND_SECRET:-}
     restart: unless-stopped
     healthcheck:
       test: [ "CMD-SHELL", "python3 -c 'import urllib.request; urllib.request.urlopen(\"http://localhost:8000/health\")' || exit 1" ]

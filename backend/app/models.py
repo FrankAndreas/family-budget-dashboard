@@ -186,6 +186,37 @@ class Attachment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class UserEmail(Base):
+    """An address a person forwards receipt mails from (issue #57); unique, stored lowercased."""
+
+    __tablename__ = "user_emails"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    address: Mapped[str] = mapped_column(String, unique=True)
+
+
+class InboxMail(Base):
+    """A forwarded receipt mail waiting for a parent to release it (issue #57). Only its headers were read; the raw
+    mail is a file in the inbox folder. Booked entries stay (without the file) so the same mail isn't taken twice."""
+
+    __tablename__ = "inbox_mails"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    # Who forwarded it; removing that person keeps the entry for the other parents
+    person_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    from_addr: Mapped[str] = mapped_column(String)
+    subject: Mapped[str] = mapped_column(String)
+    sent_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    message_id: Mapped[str] = mapped_column(String, unique=True)
+    attachment_names: Mapped[Any] = mapped_column(JSON, default=list)
+    size: Mapped[int] = mapped_column(Integer)
+    # Booking any release of the mail (an attachment with the same content) marks the entry booked
+    sha256: Mapped[str] = mapped_column(String, index=True)
+    booked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class ReceiptRead(Base):
     """One reading of a receipt by the AI, for the hourly limit; rows older than an hour are removed."""
 
