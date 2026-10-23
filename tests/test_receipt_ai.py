@@ -3,13 +3,14 @@
 import json
 import logging
 import urllib.error
+from datetime import datetime, timedelta
 
 import pytest
 
 from files import image_png, pdf_with_text
 from helpers import BASE_URL, admin_headers, category_id, register
 
-from app import receipt_ai
+from app import database, models, receipt_ai
 
 READ = f"{BASE_URL}/receipts/read"
 SECRET_TOKEN, SECRET_PRODUCT = "tok-SECRET-123", "pid-SECRET-456"
@@ -33,7 +34,6 @@ def ai(monkeypatch):
     monkeypatch.setenv("INFOMANIAK_AI_TOKEN", SECRET_TOKEN)
     monkeypatch.setenv("INFOMANIAK_AI_PRODUCT_ID", SECRET_PRODUCT)
     monkeypatch.delenv("RECEIPT_AI_READS_PER_HOUR", raising=False)
-    receipt_ai.reset_rate_limit()
     fake = Fake("")
     monkeypatch.setattr(receipt_ai, "client_for", lambda settings: fake)
     return fake
@@ -142,6 +142,55 @@ def test_rate_limit(client, ai, monkeypatch):
     assert read(client, dad).status_code == 200
 
 
+def attachment_count():
+    with database.SessionLocal() as db:
+        return db.query(models.Attachment).count()
+
+
+def test_reads_over_the_limit_store_nothing(client, ai, monkeypatch):
+    monkeypatch.setenv("RECEIPT_AI_READS_PER_HOUR", "1")
+    mum = register(client, "mum")
+    ai.answer = answer(shop="x", date="2026-10-20", total=1, items=[])
+    assert read(client, mum).status_code == 200 and attachment_count() == 1
+    assert read(client, mum).status_code == 429
+    assert attachment_count() == 1 and len(ai.sent) == 1
+
+
+def test_an_unreadable_file_uses_no_read_and_stores_nothing(client, ai, monkeypatch):
+    monkeypatch.setenv("RECEIPT_AI_READS_PER_HOUR", "1")
+    mum = register(client, "mum")
+    assert read(client, mum, b"hello", "beleg.txt").status_code == 400
+    assert attachment_count() == 0
+    ai.answer = answer(shop="x", date="2026-10-20", total=1, items=[])
+    assert read(client, mum).status_code == 200
+
+
+def test_the_limit_is_kept_in_the_database(client, ai, monkeypatch):
+    """Reads are counted in the database, so a restart of the app doesn't reset them; reads older than an hour
+    don't count."""
+    monkeypatch.setenv("RECEIPT_AI_READS_PER_HOUR", "2")
+    mum = register(client, "mum")
+    with database.SessionLocal() as db:
+        mum_id = db.query(models.User).filter(models.User.username == "mum").one().id
+        now = datetime.utcnow()
+        db.add_all(
+            [
+                models.ReceiptRead(user_id=mum_id, read_at=now - timedelta(minutes=50)),
+                models.ReceiptRead(user_id=mum_id, read_at=now - timedelta(minutes=61)),
+            ]
+        )
+        db.commit()
+    ai.answer = answer(shop="x", date="2026-10-20", total=1, items=[])
+    assert read(client, mum).status_code == 200
+    response = read(client, mum)
+    assert response.status_code == 429
+    # The oldest counting read (50 minutes ago) frees up in about 10 minutes
+    assert "11 minutes" in response.json()["detail"] or "10 minutes" in response.json()["detail"]
+    with database.SessionLocal() as db:
+        # Reads older than an hour are cleaned up
+        assert db.query(models.ReceiptRead).count() == 2
+
+
 def test_only_categories_and_tags_go_to_the_ai(client, ai):
     admin = admin_headers(client)
     client.post(f"{BASE_URL}/tags", json={"name": "Velo"}, headers=admin)
@@ -156,7 +205,6 @@ def test_only_categories_and_tags_go_to_the_ai(client, ai):
 def test_no_secret_in_errors_or_logs(client, monkeypatch, caplog):
     monkeypatch.setenv("INFOMANIAK_AI_TOKEN", SECRET_TOKEN)
     monkeypatch.setenv("INFOMANIAK_AI_PRODUCT_ID", SECRET_PRODUCT)
-    receipt_ai.reset_rate_limit()
 
     def refuse(request, timeout):
         assert request.headers["Authorization"] == f"Bearer {SECRET_TOKEN}"

@@ -96,6 +96,11 @@ export default function ReceiptForm({ account, categories, people, aiEnabled, tr
                 // Without the AI, the file is only kept with the booking
                 const response = await api.post(`/api/v1/transactions/${transaction.id}/attachments`, body);
                 setAttachments(list => [...list, response.data]);
+            } else {
+                // A new receipt without the AI: kept as pending, linked when booking
+                const response = await api.post('/api/v1/attachments', body);
+                setPendingIds(ids => [...ids, response.data.id]);
+                setAttachments(list => [...list, response.data]);
             }
         } catch (err) {
             setError(errorMessage(err, t('receipt.readFailed')));
@@ -130,7 +135,7 @@ export default function ReceiptForm({ account, categories, people, aiEnabled, tr
             <label className="block text-sm text-slate-400">
                 {aiEnabled ? t('receipt.fileWithAi') : t('receipt.fileWithoutAi')}
                 <input type="file" aria-label={t('receipt.file')} accept="image/*,application/pdf,.eml,message/rfc822"
-                    onChange={upload} disabled={reading || (!aiEnabled && !transaction)}
+                    onChange={upload} disabled={reading}
                     className="block mt-1 text-sm text-slate-400" />
             </label>
             {reading && <p className="text-blue-400">{t('receipt.reading')}</p>}

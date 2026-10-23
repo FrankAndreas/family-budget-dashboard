@@ -12,11 +12,10 @@ import json
 import logging
 import os
 import re
-import time
 import urllib.error
 import urllib.request
-from collections import defaultdict, deque
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from typing import Any, Optional, Protocol
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
@@ -203,23 +202,26 @@ def parse(text: str, categories: dict[str, str], tags: dict[str, str], unsorted_
     }
 
 
-# Reads per person in the last hour, in memory (one app process on the NAS; a restart resets it)
-_reads: dict[str, deque] = defaultdict(deque)
+def take_read(db: Session, user_id: str, per_hour: int, now: Optional[datetime] = None) -> None:
+    """Count one read for the person, or raise a 429 when they have used up the last hour's reads.
 
-
-def reset_rate_limit() -> None:
-    _reads.clear()
-
-
-def take_read(user_id: str, per_hour: int, now: Optional[float] = None) -> None:
-    now = time.monotonic() if now is None else now
-    reads = _reads[user_id]
-    while reads and reads[0] <= now - 3600:
-        reads.popleft()
+    Reads are kept in the database, so a restart doesn't reset them; reads older than an hour are removed here."""
+    now = now or datetime.utcnow()
+    hour_ago = now - timedelta(hours=1)
+    db.query(models.ReceiptRead).filter(models.ReceiptRead.read_at <= hour_ago).delete()
+    reads = (
+        db.query(models.ReceiptRead.read_at)
+        .filter(models.ReceiptRead.user_id == user_id)
+        .order_by(models.ReceiptRead.read_at)
+        .all()
+    )
     if len(reads) >= per_hour:
-        minutes = max(1, int((reads[0] + 3600 - now) // 60) + 1)
+        db.commit()
+        seconds = (reads[0].read_at + timedelta(hours=1) - now).total_seconds()
+        minutes = max(1, int(seconds // 60) + 1)
         raise HTTPException(status_code=429, detail=messages.plural("receipt_reads_used_up", minutes))
-    reads.append(now)
+    db.add(models.ReceiptRead(user_id=user_id, read_at=now))
+    db.commit()
 
 
 @router.get("/receipts/status")
@@ -237,10 +239,10 @@ async def read_receipt(
     if not settings.enabled:
         raise messages.api_error(400, "receipt_ai_off")
     data = await file.read(attachments.MAX_BYTES + 1)
-    # Kept as a pending attachment: booking the receipt links it, otherwise the sweep removes it after a day
-    attachment = attachments.store(db, current_user, file.filename or "", data, None)
+    filename = file.filename or ""
+    # The file is checked before a read is counted or anything is stored
     try:
-        content = receipt_files.ai_content(attachment.content_type, data)
+        content = receipt_files.ai_content(attachments.check(data, filename), data)
     except receipt_files.Unreadable:
         raise messages.api_error(400, "file_type_unsupported")
 
@@ -250,7 +252,9 @@ async def read_receipt(
     all_tags = db.query(models.Tag).all()
     unsorted = next((c.id for c in expense if c.system_key == "UNSORTED"), expense[0].id if expense else "")
 
-    take_read(current_user.id, settings.reads_per_hour)
+    take_read(db, current_user.id, settings.reads_per_hour)
+    # Kept as a pending attachment: booking the receipt links it, otherwise the sweep removes it after a day
+    attachment = attachments.store(db, current_user, filename, data, None)
     question = [{"type": "text", "text": prompt(shown, sorted(t.name for t in all_tags), i18n.current())}]
     try:
         answer = client_for(settings).complete(question + content)
