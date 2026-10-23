@@ -28,6 +28,13 @@ from . import (
 )
 from .seed import seed_admin, seed_categories
 
+# The app's own lines (start-up status, receipt mails, AI errors) go to the container log next to uvicorn's;
+# without a handler Python would only print warnings
+_handler = logging.StreamHandler()
+_handler.setFormatter(logging.Formatter("%(levelname)s:     %(message)s"))
+logging.getLogger("app").addHandler(_handler)
+logging.getLogger("app").setLevel(logging.INFO)
+
 # Create or upgrade the schema (Alembic migrations in app/migrations)
 database_setup.setup(database.engine)
 
