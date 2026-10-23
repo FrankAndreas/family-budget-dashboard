@@ -33,6 +33,8 @@ DEFAULT_CATEGORIES = [
     {"name": "Clothing", "default_key": "CLOTHING", "type": "EXPENSE", "icon": "👕"},
     {"name": "Dining Out", "default_key": "DINING_OUT", "type": "EXPENSE", "icon": "🍽️"},
     {"name": "Other Expense", "default_key": "OTHER_EXPENSE", "type": "EXPENSE", "icon": "💸"},
+    {"name": "Sport", "default_key": "SPORT", "type": "EXPENSE", "icon": "🏅"},
+    {"name": "Communication", "default_key": "COMMUNICATION", "type": "EXPENSE", "icon": "📡"},
     # Fallbacks for imported bookings no rule recognised, and money paid back by others
     {"name": "Unsorted", "type": "EXPENSE", "icon": "❓", "system_key": UNSORTED},
     {"name": "Reimbursements", "default_key": "REIMBURSEMENTS", "type": "INCOME", "icon": "↩️"},
