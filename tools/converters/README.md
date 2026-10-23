@@ -1,5 +1,11 @@
 # Converters for bank and Migros exports
 
+> **Bank statements no longer need `bank.py`.** Enter each account's IBAN in the app (Accounts tab, edit the
+> account), then upload the bank's CSV export as it is in **Settings → Data Management → Import**. The app finds
+> the account by IBAN, applies the import rules (Settings → Data Management → Import rules, with suggested rules for
+> Swiss shops) and lets the AI suggest categories for the rest. `bank.py` stays for regex rules and `to_account`
+> transfers; a file converted with it and the raw file are recognised as the same rows.
+
 Two small scripts turn exports into the app's [import format](../../docs/import-format.md). The app then
 shows a preview and books the rows. They need Python 3.11 or newer and nothing else, so they run on a PC
 or on the NAS.

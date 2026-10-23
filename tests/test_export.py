@@ -13,7 +13,7 @@ from helpers import BASE_URL, add_transaction, category_id, create_account, crea
 HEADERS = {
     "members.csv": "member_id,name,role,has_allowance,is_active",
     "categories.csv": "category_id,name,type",
-    "accounts.csv": "account_id,name,type,owner_id,owner,balance",
+    "accounts.csv": "account_id,name,type,iban,owner_id,owner,balance",
     "transactions.csv": "transaction_id,date,account_id,account,owner_id,owner,category_id,category,category_type,"
     "amount,description,for_member_id,for_member,split_id,split,investment_id,investment,reference",
     "shared_expense_shares.csv": "transaction_id,date,payer_id,payer,amount,member_id,member,percent,share",

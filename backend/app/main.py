@@ -17,6 +17,7 @@ from . import (
     month_check,
     wishes_api,
     import_rules,
+    rule_presets,
     reports,
     categories_api,
     tags_api,
@@ -26,7 +27,7 @@ from . import (
     inbox,
     i18n,
 )
-from .seed import seed_admin, seed_categories
+from .seed import seed_admin
 
 # Create or upgrade the schema (Alembic migrations in app/migrations)
 database_setup.setup(database.engine)
@@ -36,7 +37,7 @@ logger = logging.getLogger(__name__)
 # Make sure a fresh database has categories (transactions need one) and a first parent to log in with;
 # receipts read but never booked are removed after a day (issue #56), unreleased receipt mails after 30 (#57)
 with database.SessionLocal() as db:
-    seed_categories(db)
+    rule_presets.seed_new_database(db)
     initial_pin = seed_admin(db)
     attachments.sweep(db)
     inbox.sweep(db)
@@ -80,6 +81,7 @@ app.include_router(import_api.router, prefix="/api/v1")
 app.include_router(month_check.router, prefix="/api/v1")
 app.include_router(wishes_api.router, prefix="/api/v1")
 app.include_router(import_rules.router, prefix="/api/v1")
+app.include_router(rule_presets.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
 app.include_router(categories_api.router, prefix="/api/v1")
 app.include_router(tags_api.router, prefix="/api/v1")

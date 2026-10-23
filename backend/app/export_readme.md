@@ -18,7 +18,7 @@ other family members share with them, and (for parents) the common budget, inves
 |---|---|---|
 | `members.csv` | family member | `role` is `PARENT` or `CHILD`; `has_allowance` false = a child without own money, whose costs parents tag with `for_member` |
 | `categories.csv` | category | `type` is `INCOME`, `EXPENSE` or `TRANSFER` |
-| `accounts.csv` | account | `owner` is the member the account belongs to; `balance` at export time |
+| `accounts.csv` | account | `owner` is the member the account belongs to; `iban` if set (bank import finds the account by it); `balance` at export time |
 | `transactions.csv` | booking | see below |
 | `shared_expense_shares.csv` | parent and shared expense | how a shared expense is divided: `percent` and `share` (CHF) per parent; `payer` paid the full `amount` |
 | `settlements.csv` | settle-up payment | `from` paid `to` to settle the common budget |

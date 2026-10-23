@@ -81,6 +81,8 @@ DEFAULT_NAMES = {
     "DINING_OUT": {"en": "Dining Out", "de": "Auswärts essen"},
     "OTHER_EXPENSE": {"en": "Other Expense", "de": "Übrige Ausgaben"},
     "REIMBURSEMENTS": {"en": "Reimbursements", "de": "Rückerstattungen"},
+    "SPORT": {"en": "Sport", "de": "Sport"},
+    "COMMUNICATION": {"en": "Communication", "de": "Kommunikation"},
 }
 
 NAMES = {**SYSTEM_NAMES, **DEFAULT_NAMES}

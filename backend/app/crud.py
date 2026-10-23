@@ -1,7 +1,7 @@
 from typing import Optional
 
 from sqlalchemy.orm import Session
-from . import models, schemas, auth
+from . import auth, ibans, messages, models, schemas
 from datetime import datetime, timezone
 
 
@@ -117,8 +117,23 @@ def get_accounts(db: Session, user_id: str):
     return db.query(models.Account).filter(models.Account.user_id == user_id).all()
 
 
+def checked_iban(db: Session, value: Optional[str], account_id: Optional[str] = None) -> Optional[str]:
+    """The IBAN compact, None for empty; 400 when it isn't one or another account has it."""
+    if not value or not value.strip():
+        return None
+    if not ibans.is_valid(value):
+        raise messages.api_error(400, "iban_invalid")
+    iban = ibans.compact(value)
+    taken = db.query(models.Account).filter(models.Account.iban == iban, models.Account.id != account_id).first()
+    if taken:
+        raise messages.api_error(400, "iban_taken")
+    return iban
+
+
 def create_account(db: Session, account: schemas.AccountCreate, user_id: str):
-    db_account = models.Account(user_id=user_id, name=account.name, type=account.type)
+    db_account = models.Account(
+        user_id=user_id, name=account.name, type=account.type, iban=checked_iban(db, account.iban)
+    )
     db.add(db_account)
     db.commit()
     db.refresh(db_account)
@@ -130,7 +145,10 @@ def get_account(db: Session, account_id: str) -> Optional[models.Account]:
 
 
 def update_account(db: Session, db_account: models.Account, update: schemas.AccountUpdate):
-    for key, value in update.model_dump(exclude_unset=True).items():
+    changes = update.model_dump(exclude_unset=True)
+    if "iban" in changes:
+        changes["iban"] = checked_iban(db, changes["iban"], db_account.id)
+    for key, value in changes.items():
         setattr(db_account, key, value)
     db.commit()
     db.refresh(db_account)
