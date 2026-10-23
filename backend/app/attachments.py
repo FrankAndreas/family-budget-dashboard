@@ -56,14 +56,20 @@ def detect(data: bytes, filename: str) -> Optional[str]:
     return None
 
 
-def store(
-    db: Session, owner: models.User, filename: str, data: bytes, transaction_id: Optional[str]
-) -> models.Attachment:
+def check(data: bytes, filename: str) -> str:
+    """The file's type if it can be kept as a receipt; raises a 400 otherwise."""
     if len(data) > MAX_BYTES:
         raise messages.api_error(400, "attachment_too_large")
     content_type = detect(data, filename)
     if not content_type:
         raise messages.api_error(400, "file_type_unsupported")
+    return content_type
+
+
+def store(
+    db: Session, owner: models.User, filename: str, data: bytes, transaction_id: Optional[str]
+) -> models.Attachment:
+    content_type = check(data, filename)
     attachment = models.Attachment(
         transaction_id=transaction_id,
         owner_id=owner.id,
@@ -148,6 +154,17 @@ async def add_attachment(
         raise messages.api_error(404, "transaction_not_found")
     data = await file.read(MAX_BYTES + 1)
     return out(store(db, current_user, file.filename or "", data, transaction.id))
+
+
+@router.post("/attachments")
+async def add_pending_attachment(
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+) -> dict:
+    """A receipt's file before its booking exists (without the AI); booking it links it, else the sweep removes it."""
+    data = await file.read(MAX_BYTES + 1)
+    return out(store(db, current_user, file.filename or "", data, None))
 
 
 @router.get("/attachments/{attachment_id}")

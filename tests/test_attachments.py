@@ -159,3 +159,23 @@ def test_removing_the_uploader_keeps_the_receipt_on_someone_elses_booking(client
     listed = client.get(f"{BASE_URL}/accounts/{tx['account_id']}/transactions", headers=admin).json()
     assert [a["id"] for a in listed[0]["attachments"]] == [stored["id"]]
     assert client.get(f"{BASE_URL}/attachments/{stored['id']}", headers=admin).content == PNG
+
+
+def test_upload_a_pending_attachment_for_a_new_booking(client, attachments_dir):
+    """Without the AI, a new receipt's file is uploaded first and linked when booking."""
+    mum = register(client, "mum")
+    response = client.post(f"{BASE_URL}/attachments", files={"file": ("beleg.png", PNG)}, headers=mum)
+    assert response.status_code == 200, response.text
+    attachment_id = response.json()["id"]
+    assert response.json()["content_type"] == "image/png"
+    booked = add_transaction(
+        client, mum, create_account(client, mum), category_id(client, "Groceries"), 5, attachment_ids=[attachment_id]
+    )
+    assert [a["id"] for a in booked.json()["attachments"]] == [attachment_id]
+    assert os.listdir(attachments_dir) == [attachment_id]
+
+
+def test_upload_a_pending_attachment_checks_the_file(client):
+    mum = register(client, "mum")
+    response = client.post(f"{BASE_URL}/attachments", files={"file": ("beleg.txt", b"hello")}, headers=mum)
+    assert response.status_code == 400 and response.json()["detail"] == "This file can't be read"

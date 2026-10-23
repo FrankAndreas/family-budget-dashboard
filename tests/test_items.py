@@ -177,3 +177,18 @@ def test_items_listed_with_transactions(client):
 def test_plain_booking_still_needs_amount_and_category(client):
     mum = register(client, "mum")
     assert client.post(TX, json={"account_id": create_account(client, mum)}, headers=mum).status_code == 422
+
+
+def test_an_item_may_be_zero_or_negative(client):
+    """A free item (0) or a discount (negative) is a line of its own; only the receipt total must be above 0."""
+    mum = register(client, "mum")
+    groceries = category_id(client, "Groceries")
+    response = receipt(
+        client,
+        mum,
+        create_account(client, mum),
+        [item("Brot", 3.50, groceries), item("Gratis-Tasche", 0, groceries), item("Aktion", -1.00, groceries)],
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["amount"] == -2.50
+    assert [i["amount"] for i in response.json()["items"]] == [3.50, 0, -1.00]

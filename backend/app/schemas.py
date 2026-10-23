@@ -174,13 +174,11 @@ MAX_ITEMS = 100
 
 class ItemIn(BaseModel):
     name: ItemName
-    # Positive = cost, negative = discount or deposit refund
+    # Positive = cost, 0 = free, negative = discount or deposit refund; only the receipt's total must be above 0
     amount: float
     category_id: str
     person_id: Optional[str] = None
     tag_ids: list[str] = []
-
-    _amount_not_zero = field_validator("amount")(_reject_zero)
 
 
 class ItemOut(BaseModel):

@@ -184,6 +184,16 @@ class Attachment(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
+class ReceiptRead(Base):
+    """One reading of a receipt by the AI, for the hourly limit; rows older than an hour are removed."""
+
+    __tablename__ = "receipt_reads"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    read_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
 class Account(Base):
     __tablename__ = "accounts"
 
