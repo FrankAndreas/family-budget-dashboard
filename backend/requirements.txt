@@ -5,7 +5,7 @@ pydantic==2.14.1
 python-multipart==0.0.32
 bcrypt==5.0.0
 python-jose[cryptography]==3.5.0
-tzdata==2025.2
+tzdata==2026.5
 alembic==1.20.0
 pypdf==6.19.0
 pypdfium2==5.14.0
