@@ -179,7 +179,7 @@ def create_category(db: Session, category: schemas.CategoryCreate):
 
 
 # Transaction CRUD
-def get_transactions(db: Session, account_id: str, skip: int = 0, limit: int = 100):
+def get_transactions(db: Session, account_id: str, skip: int = 0, limit: Optional[int] = 100):
     return (
         db.query(models.Transaction)
         .filter(models.Transaction.account_id == account_id)
@@ -273,8 +273,8 @@ def get_transaction(db: Session, transaction_id: str):
 
 
 def delete_transaction(db: Session, db_transaction: models.Transaction):
-    # Loaded now: the response shows the deleted booking with its items and attachments
-    db_transaction.items, db_transaction.attachments
+    # Loaded now: the response shows the deleted booking with its items, attachments and bank lines
+    db_transaction.items, db_transaction.attachments, db_transaction.bank_rows
     db.delete(db_transaction)
     db.commit()
     return db_transaction

@@ -381,6 +381,8 @@ def check_file(
             _account=raw.get("_account"),
             _booked=raw.get("_booked"),
             _valuta=raw.get("_valuta"),
+            # The rule that booked it expects a receipt (reconciliation)
+            _receipt_expected=any(r.text == rule and r.receipt_expected for r in rules) if rule else False,
             _balance=raw.get("_balance"),
         )
         rows.append(out)
@@ -492,6 +494,7 @@ def run_import(
         for row in chosen:
             transaction, category, split_shares = row["_create"]
             created = crud.create_transaction(db, transaction, category, split_shares=split_shares, commit=False)
+            created.receipt_expected = row.get("_receipt_expected", False)
             if bank:
                 db.add(bank_row(row, created))
         # Remembered rules are saved with the bookings, so a failed import saves none
