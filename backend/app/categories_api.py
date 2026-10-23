@@ -109,7 +109,10 @@ def update_category(
     require_parent(current_user)
     category = get_category(db, category_id)
     changes = update.model_dump(exclude_unset=True)
-    renamed = "name" in changes and changes["name"] != category.name
+    # The edit form sends the name it shows; any of the category's own names (e.g. the translation) is no rename
+    if "name" in changes and changes["name"] in i18n.all_names(category):
+        del changes["name"]
+    renamed = "name" in changes
     retyped = "type" in changes and changes["type"] != category.type
     if category.system_key and (renamed or retyped):
         raise messages.api_error(400, "category_locked")
@@ -121,6 +124,9 @@ def update_category(
         counts = usage_counts(db).get(category.id)
         if counts:
             raise messages.api_error(400, "category_type_in_use", used=describe(counts))
+    if renamed:
+        # The family's own name from now on, the same in every language
+        category.default_key = None
     for key, value in changes.items():
         setattr(category, key, value or None if key == "icon" else value)
     db.commit()

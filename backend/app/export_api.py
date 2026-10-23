@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from . import auth, database, finance, models, privacy
+from . import auth, database, finance, i18n, models, privacy
 from .common_api import asset_out, planned_cost_out, shared_transactions, visible_owner
 from .wishes_api import visible_wishes, wish_out
 
@@ -53,7 +53,7 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
         return splits[split_id].name if split_id in splits else None
 
     def category_name(category_id):
-        return categories[category_id].name if category_id in categories else None
+        return i18n.category_name(categories[category_id]) if category_id in categories else None
 
     accounts = db.query(models.Account).filter(models.Account.user_id.in_(visible_ids)).all()
     account_by_id = {a.id: a for a in accounts}
@@ -73,7 +73,7 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
             [[u.id, u.username, u.role, u.has_allowance, u.is_active] for u in users if privacy.can_list_user(user, u)],
         ),
         "categories.csv": to_csv(
-            ["category_id", "name", "type"], [[c.id, c.name, c.type] for c in categories.values()]
+            ["category_id", "name", "type"], [[c.id, i18n.category_name(c), c.type] for c in categories.values()]
         ),
         "accounts.csv": to_csv(
             ["account_id", "name", "type", "owner_id", "owner", "balance"],
@@ -94,7 +94,7 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
                 account.user_id,
                 names.get(account.user_id),
                 t.category_id,
-                category.name if category else None,
+                i18n.category_name(category) if category else None,
                 category.type if category else None,
                 t.amount,
                 t.description,

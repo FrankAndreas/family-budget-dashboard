@@ -42,7 +42,8 @@ Bookings come in by hand, or in bulk from bank and Migros exports through small 
 
   The app speaks German and English: each person picks a language in **Settings → Logins**. `DEFAULT_LANGUAGE`
   (`de` if unset, or `en`) is the language of people who haven't picked one, of the login screen when the browser
-  asks for neither, and of a new database's default categories.
+  asks for neither, and of a new database's default categories. The default categories (Groceries/Lebensmittel,
+  …) show in each person's language until a parent renames one; imports and converter rules accept both names.
 
   Reading receipts with the Infomaniak AI (optional): `scripts/dev-backend.sh` starts the backend with the token
   and product ID from `pass` (`andreas/infomaniak_ai_api_token`, `andreas/infomaniak_ai_product_id`); see

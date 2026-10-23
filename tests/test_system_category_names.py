@@ -32,9 +32,10 @@ def test_logged_out_lists_follow_the_browser(client):
     assert names(client, {"Accept-Language": "de-CH"})["TRANSFER"] == "Umbuchung"
 
 
-def test_ordinary_categories_keep_their_name(client):
+def test_the_familys_own_categories_keep_their_name(client):
     mum = german(client)
-    assert "Groceries" in [c["name"] for c in categories(client, mum)]
+    client.post(f"{BASE_URL}/categories", json={"name": "Velo", "type": "EXPENSE"}, headers=mum)
+    assert "Velo" in [c["name"] for c in categories(client, mum)]
 
 
 def preview(client, headers, category):
