@@ -15,10 +15,8 @@ updates:
     commit-message:
       prefix: "chore(backend)"
       include: "scope"
-    reviewers:
-      - "your-github-username"
     assignees:
-      - "your-github-username"
+      - "FrankAndreas"
   
   # Frontend npm dependencies
   - package-ecosystem: "npm"
@@ -33,10 +31,8 @@ updates:
     commit-message:
       prefix: "chore(frontend)"
       include: "scope"
-    reviewers:
-      - "your-github-username"
     assignees:
-      - "your-github-username"
+      - "FrankAndreas"
     ignore:
       # Ignore major version updates for stability
       - dependency-name: "*"
