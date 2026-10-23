@@ -72,6 +72,8 @@ class TokenData(BaseModel):
 class AccountBase(BaseModel):
     name: str
     type: AccountType = AccountType.BANK
+    # Compact on the way out; any spacing on the way in, "" removes it
+    iban: Optional[str] = None
 
 
 class AccountCreate(AccountBase):
@@ -82,6 +84,7 @@ class AccountCreate(AccountBase):
 class AccountUpdate(BaseModel):
     name: Optional[str] = None
     type: Optional[AccountType] = None
+    iban: Optional[str] = None
 
 
 class Account(AccountBase):

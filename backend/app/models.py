@@ -12,6 +12,7 @@ from sqlalchemy import (
     Index,
     Integer,
     JSON,
+    false,
     func,
     select,
     type_coerce,
@@ -234,6 +235,8 @@ class Account(Base):
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     name: Mapped[str] = mapped_column(String, nullable=True)
     type: Mapped[AccountType] = mapped_column(Enum(AccountType), default=AccountType.BANK, nullable=True)
+    # Compact and uppercase (ibans.py); a bank statement's lines find their account by it
+    iban: Mapped[Optional[str]] = mapped_column(String, nullable=True, unique=True, index=True)
     user: Mapped["User"] = relationship("User", back_populates="accounts")
     transactions: Mapped[list["Transaction"]] = relationship("Transaction", back_populates="account")
     # The sum of its transactions, calculated on every read so it can't drift; summed in cents (exact), and the Money
@@ -368,6 +371,8 @@ class ImportRule(Base):
     # Matched ignoring case, anywhere in the description
     text: Mapped[str] = mapped_column(String, nullable=True)
     category_id: Mapped[str] = mapped_column(String, ForeignKey("categories.id"), nullable=True)
+    # Bookings by this rule expect a receipt (matched to bank rows later)
+    receipt_expected: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
 
     category: Mapped["Category"] = relationship("Category")

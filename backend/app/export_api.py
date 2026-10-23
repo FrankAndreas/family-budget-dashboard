@@ -76,8 +76,8 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
             ["category_id", "name", "type"], [[c.id, i18n.category_name(c), c.type] for c in categories.values()]
         ),
         "accounts.csv": to_csv(
-            ["account_id", "name", "type", "owner_id", "owner", "balance"],
-            [[a.id, a.name, a.type, a.user_id, names.get(a.user_id), a.balance] for a in accounts],
+            ["account_id", "name", "type", "iban", "owner_id", "owner", "balance"],
+            [[a.id, a.name, a.type, a.iban, a.user_id, names.get(a.user_id), a.balance] for a in accounts],
         ),
     }
 
