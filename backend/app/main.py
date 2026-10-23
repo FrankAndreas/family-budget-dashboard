@@ -22,6 +22,7 @@ from . import (
     tags_api,
     attachments,
     receipt_ai,
+    emails_api,
     i18n,
 )
 from .seed import seed_admin, seed_categories
@@ -78,6 +79,7 @@ app.include_router(categories_api.router, prefix="/api/v1")
 app.include_router(tags_api.router, prefix="/api/v1")
 app.include_router(attachments.router, prefix="/api/v1")
 app.include_router(receipt_ai.router, prefix="/api/v1")
+app.include_router(emails_api.router, prefix="/api/v1")
 
 # Configure CORS
 app.add_middleware(
