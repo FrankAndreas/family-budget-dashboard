@@ -216,3 +216,28 @@ def test_sweep_after_30_days(client):
         assert inbox.sweep(db) == 1
     assert [r["id"] for r in listing(client, mum)] == [recent]
     assert not (inbox.inbox_dir() / old).exists() and (inbox.inbox_dir() / recent).exists()
+
+
+def test_sweep_keeps_a_fresh_inbox_file_without_entry(client):
+    """The file is written a moment before its entry is committed (issue #75)."""
+    import os
+
+    folder = inbox.inbox_dir()
+    (folder / "being-received").write_bytes(b"From: x")
+    with database.SessionLocal() as db:
+        inbox.sweep(db)
+        assert (folder / "being-received").exists()
+        then = (datetime.now() - timedelta(hours=2)).timestamp()
+        os.utime(folder / "being-received", (then, then))
+        inbox.sweep(db)
+    assert not (folder / "being-received").exists()
+
+
+def test_release_answers_with_the_stored_attachment(client, ai):
+    """The inbox shows the attachment as stored, e.g. with "/" in the subject replaced (issue #75)."""
+    mum = parent(client, "mum", "mum@example.ch")
+    entry = received(client, "mum@example.ch", subject="WG: Rechnung 10/2026")
+    body = release(client, mum, entry).json()
+    assert body["attachment"]["id"] == body["attachment_id"]
+    assert body["attachment"]["filename"] == "WG: Rechnung 10-2026.eml"
+    assert body["attachment"]["content_type"] == "message/rfc822" and body["attachment"]["size"] > 0

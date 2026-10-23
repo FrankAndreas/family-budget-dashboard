@@ -8,6 +8,7 @@ never under the uploaded name. An attachment without a booking is pending: its u
 import email
 import hashlib
 import os
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
@@ -23,6 +24,8 @@ router = APIRouter()
 
 MAX_BYTES = 10 * 1024 * 1024
 PENDING_HOURS = 24
+# A file is written a moment before its row is committed; a file without a row is only an orphan after this
+ORPHAN_AFTER = timedelta(hours=1)
 IMAGES = ("image/jpeg", "image/png")
 
 
@@ -115,18 +118,27 @@ def remove_files(ids: list[str]) -> None:
 
 
 def sweep(db: Session, now: Optional[datetime] = None) -> int:
-    """Delete pending attachments older than 24 h, and files without a row. Returns how many files were removed."""
+    """Delete pending attachments older than 24 h, and files without a row (an hour old). Returns how many files
+    were removed."""
     cutoff = (now or datetime.utcnow()) - timedelta(hours=PENDING_HOURS)
     old = db.query(models.Attachment).filter(
         models.Attachment.transaction_id.is_(None), models.Attachment.created_at < cutoff
     )
+    gone = [attachment.id for attachment in old.all()]
     for attachment in old.all():
         db.delete(attachment)
     db.commit()
+    remove_files(gone)
     known = {a.id for a in db.query(models.Attachment.id)}
+    return len(gone) + remove_orphans(directory(), known)
+
+
+def remove_orphans(folder: Path, known: set[str]) -> int:
+    """Delete the folder's files whose name is no known id, once they are older than ORPHAN_AFTER (by file time)."""
+    cutoff = time.time() - ORPHAN_AFTER.total_seconds()
     removed = 0
-    for path in directory().iterdir():
-        if path.is_file() and path.name not in known:
+    for path in folder.iterdir():
+        if path.is_file() and path.name not in known and path.stat().st_mtime < cutoff:
             path.unlink()
             removed += 1
     return removed

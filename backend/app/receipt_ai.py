@@ -19,6 +19,7 @@ from datetime import datetime, timedelta
 from typing import Any, Optional, Protocol
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from . import attachments, auth, database, i18n, messages, models, receipt_files
@@ -230,7 +231,8 @@ def status(_user: models.User = Depends(auth.get_current_user_from_token)) -> di
 
 
 def read(db: Session, user: models.User, filename: str, data: bytes) -> dict:
-    """Read a receipt file with the AI: the draft, and the file kept as the user's pending attachment."""
+    """Read a receipt file with the AI: the draft, and the file kept as the user's pending attachment (its id, and
+    how it was stored)."""
     settings = Settings.from_env()
     if not settings.enabled:
         raise messages.api_error(400, "receipt_ai_off")
@@ -258,7 +260,7 @@ def read(db: Session, user: models.User, filename: str, data: bytes) -> dict:
         draft = parse(answer, category_ids, {t.name.casefold(): t.id for t in all_tags}, unsorted)
     except ValueError, json.JSONDecodeError:
         raise messages.api_error(502, "receipt_ai_unreadable")
-    return {"draft": draft, "attachment_id": attachment.id}
+    return {"draft": draft, "attachment_id": attachment.id, "attachment": attachments.out(attachment)}
 
 
 @router.post("/receipts/read")
@@ -270,4 +272,5 @@ async def read_receipt(
     if not Settings.from_env().enabled:
         raise messages.api_error(400, "receipt_ai_off")
     data = await file.read(attachments.MAX_BYTES + 1)
-    return read(db, current_user, file.filename or "", data)
+    # The AI answers within seconds, synchronously: in the thread pool, so other requests are served meanwhile
+    return await run_in_threadpool(read, db, current_user, file.filename or "", data)

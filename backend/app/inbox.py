@@ -184,15 +184,15 @@ def sweep(db: Session, now: Optional[datetime] = None) -> int:
     """Delete mails nobody released within 30 days, and waiting files without an entry. Returns how many went."""
     cutoff = (now or datetime.utcnow()) - timedelta(days=KEEP_DAYS)
     old = db.query(models.InboxMail).filter(models.InboxMail.booked_at.is_(None), models.InboxMail.received_at < cutoff)
-    removed = 0
+    gone = [entry.id for entry in old.all()]
     for entry in old.all():
         db.delete(entry)
-        removed += 1
     db.commit()
+    removed = len(gone)
+    for entry_id in gone:
+        (inbox_dir() / entry_id).unlink(missing_ok=True)
     waiting = {e.id for e in db.query(models.InboxMail.id).filter(models.InboxMail.booked_at.is_(None))}
-    for path in inbox_dir().iterdir():
-        if path.is_file() and path.name not in waiting:
-            path.unlink()
+    attachments.remove_orphans(inbox_dir(), waiting)
     return removed
 
 
@@ -256,4 +256,4 @@ def release(
     if receipt_ai.Settings.from_env().enabled:
         return receipt_ai.read(db, current_user, filename, raw)
     attachment = attachments.store(db, current_user, filename, raw, None)
-    return {"draft": None, "attachment_id": attachment.id}
+    return {"draft": None, "attachment_id": attachment.id, "attachment": attachments.out(attachment)}

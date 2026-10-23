@@ -46,6 +46,6 @@ export async function release(mail: InboxMail): Promise<Release> {
     const response = await api.post(`/api/v1/inbox/${mail.id}/release`);
     return {
         draft: response.data.draft,
-        attachment: { id: response.data.attachment_id, filename: `${mail.subject}.eml`, content_type: 'message/rfc822', size: mail.size },
+        attachment: response.data.attachment,
     };
 }
