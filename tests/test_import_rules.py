@@ -184,3 +184,51 @@ class TestRulesApi:
         send(client, mum, csv(BAKERY), {"2": {"category": "Groceries", "remember": "Bäckerei"}}, path="import")
         schema = client.get(f"{BASE_URL}/import/schema", headers=mum).json()
         assert schema["x-rules"] == [{"contains": "Bäckerei", "category": "Groceries"}]
+
+
+def add_rule(text, category_name, created_at):
+    """A rule as the preview's "remember" saves it, with a fixed age."""
+    from datetime import datetime
+
+    from app import database, models
+
+    with database.SessionLocal() as db:
+        category = db.query(models.Category).filter(models.Category.name == category_name).one()
+        db.add(models.ImportRule(text=text, category_id=category.id, created_at=datetime(2026, 1, created_at)))
+        db.commit()
+
+
+def booked_as(client, headers, *descriptions):
+    lines = [f"2026-09-0{i + 1},Bank,Unsorted,10.00,,{d},m:{i}" for i, d in enumerate(descriptions)]
+    return [row["category"] for row in rows(client, headers, csv(*lines))]
+
+
+class TestMatching:
+    def test_whole_words(self, client, mum):
+        add_rule("CSS", "Healthcare", 1)
+        assert booked_as(client, mum, "LSV CSS Versicherung", "ACCSSO Shop", "css") == [
+            "Healthcare",
+            "Unsorted",
+            "Healthcare",
+        ]
+
+    def test_separators(self, client, mum):
+        add_rule("BIKE-IMPORT", "Entertainment", 1)
+        add_rule("H&M", "Clothing", 2)
+        add_rule("S.OLIVER", "Clothing", 3)
+        assert booked_as(client, mum, "Einkauf bike-import.ch", "H&M Stans", "s.Oliver Kriens", "H&MX") == [
+            "Entertainment",
+            "Clothing",
+            "Clothing",
+            "Unsorted",
+        ]
+
+    def test_longest_wins(self, client, mum):
+        add_rule("DOSENBACH", "Clothing", 1)
+        add_rule("DOSENBACH SPORT", "Entertainment", 2)
+        assert booked_as(client, mum, "Dosenbach Sport Stans", "Dosenbach Stans") == ["Entertainment", "Clothing"]
+
+    def test_equal_length_older_wins(self, client, mum):
+        add_rule("Muster", "Groceries", 2)
+        add_rule("muster", "Clothing", 1)
+        assert booked_as(client, mum, "Bäckerei Muster") == ["Clothing"]

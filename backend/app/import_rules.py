@@ -74,11 +74,24 @@ def adjust(raw: dict, change: Optional[dict], lookups, rules: list) -> tuple[dic
             return raw, f"Can't change {raw['category']} to {change['category']}", None
         return with_category(raw, target, kind), None, None
     if file_category and file_category.system_key in FALLBACKS:
-        description = key(raw["description"])
-        for rule in rules:
-            if key(rule.text) in description and fits(rule.category, kind):
-                return with_category(raw, rule.category, kind), None, rule.text
+        rule = find(rules, raw["description"], kind)
+        if rule:
+            return with_category(raw, rule.category, kind), None, rule.text
     return raw, None, None
+
+
+def pattern(text: str) -> re.Pattern:
+    """The text as whole words: no letter or digit directly before or after it, ignoring case."""
+    return re.compile(r"(?<![^\W_])" + re.escape(text.strip()) + r"(?![^\W_])", re.IGNORECASE)
+
+
+def find(rules: list[models.ImportRule], description: str, kind) -> Optional[models.ImportRule]:
+    """The rule for a description: the longest matching text whose category fits; equal length → the older one."""
+    # sorted() keeps the order of equal lengths, and load() returns the oldest first
+    for rule in sorted(rules, key=lambda r: -len(r.text.strip())):
+        if fits(rule.category, kind) and pattern(rule.text).search(description or ""):
+            return rule
+    return None
 
 
 def remember_problem(text: str) -> Optional[str]:
