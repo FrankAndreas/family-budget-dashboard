@@ -7,6 +7,6 @@ bcrypt==5.0.0
 python-jose[cryptography]==3.5.0
 tzdata==2026.5
 alembic==1.20.0
-pypdf==6.19.0
+pypdf==6.21.1
 pypdfium2==5.14.0
 Pillow==13.0.0
