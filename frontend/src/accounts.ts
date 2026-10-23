@@ -7,7 +7,12 @@ export interface Account {
     name: string;
     type: string;
     balance: number;
+    // Compact (CH9300762011623852957); a bank statement's lines find the account by it
+    iban?: string | null;
 }
+
+// CH93 0076 2011 6238 5295 7
+export const groupedIban = (iban: string) => iban.replace(/\s+/g, '').replace(/(.{4})(?=.)/g, '$1 ');
 
 export interface Transaction {
     id: string;

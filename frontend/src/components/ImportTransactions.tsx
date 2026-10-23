@@ -4,10 +4,11 @@ import axios from 'axios';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import { downloadBlob } from '../download';
+import { money } from '../finance';
 
 interface PreviewRow {
     line: number;
-    status: 'ok' | 'duplicate' | 'error';
+    status: 'ok' | 'duplicate' | 'error' | 'skipped';
     errors: string[];
     note: string | null;
     date: string;
@@ -22,18 +23,32 @@ interface PreviewRow {
     file_category: string;
     // The import rule's text when a rule set the category
     rule: string | null;
+    // Bank statements only: where the category came from
+    source?: 'rule' | 'ai' | 'change' | 'fallback' | null;
+}
+
+// Bank statements: the bank's balance after the file's latest line, and the app's after the import
+interface BalanceCheck { account_id: string; account: string; file_balance: number | null; app_balance: number }
+
+interface AiResult {
+    status: 'off' | 'ok' | 'capped' | 'limit' | 'failed';
+    message: string | null;
+    suggestions: Record<string, { category: string; source: 'ai' }>;
 }
 
 interface Category { id: string; name: string; type: string }
 
-// A category picked in the preview, and whether to remember it as a rule (parents only)
-interface Change { category: string; remember: boolean; text: string }
+// A category picked in the preview (or suggested by the AI), and whether to remember it as a rule (parents only)
+interface Change { category: string; remember: boolean; text: string; source?: 'ai' }
 
 interface Preview {
     rows: PreviewRow[];
     ok: number;
     duplicates: number;
     errors: number;
+    skipped?: number;
+    balances?: BalanceCheck[];
+    ai?: AiResult;
 }
 
 interface Status {
@@ -45,16 +60,19 @@ const STATUS_STYLE: Record<PreviewRow['status'], string> = {
     ok: 'text-emerald-300',
     duplicate: 'text-yellow-300',
     error: 'text-red-300',
+    skipped: 'text-slate-500',
 };
 
 // The file, the duplicates the user chose to book anyway and the changed categories, as the import endpoints expect them
-const formData = (file: File, include: number[] = [], changes: Record<number, Change> = {}) => {
+// (ai: the first preview of a bank statement asks the AI for the rows no rule knows)
+const formData = (file: File, include: number[] = [], changes: Record<number, Change> = {}, ai = false) => {
     const data = new FormData();
     data.append('file', file);
     data.append('include_duplicates', include.join(','));
     data.append('changes', JSON.stringify(Object.fromEntries(Object.entries(changes).map(
-        ([line, c]) => [line, { category: c.category, remember: c.remember ? c.text : '' }]
+        ([line, c]) => [line, { category: c.category, remember: c.remember ? c.text : '', ...(c.source ? { source: c.source } : {}) }]
     ))));
+    if (ai) data.append('ai', '1');
     return data;
 };
 
@@ -75,6 +93,8 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
     const [categories, setCategories] = useState<Category[]>([]);
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState<Status | null>(null);
+    // The AI's note for this file (limit reached, failed, ...), kept while its suggestions are
+    const [aiMessage, setAiMessage] = useState<string | null>(null);
     const isParent = user?.role === 'PARENT';
 
     useEffect(() => {
@@ -88,6 +108,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
         setPreview(null);
         setIncluded(new Set());
         setChanges({});
+        setAiMessage(null);
     };
 
     const typeOf = (name: string) => categories.find(c => c.name.toLowerCase() === name.trim().toLowerCase())?.type;
@@ -133,9 +154,18 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
         setStatus(null);
         setBusy(true);
         try {
-            const res = await api.post('/api/v1/import/preview', formData(chosen));
+            const res = await api.post('/api/v1/import/preview', formData(chosen, [], {}, true));
+            const result: Preview = res.data;
             setFile(chosen);
-            setPreview(res.data);
+            setPreview(result);
+            if (result.ai) {
+                // Kept as changes, so the later previews and the import book what was shown
+                const described = Object.fromEntries(result.rows.map(r => [r.line, r.description]));
+                setChanges(Object.fromEntries(Object.entries(result.ai.suggestions).map(([line, s]) => [
+                    Number(line), { category: s.category, remember: false, text: described[Number(line)] ?? '', source: 'ai' as const },
+                ])));
+                setAiMessage(result.ai.message);
+            }
         } catch (error) {
             setStatus({ kind: 'error', text: errorMessage(error, t('importing.readFailed')) });
         } finally {
@@ -229,7 +259,24 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                         <strong>{file.name}</strong>: {t('importing.ready', { count: preview.ok })}
                         {preview.duplicates > 0 && t('importing.alreadyBooked', { count: preview.duplicates })}
                         {preview.errors > 0 && <span className="text-red-300">{t('importing.withErrors', { count: preview.errors })}</span>}
+                        {(preview.skipped ?? 0) > 0 && t('importing.skippedRows', { count: preview.skipped })}
                     </p>
+                    {aiMessage && <p className="text-sm text-amber-300 mb-2">{aiMessage}</p>}
+                    {preview.balances && preview.balances.length > 0 && (
+                        <ul className="mb-2 text-sm space-y-1">
+                            {preview.balances.map(b => {
+                                const differs = b.file_balance !== null && Math.abs(b.file_balance - b.app_balance) >= 0.005;
+                                return (
+                                    <li key={b.account_id} className={differs ? 'text-amber-300' : 'text-slate-300'}>
+                                        <strong>{b.account}</strong>: {t('importing.balanceCheck', {
+                                            bank: b.file_balance === null ? '–' : money(b.file_balance), app: money(b.app_balance),
+                                        })}
+                                        {differs && ` ${t('importing.balanceDiffers')}`}
+                                    </li>
+                                );
+                            })}
+                        </ul>
+                    )}
                     <div className="overflow-x-auto max-h-96 overflow-y-auto border border-slate-700 rounded-lg">
                         <table className="w-full text-sm">
                             <thead className="bg-slate-800/80 sticky top-0">
@@ -262,8 +309,10 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                                 </select>
                                             ) : row.category}
                                             {row.shared && <span className="text-slate-400"> · {row.shared}</span>}
-                                            {changes[row.line] && <div className="text-xs text-slate-500">{t('importing.was')}<s>{row.file_category}</s></div>}
+                                            {row.source === 'ai' && <div className="text-xs text-sky-400">{t('importing.byAi')}</div>}
+                                            {changes[row.line] && row.source !== 'ai' && <div className="text-xs text-slate-500">{t('importing.was')}<s>{row.file_category}</s></div>}
                                             {row.rule && <div className="text-xs text-emerald-400">{t('importing.byRule', { rule: row.rule })}</div>}
+                                            {row.source === 'fallback' && row.status !== 'error' && <div className="text-xs text-slate-500">{t('importing.byFallback')}</div>}
                                             {isParent && changes[row.line] && (
                                                 <div className="mt-1 flex flex-wrap items-center gap-1 text-xs">
                                                     <label className="flex items-center gap-1 cursor-pointer">
@@ -297,6 +346,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                         <td className="p-2">{row.description}</td>
                                         <td className={`p-2 ${STATUS_STYLE[row.status]}`}>
                                             {row.status === 'ok' && t('importing.statusReady')}
+                                            {row.status === 'skipped' && row.note}
                                             {row.status === 'error' && row.errors.map(e => <div key={e}>{e}</div>)}
                                             {row.status === 'duplicate' && (
                                                 <label className="flex items-start gap-2 cursor-pointer">

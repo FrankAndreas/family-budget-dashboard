@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import { money } from '../finance';
-import { ACCOUNT_TYPES, type Account } from '../accounts';
+import { ACCOUNT_TYPES, groupedIban, type Account } from '../accounts';
 import type { FamilyUser } from '../family';
 
 interface Props {
@@ -31,8 +31,11 @@ export default function AccountCards({
     const [showAddAccount, setShowAddAccount] = useState(false);
     const [newAccountName, setNewAccountName] = useState('');
     const [newAccountType, setNewAccountType] = useState('BANK');
+    const [newAccountIban, setNewAccountIban] = useState('');
     // Account being renamed (inline form on its card)
-    const [editingAccount, setEditingAccount] = useState<{ id: string; name: string; type: string } | null>(null);
+    const [editingAccount, setEditingAccount] = useState<{ id: string; name: string; type: string; iban: string } | null>(null);
+    // Only parents enter IBANs (the bank import finds accounts by them)
+    const isParent = user?.role === 'PARENT';
 
     // Your own money; accounts others shared with you are listed but not added up
     const totalBalance = accounts.filter(a => a.user_id === user?.id).reduce((sum, acc) => sum + acc.balance, 0);
@@ -40,8 +43,11 @@ export default function AccountCards({
     const handleAddAccount = async (e: React.FormEvent) => {
         e.preventDefault();
         try {
-            await api.post('/api/v1/accounts', { name: newAccountName, type: newAccountType });
+            await api.post('/api/v1/accounts', {
+                name: newAccountName, type: newAccountType, ...(isParent && newAccountIban ? { iban: newAccountIban } : {}),
+            });
             setNewAccountName('');
+            setNewAccountIban('');
             setShowAddAccount(false);
             onChanged();
         } catch (error) {
@@ -54,7 +60,9 @@ export default function AccountCards({
         e.preventDefault();
         if (!editingAccount) return;
         try {
-            await api.put(`/api/v1/accounts/${editingAccount.id}`, { name: editingAccount.name, type: editingAccount.type });
+            await api.put(`/api/v1/accounts/${editingAccount.id}`, {
+                name: editingAccount.name, type: editingAccount.type, ...(isParent ? { iban: editingAccount.iban } : {}),
+            });
             setEditingAccount(null);
             onChanged();
         } catch (error) {
@@ -114,6 +122,16 @@ export default function AccountCards({
                         <select value={newAccountType} onChange={(e) => setNewAccountType(e.target.value)} className={`${field} mb-2`}>
                             {ACCOUNT_TYPES.map(type => <option key={type} value={type}>{t(`accounts.types.${type}`)}</option>)}
                         </select>
+                        {isParent && (
+                            <input
+                                type="text"
+                                placeholder={t('accounts.ibanPlaceholder')}
+                                value={newAccountIban}
+                                onChange={(e) => setNewAccountIban(e.target.value)}
+                                className={`${field} mb-2`}
+                                aria-label={t('accounts.iban')}
+                            />
+                        )}
                         <button type="submit" className="btn-primary w-full">{t('accounts.create')}</button>
                     </form>
                 )}
@@ -146,6 +164,16 @@ export default function AccountCards({
                                     >
                                         {ACCOUNT_TYPES.map(type => <option key={type} value={type}>{t(`accounts.types.${type}`)}</option>)}
                                     </select>
+                                    {isParent && (
+                                        <input
+                                            type="text"
+                                            placeholder={t('accounts.ibanPlaceholder')}
+                                            value={editingAccount.iban}
+                                            onChange={(e) => setEditingAccount({ ...editingAccount, iban: e.target.value })}
+                                            className={field}
+                                            aria-label={t('accounts.iban')}
+                                        />
+                                    )}
                                     <div className="flex gap-2">
                                         <button type="submit" className="btn-primary text-sm flex-1">{t('common.save')}</button>
                                         <button type="button" onClick={() => setEditingAccount(null)} className="px-3 text-sm text-slate-400 hover:text-white">
@@ -161,6 +189,7 @@ export default function AccountCards({
                                     </p>
                                 )}
                                 <p className="text-sm text-slate-400">{t(`accounts.types.${account.type as typeof ACCOUNT_TYPES[number]}`)}</p>
+                                {isParent && account.iban && <p className="text-xs text-slate-500 font-mono">{groupedIban(account.iban)}</p>}
                                 <div className="flex justify-between items-end mt-2">
                                     <p className="text-2xl font-bold">{money(account.balance)}</p>
                                     {canEdit(account) && (
@@ -168,7 +197,7 @@ export default function AccountCards({
                                             <button
                                                 onClick={(e) => {
                                                     e.stopPropagation();
-                                                    setEditingAccount({ id: account.id, name: account.name, type: account.type });
+                                                    setEditingAccount({ id: account.id, name: account.name, type: account.type, iban: account.iban ? groupedIban(account.iban) : '' });
                                                 }}
                                                 className="text-sm text-slate-500 hover:text-blue-400 transition-colors"
                                                 title={t('accounts.editTitle')}
