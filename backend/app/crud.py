@@ -156,6 +156,7 @@ def update_account(db: Session, db_account: models.Account, update: schemas.Acco
 
 
 def delete_account(db: Session, db_account: models.Account):
+    db.query(models.BankRow).filter(models.BankRow.account_id == db_account.id).delete(synchronize_session=False)
     db.query(models.Transaction).filter(models.Transaction.account_id == db_account.id).delete(
         synchronize_session=False
     )

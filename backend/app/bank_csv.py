@@ -78,8 +78,9 @@ def booked_day(value: str) -> Optional[date]:
 
 
 def rows(text: str, fields: tuple[str, ...]) -> list[dict[str, Any]]:
-    """One import row per line ({"_line", every field}), plus _iban (compact), _booked (date or None), _balance
-    (float or None) and _skip (amount 0). Values that can't be read stay as they are, for the import to report."""
+    """One import row per line ({"_line", every field}), plus _iban (compact), _booked and _valuta (date or None),
+    _balance (float or None) and _skip (amount 0). Values that can't be read stay as they are, for the import to report.
+    """
     reader = csv.reader(io.StringIO(text), delimiter=";")
     columns = [key(column) for column in next(reader, [])]
     out = []
@@ -111,6 +112,7 @@ def rows(text: str, fields: tuple[str, ...]) -> list[dict[str, Any]]:
                 **row,
                 "_iban": ibans.compact(get("iban")),
                 "_booked": day,
+                "_valuta": booked_day(get("valuta date")) if get("valuta date") else None,
                 "_balance": float(balance) if balance is not None else None,
                 "_skip": amount == 0,
             }

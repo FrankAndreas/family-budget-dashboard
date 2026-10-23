@@ -9,7 +9,8 @@ import io
 import json
 import math
 import re
-from datetime import datetime
+from datetime import datetime, time
+from types import SimpleNamespace
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
@@ -149,7 +150,15 @@ class Lookups:
 
         visible = [a.id for a in accounts if levels.get(a.user_id)]
         existing = db.query(models.Transaction).filter(models.Transaction.account_id.in_(visible)).all()
-        self.references = {t.reference: t for t in existing if t.reference}
+        self.references: dict[str, Any] = {t.reference: t for t in existing if t.reference}
+        # Imported bank lines are known by their own reference, also when linked to another booking (a receipt) or
+        # to none any more
+        by_id = {t.id: t for t in existing}
+        for row in db.query(models.BankRow).filter(models.BankRow.account_id.in_(visible)):
+            twin = by_id.get(row.transaction_id or "")
+            self.references.setdefault(
+                row.reference, twin or SimpleNamespace(id=None, date=datetime.combine(row.booked_on, time(12)))
+            )
         self.bookings = {(t.account_id, t.date.date(), t.amount, t.category_id): t for t in existing}
 
     def account(self, name: str, owner: str) -> tuple[Optional[models.Account], Optional[str]]:
@@ -371,6 +380,7 @@ def check_file(
             source=source(raw, change, rule),
             _account=raw.get("_account"),
             _booked=raw.get("_booked"),
+            _valuta=raw.get("_valuta"),
             _balance=raw.get("_balance"),
         )
         rows.append(out)
@@ -402,6 +412,20 @@ def balances(rows: list[dict]) -> list[dict]:
         }
         for account in accounts.values()
     ]
+
+
+def bank_row(row: dict, booking: models.Transaction) -> models.BankRow:
+    """The statement line behind a booked bank row, kept as the proof that the money moved."""
+    return models.BankRow(
+        account_id=booking.account_id,
+        transaction_id=booking.id,
+        booked_on=row["_booked"] or booking.date.date(),
+        valuta_on=row["_valuta"],
+        text=row["description"],
+        amount=booking.amount,
+        balance=row["_balance"],
+        reference=row["reference"],
+    )
 
 
 def public(rows: list[dict], bank: bool = False) -> dict:
@@ -467,7 +491,9 @@ def run_import(
     try:
         for row in chosen:
             transaction, category, split_shares = row["_create"]
-            crud.create_transaction(db, transaction, category, split_shares=split_shares, commit=False)
+            created = crud.create_transaction(db, transaction, category, split_shares=split_shares, commit=False)
+            if bank:
+                db.add(bank_row(row, created))
         # Remembered rules are saved with the bookings, so a failed import saves none
         categories = categories_by_name(db)
         for row in rows:

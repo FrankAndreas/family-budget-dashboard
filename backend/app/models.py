@@ -119,6 +119,11 @@ class Transaction(Base):
     asset_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("assets.id"), nullable=True)
     # The importing tool's own ID for the source (receipt file, hash, ...); recognises repeated imports
     reference: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # Reconciliation (bank import, part 2): a receipt is expected (from the import rule that booked it); the bank
+    # amount minus the receipt's total when the items were fitted to the bank, and whether a parent accepted it
+    receipt_expected: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
+    difference: Mapped[Optional[float]] = mapped_column(Money, nullable=True)
+    difference_accepted: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
 
     account: Mapped["Account"] = relationship("Account", back_populates="transactions")
     category: Mapped["Category"] = relationship("Category")
@@ -129,6 +134,34 @@ class Transaction(Base):
     attachments: Mapped[list["Attachment"]] = relationship(
         "Attachment", cascade="all, delete-orphan", passive_deletes=True
     )
+    # The bank statement lines that paid it; they stay when the booking is deleted (the database unlinks them)
+    bank_rows: Mapped[list["BankRow"]] = relationship(
+        "BankRow", back_populates="transaction", order_by="BankRow.booked_on", passive_deletes=True
+    )
+
+
+class BankRow(Base):
+    """A line of an imported bank statement (bank import, part 2): the proof that money moved, linked to the booking
+    it created or confirmed. Its reference recognises the line when the statement is uploaded again."""
+
+    __tablename__ = "bank_rows"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    account_id: Mapped[str] = mapped_column(String, ForeignKey("accounts.id"), index=True)
+    transaction_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("transactions.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    booked_on: Mapped[date] = mapped_column(Date)
+    valuta_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # The cleaned booking text (no card numbers or IBANs)
+    text: Mapped[str] = mapped_column(String)
+    # Signed: negative is money out
+    amount: Mapped[float] = mapped_column(Money)
+    balance: Mapped[Optional[float]] = mapped_column(Money, nullable=True)
+    reference: Mapped[str] = mapped_column(String, unique=True)
+    imported_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+    transaction: Mapped[Optional["Transaction"]] = relationship("Transaction", back_populates="bank_rows")
 
 
 class Tag(Base):
