@@ -295,7 +295,7 @@ def test_payments_need_write_access(client):
 
 ```ts
 test('receipt confirmed by the bank statement', ...)
-// account with IBAN; a receipt typed in: "Muster Laden", 2026-09-03, items 50.00 + 34.30 → list shows "not confirmed"? (no: no import yet → no badge)
+// account with IBAN; a receipt typed in: "Muster Laden", 2026-09-03, items 50.00 + 34.30 → no badge yet (no import on the account)
 // import a statement: line 2026-09-02 "Einkauf TWINT Muster Laden" −84.30 and line 2026-09-20 "Zahlung Beispiel" −10
 //   → preview row 2 "confirms: Muster Laden"; import 2 → receipt booking has no badge (confirmed) and shows its bank line when expanded
 // a booking typed in on 2026-09-01 without bank line → badge "no payment found"; "open points (1)" toggle lists it
