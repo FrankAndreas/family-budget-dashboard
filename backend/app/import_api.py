@@ -432,7 +432,8 @@ def preview_import(
     if not (bank and ai == "1"):
         return public(rows, bank)
     # The first preview of a bank file asks the AI once; the frontend sends its answers back as changes
-    open_rows = [r for r in rows if r.get("source") == "fallback" and r["status"] != "error"]
+    # Only rows that will be booked: an already booked one needs no suggestion
+    open_rows = [r for r in rows if r.get("source") == "fallback" and r["status"] == "ok"]
     income = i18n.category_name(system_category(db, OTHER_INCOME))
     money_in = {r["line"] for r in open_rows if r["category"] == income}
     texts_out = list(dict.fromkeys(r["description"] for r in open_rows if r["line"] not in money_in))

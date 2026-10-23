@@ -142,3 +142,12 @@ def test_ai_suggestion_books_and_can_be_remembered(client, mum, ai):  # noqa: F8
     assert response.json()["imported"] == 4
     rules = client.get(f"{BASE_URL}/import/rules", headers=mum).json()
     assert [(r["text"], r["category"]) for r in rules] == [("Kiosk", "Dining Out")]
+
+
+def test_already_booked_rows_not_sent(client, mum, ai):  # noqa: F811
+    ai.answer = answer({})
+    assert upload(client, mum, FILE, name="export.csv", path="import").json()["imported"] == 4
+    result = with_ai(client, mum, FILE)
+    assert result["duplicates"] == 4
+    assert ai.sent == []
+    assert result["ai"]["suggestions"] == {}
