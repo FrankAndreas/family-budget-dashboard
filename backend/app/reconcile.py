@@ -153,6 +153,36 @@ def candidates_for_line(
     return sorted(found, key=lambda t: (to_cents(t.amount) != to_cents(amount), abs((swiss_day(t) - day).days)))
 
 
+def payments_for_receipt(db: Session, account: models.Account, day: date, total: float) -> list[models.Transaction]:
+    """Bank bookings a receipt could go onto: expenses on the account with a bank row and no items, the amount within
+    TOLERANCE, paid from 3 days before the receipt to 30 days after it. Exact amounts first, then the nearest date."""
+    bookings = db.query(models.Transaction).filter(
+        models.Transaction.account_id == account.id, models.Transaction.bank_rows.any()
+    )
+    found = []
+    for t in bookings:
+        if t.items or t.amount >= 0 or abs(-t.amount - total) > TOLERANCE:
+            continue
+        paid = min(r.booked_on for r in t.bank_rows)
+        if day - timedelta(days=3) <= paid <= day + timedelta(days=30):
+            found.append((t, paid))
+    found.sort(key=lambda f: (to_cents(-f[0].amount) != to_cents(total), abs((f[1] - day).days)))
+    return [t for t, _ in found]
+
+
+@router.get("/accounts/{account_id}/payments", response_model=list[schemas.Transaction])
+def list_payments(
+    account_id: str,
+    date: date,
+    total: float,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    """For the receipt form: the bank bookings this receipt may have been paid with."""
+    account = privacy.check_account_access(db, current_user, account_id, write=True)
+    return annotate(db, payments_for_receipt(db, account, date, total))
+
+
 def get_row(db: Session, row_id: str) -> models.BankRow:
     row = db.get(models.BankRow, row_id)
     if not row:
