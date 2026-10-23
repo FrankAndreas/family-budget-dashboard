@@ -138,11 +138,47 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
         ],
     )
 
+    tags = {t.id: t for t in db.query(models.Tag)}
+    files["tags.csv"] = to_csv(
+        ["tag_id", "name", "icon"], [[t.id, t.name, t.icon] for t in sorted(tags.values(), key=lambda t: t.name)]
+    )
+    item_rows = []
+    for t in transactions:
+        for item in t.items:
+            item_rows.append(
+                [
+                    item.id,
+                    t.id,
+                    item.position,
+                    item.name,
+                    item.amount,
+                    item.category_id,
+                    category_name(item.category_id),
+                    item.person_id,
+                    names.get(item.person_id) if item.person_id else None,
+                    ";".join(sorted(tag.name for tag in item.tags)),
+                ]
+            )
+    files["items.csv"] = to_csv(
+        "item_id,transaction_id,position,name,amount,category_id,category,person_id,person,tags".split(","),
+        item_rows,
+    )
+
     budgets = db.query(models.Budget).filter(models.Budget.user_id.in_(visible_ids)).all()
     files["budgets.csv"] = to_csv(
-        ["budget_id", "owner_id", "owner", "category_id", "category", "limit", "period"],
+        ["budget_id", "owner_id", "owner", "category_id", "category", "tag_id", "tag", "limit", "period"],
         [
-            [b.id, b.user_id, names.get(b.user_id), b.category_id, category_name(b.category_id), b.limit, b.period]
+            [
+                b.id,
+                b.user_id,
+                names.get(b.user_id),
+                b.category_id,
+                category_name(b.category_id),
+                b.tag_id,
+                tags[b.tag_id].name if b.tag_id in tags else None,
+                b.limit,
+                b.period,
+            ]
             for b in budgets
         ],
     )

@@ -135,6 +135,7 @@ fi
 log "Updating:${changed:- (forced)}"
 
 # Back up the database first: a new version may change it when it starts.
+# Stored receipts (data/attachments/) are not in this backup; the NAS backup of data/ must cover them.
 # Writes the backup to stdout, using SQLite's online-backup API (a consistent
 # copy even while the backend is writing), through the running backend or a
 # one-off backend container if it is stopped

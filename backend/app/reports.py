@@ -5,12 +5,13 @@ category type.
 """
 
 from collections import defaultdict
+from dataclasses import dataclass
 from datetime import date, datetime, time, timezone
 from typing import Literal, Optional
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from . import auth, database, i18n, models, privacy
 
@@ -47,27 +48,67 @@ def cents(value: float) -> float:
     return round(value + 0.0, 2)
 
 
-def bookings(db: Session, owner_id: str, since: Optional[date]) -> list[tuple[models.Transaction, models.Category]]:
-    """The owner's income and expenses (no transfers) from a Swiss day on."""
+@dataclass(frozen=True)
+class Line:
+    """What counts: a plain booking, or one item of a receipt (issue #56). amount > 0 is a cost or an income;
+    a discount item is negative and lowers its category."""
+
+    date: datetime
+    amount: float
+    type: models.CategoryType
+    category: models.Category
+    person_id: Optional[str] = None
+    tag_ids: frozenset[str] = frozenset()
+    member_id: Optional[str] = None
+
+
+def lines(db: Session, owner_id: str, since: Optional[date]) -> list[Line]:
+    """The owner's income and expenses (no transfers) from a Swiss day on: one line per plain booking, one per item."""
     query = (
         db.query(models.Transaction, models.Category)
         .join(models.Account, models.Transaction.account_id == models.Account.id)
         .join(models.Category, models.Transaction.category_id == models.Category.id)
         .filter(models.Account.user_id == owner_id, models.Category.type.in_([INCOME, EXPENSE]))
+        .options(
+            selectinload(models.Transaction.items).selectinload(models.TransactionItem.category),
+            selectinload(models.Transaction.items).selectinload(models.TransactionItem.tags),
+        )
     )
     if since:
         query = query.filter(models.Transaction.date >= utc_start(since))
-    return [(transaction, category) for transaction, category in query.all()]
+    result = []
+    for transaction, category in query.all():
+        if not transaction.items:
+            result.append(
+                Line(
+                    transaction.date, abs(transaction.amount), category.type, category, member_id=transaction.member_id
+                )
+            )
+            continue
+        for item in transaction.items:
+            result.append(
+                Line(
+                    transaction.date,
+                    item.amount,
+                    item.category.type,
+                    item.category,
+                    person_id=item.person_id,
+                    tag_ids=frozenset(t.id for t in item.tags),
+                )
+            )
+    return result
 
 
 def budget_out(db: Session, budget: models.Budget) -> dict:
     day = today()
     since = month_start(day) if budget.period == "MONTHLY" else date(day.year, 1, 1)
+    # A tag budget counts every line carrying the tag (an item with several tags counts in each of their budgets)
     spent = cents(
         sum(
-            abs(t.amount)
-            for t, c in bookings(db, budget.user_id, since)
-            if c.type == EXPENSE and c.id == budget.category_id
+            line.amount
+            for line in lines(db, budget.user_id, since)
+            if line.type == EXPENSE
+            and (line.category.id == budget.category_id if budget.tag_id is None else budget.tag_id in line.tag_ids)
         )
     )
     percentage = round(spent / budget.limit * 100, 1) if budget.limit else 0.0
@@ -75,6 +116,7 @@ def budget_out(db: Session, budget: models.Budget) -> dict:
         "id": budget.id,
         "user_id": budget.user_id,
         "category_id": budget.category_id,
+        "tag_id": budget.tag_id,
         "limit": budget.limit,
         "period": budget.period,
         "spent": spent,
@@ -85,10 +127,13 @@ def budget_out(db: Session, budget: models.Budget) -> dict:
 def summary(db: Session, owner: models.User, period: str, day: date) -> dict:
     start = range_start(period, day)
     six_months = month_start(day, 5)
-    rows = bookings(db, owner.id, None if start is None else min(start, six_months))
+    rows = lines(db, owner.id, None if start is None else min(start, six_months))
     totals = {INCOME: 0.0, EXPENSE: 0.0}
     by_category: dict[str, list] = {}
     by_child: dict[str, float] = defaultdict(float)
+    # An item counts in full under each of its tags, so these totals overlap and are never added up
+    by_tag: dict[str, float] = defaultdict(float)
+    by_person: dict[str, float] = defaultdict(float)
     months = {month_start(day, back).strftime("%Y-%m"): {INCOME: 0.0, EXPENSE: 0.0} for back in range(5, -1, -1)}
     first = month_start(day)
     days = {}
@@ -96,20 +141,29 @@ def summary(db: Session, owner: models.User, period: str, day: date) -> dict:
     while current.month == first.month:
         days[current.isoformat()] = {INCOME: 0.0, EXPENSE: 0.0}
         current = date.fromordinal(current.toordinal() + 1)
-    for transaction, category in rows:
-        local = swiss_day(transaction.date)
-        amount = abs(transaction.amount)
+    dependents = {
+        u.id for u in db.query(models.User).filter(models.User.role == models.UserRole.CHILD) if not u.has_allowance
+    }
+    for line in rows:
+        local = swiss_day(line.date)
         if start is None or local >= start:
-            totals[category.type] += amount
-            if category.type == EXPENSE:
-                by_category.setdefault(category.id, [i18n.category_name(category), 0.0])[1] += amount
-                if transaction.member_id:
-                    by_child[transaction.member_id] += amount
+            totals[line.type] += line.amount
+            if line.type == EXPENSE:
+                by_category.setdefault(line.category.id, [i18n.category_name(line.category), 0.0])[1] += line.amount
+                child = line.member_id or (line.person_id if line.person_id in dependents else None)
+                if child:
+                    by_child[child] += line.amount
+                for tag_id in line.tag_ids:
+                    by_tag[tag_id] += line.amount
+                if line.person_id:
+                    by_person[line.person_id] += line.amount
         if local.strftime("%Y-%m") in months:
-            months[local.strftime("%Y-%m")][category.type] += amount
+            months[local.strftime("%Y-%m")][line.type] += line.amount
         if local.isoformat() in days:
-            days[local.isoformat()][category.type] += amount
-    names = {u.id: u.username for u in db.query(models.User).filter(models.User.id.in_(list(by_child)))}
+            days[local.isoformat()][line.type] += line.amount
+    people = set(by_child) | set(by_person)
+    names = {u.id: u.username for u in db.query(models.User).filter(models.User.id.in_(list(people)))}
+    tags = {t.id: t for t in db.query(models.Tag).filter(models.Tag.id.in_(list(by_tag)))}
     is_parent = owner.role == models.UserRole.PARENT
     return {
         "range": period,
@@ -128,6 +182,18 @@ def summary(db: Session, owner: models.User, period: str, day: date) -> dict:
                 if is_parent
                 else []
             ),
+            key=lambda row: -row["amount"],
+        ),
+        "by_tag": sorted(
+            (
+                {"tag_id": tid, "name": tags[tid].name, "icon": tags[tid].icon, "amount": cents(a)}
+                for tid, a in by_tag.items()
+                if tid in tags
+            ),
+            key=lambda row: -row["amount"],
+        ),
+        "by_person": sorted(
+            ({"person_id": pid, "name": names.get(pid, ""), "amount": cents(a)} for pid, a in by_person.items()),
             key=lambda row: -row["amount"],
         ),
         "months": [{"month": m, "income": cents(v[INCOME]), "expenses": cents(v[EXPENSE])} for m, v in months.items()],

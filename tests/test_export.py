@@ -18,7 +18,9 @@ HEADERS = {
     "amount,description,for_member_id,for_member,split_id,split,investment_id,investment,reference",
     "shared_expense_shares.csv": "transaction_id,date,payer_id,payer,amount,member_id,member,percent,share",
     "settlements.csv": "settlement_id,date,from_id,from,to_id,to,amount",
-    "budgets.csv": "budget_id,owner_id,owner,category_id,category,limit,period",
+    "budgets.csv": "budget_id,owner_id,owner,category_id,category,tag_id,tag,limit,period",
+    "items.csv": "item_id,transaction_id,position,name,amount,category_id,category,person_id,person,tags",
+    "tags.csv": "tag_id,name,icon",
     "splits.csv": "split_id,name,member_id,member,percent",
     "investments.csv": "investment_id,name,owner_id,owner,split_id,split,price,purchase_date,lifespan_years,"
     "age_years,replacement_due,monthly_set_aside,follow_up_costs,total_cost,cost_per_year,notes",
@@ -196,3 +198,48 @@ def test_wishes_follow_visibility(client):
     client.post(f"{BASE_URL}/wishes", json={"name": "Drill", "owner_id": user_id(client, dad, "dad")}, headers=dad)
     wishes = rows(export(client, mum), "wishes.csv")
     assert [(w["name"], w["price"]) for w in wishes] == [("Bike", "800.0")]
+
+
+def test_items_and_tags_in_the_zip(client):
+    from helpers import admin_headers
+
+    admin = admin_headers(client)
+    velo = client.post(f"{BASE_URL}/tags", json={"name": "Velo", "icon": "🚲"}, headers=admin).json()["id"]
+    sport = client.post(f"{BASE_URL}/tags", json={"name": "Sport"}, headers=admin).json()["id"]
+    mum = register(client, "mum")
+    me = user_id(client, mum, "mum")
+    account = create_account(client, mum)
+    receipt = client.post(
+        f"{BASE_URL}/transactions",
+        json={
+            "account_id": account,
+            "items": [
+                {"name": "Brot", "amount": 3.5, "category_id": category_id(client, "Groceries")},
+                {
+                    "name": "Velo-Hose",
+                    "amount": 79.9,
+                    "category_id": category_id(client, "Clothing"),
+                    "person_id": me,
+                    "tag_ids": [velo, sport],
+                },
+            ],
+        },
+        headers=mum,
+    ).json()
+    client.post(f"{BASE_URL}/budgets", json={"tag_id": velo, "limit": 4000, "period": "YEARLY"}, headers=mum)
+    archive = export(client, mum)
+    items = rows(archive, "items.csv")
+    assert [
+        (i["transaction_id"], i["position"], i["name"], i["amount"], i["category"], i["person"], i["tags"])
+        for i in items
+    ] == [
+        (receipt["id"], "0", "Brot", "3.5", "Groceries", "", ""),
+        (receipt["id"], "1", "Velo-Hose", "79.9", "Clothing", "mum", "Sport;Velo"),
+    ]
+    assert {(t["name"], t["icon"]) for t in rows(archive, "tags.csv")} == {("Velo", "🚲"), ("Sport", "")}
+    assert rows(archive, "budgets.csv")[0]["tag"] == "Velo"
+    readme = archive.read("README.md").decode()
+    assert "`items.csv`" in readme and "`tags.csv`" in readme
+    # Someone who can't see mum's accounts doesn't get her items
+    dad = register(client, "dad")
+    assert rows(export(client, dad), "items.csv") == []

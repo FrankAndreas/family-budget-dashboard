@@ -35,6 +35,14 @@ def fresh_db():
     yield
 
 
+@pytest.fixture(autouse=True)
+def attachments_dir(tmp_path, monkeypatch):
+    """Receipt files go to a folder of their own per test (issue #56)."""
+    folder = tmp_path / "attachments"
+    monkeypatch.setenv("ATTACHMENTS_DIR", str(folder))
+    return folder
+
+
 @pytest.fixture
 def client():
     return TestClient(app)

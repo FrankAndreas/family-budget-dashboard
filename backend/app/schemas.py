@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field, StringConstraints, field_validator, model_validator
+from pydantic import BaseModel, Field, StringConstraints, computed_field, field_validator, model_validator
 from typing import Annotated, Optional, Literal
 from datetime import date, datetime, timezone
 from .models import UserRole, AccountType, CategoryType, ShareLevel
@@ -114,6 +114,25 @@ class CategoryUpdate(BaseModel):
     icon: Optional[str] = Field(default=None, max_length=8)
 
 
+class TagCreate(BaseModel):
+    name: CategoryName
+    icon: Optional[str] = Field(default=None, max_length=8)
+
+
+class TagUpdate(BaseModel):
+    name: Optional[CategoryName] = None
+    icon: Optional[str] = Field(default=None, max_length=8)
+
+
+class Tag(BaseModel):
+    id: str
+    name: str
+    icon: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
 class Category(CategoryBase):
     id: str
     is_global: bool = True
@@ -148,11 +167,66 @@ def _reject_zero(value: Optional[float]) -> Optional[float]:
     return value
 
 
-class TransactionCreate(TransactionBase):
-    account_id: str
+# A receipt's line (issue #56): what it is (category), what for (tags), for whom (person)
+ItemName = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1, max_length=120)]
+MAX_ITEMS = 100
+
+
+class ItemIn(BaseModel):
+    name: ItemName
+    # Positive = cost, negative = discount or deposit refund
+    amount: float
     category_id: str
+    person_id: Optional[str] = None
+    tag_ids: list[str] = []
 
     _amount_not_zero = field_validator("amount")(_reject_zero)
+
+
+class ItemOut(BaseModel):
+    id: str
+    position: int
+    name: str
+    amount: float
+    category_id: str
+    person_id: Optional[str] = None
+    tags: list[Tag] = Field(default=[], exclude=True)
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def tag_ids(self) -> list[str]:
+        return [t.id for t in self.tags]
+
+    class Config:
+        from_attributes = True
+
+
+class AttachmentOut(BaseModel):
+    id: str
+    filename: str
+    content_type: str
+    size: int
+
+    class Config:
+        from_attributes = True
+
+
+class TransactionCreate(TransactionBase):
+    account_id: str
+    # The person's own pending uploads (e.g. the receipt just read) to keep with the booking
+    attachment_ids: list[str] = []
+    # Required for a plain booking; with items, both come from the items
+    amount: Optional[float] = None  # type: ignore[assignment]
+    category_id: Optional[str] = None
+    items: Optional[list[ItemIn]] = Field(default=None, max_length=MAX_ITEMS)
+
+    _amount_not_zero = field_validator("amount")(_reject_zero)
+
+    @model_validator(mode="after")
+    def plain_needs_amount_and_category(self) -> "TransactionCreate":
+        if self.items is None and (self.amount is None or self.category_id is None):
+            raise ValueError("amount and category_id are required without items")
+        return self
 
 
 class TransactionUpdate(BaseModel):
@@ -165,6 +239,10 @@ class TransactionUpdate(BaseModel):
     # Send null to stop sharing / unlink
     split_id: Optional[str] = None
     asset_id: Optional[str] = None
+    # Replaces the items; [] turns a receipt back into a plain booking (then amount and category_id are needed)
+    items: Optional[list[ItemIn]] = Field(default=None, max_length=MAX_ITEMS)
+    # More of the person's pending uploads to keep with the booking
+    attachment_ids: list[str] = []
 
     _amount_not_zero = field_validator("amount")(_reject_zero)
 
@@ -175,6 +253,8 @@ class Transaction(TransactionBase):
     category_id: str
     date: datetime
     split_shares: Optional[dict[str, int]] = None
+    items: list[ItemOut] = []
+    attachments: list[AttachmentOut] = []
 
     # Dates are stored as naive UTC; mark them as UTC so clients convert to local time correctly
     @field_validator("date")
@@ -188,7 +268,9 @@ class Transaction(TransactionBase):
 
 # Budget Schemas
 class BudgetBase(BaseModel):
-    category_id: str
+    # A budget is for a category or for a tag (issue #56): exactly one of the two
+    category_id: Optional[str] = None
+    tag_id: Optional[str] = None
     limit: float
     period: str = "MONTHLY"
 
@@ -198,6 +280,12 @@ class BudgetCreate(BudgetBase):
     period: Literal["MONTHLY", "YEARLY"] = "MONTHLY"
     # Set to create the budget for someone who shared their finances with EDIT
     user_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def category_or_tag(self) -> "BudgetCreate":
+        if (self.category_id is None) == (self.tag_id is None):
+            raise ValueError("a budget is for either a category or a tag")
+        return self
 
 
 class BudgetUpdate(BaseModel):

@@ -76,7 +76,22 @@ who haven't picked a language, and a new database's default categories), set `DE
 If you lose the PIN before anyone uses the app, stop it, delete `data/budget.db` and start again.
 **This deletes all data.**
 
-`data/` holds everything worth keeping: the database `budget.db`.
+`data/` holds everything worth keeping: the database `budget.db` and the stored receipts in
+`data/attachments/`. Back up the whole folder: the update script's database backup does not include the receipts.
+
+### Reading receipts with the Infomaniak AI (optional)
+
+A receipt (photo, PDF, or an e-mail saved as `.eml`) becomes one booking with its items; the AI reads it and you
+check everything before it is booked. Only the file and the names of your expense categories and tags are sent.
+
+1. In the Infomaniak Manager, create an API token with **only the `ai-tools` scope** and a lifetime (e.g. one year),
+   and note the AI product's ID (*Cloud Computing → AI Tools*). Set a **spending limit** on the AI product.
+2. Put both in `.env` on the NAS (never in the repository):
+   `INFOMANIAK_AI_TOKEN=…` and `INFOMANIAK_AI_PRODUCT_ID=…`, then `sudo docker-compose up -d`.
+3. Optional: `RECEIPT_AI_MODEL` (default `google/gemma-4-31B-it`) and `RECEIPT_AI_READS_PER_HOUR` (default 30 per
+   person; `0` turns reading off while keeping the token).
+
+The NAS needs outgoing HTTPS to `api.infomaniak.com`. Without a token, receipts can still be typed in and attached.
 
 **Settings → Data Management** exports your data as a ZIP of CSV files for analysis (pandas, Jupyter, a
 local LLM; a README inside explains the columns) and imports transactions in bulk from a CSV or JSON file,

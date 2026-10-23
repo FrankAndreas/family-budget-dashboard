@@ -22,7 +22,9 @@ other family members share with them, and (for parents) the common budget, inves
 | `transactions.csv` | booking | see below |
 | `shared_expense_shares.csv` | parent and shared expense | how a shared expense is divided: `percent` and `share` (CHF) per parent; `payer` paid the full `amount` |
 | `settlements.csv` | settle-up payment | `from` paid `to` to settle the common budget |
-| `budgets.csv` | budget | spending limit per `category` and `period` (`MONTHLY` or `YEARLY`) |
+| `items.csv` | receipt item | the lines of a booking entered as a receipt; see below |
+| `tags.csv` | tag | what items are for (e.g. "Velo"), across categories |
+| `budgets.csv` | budget | spending limit per `category` **or** per `tag`, and `period` (`MONTHLY` or `YEARLY`) |
 | `splits.csv` | parent and split | a named ratio for dividing common costs, e.g. "Equal" 50/50 |
 | `investments.csv` | investment | long-lived purchase; `age_years`, `replacement_due`, `monthly_set_aside` (price spread over the lifespan), `follow_up_costs` (linked expenses), `total_cost`, `cost_per_year` are calculated on the export day |
 | `planned_costs.csv` | planned cost | yearly bills (`frequency` `YEARLY`, `due_month` 1-12, `next_due`) and common monthly costs; `monthly` is the monthly equivalent; `owner` for a personal cost, `split` for a common one |
@@ -37,6 +39,15 @@ other family members share with them, and (for parents) the common budget, inves
   their account. Each parent's part is in `shared_expense_shares.csv` (join on `transaction_id`).
 - `for_member` is the child an expense was for; `investment` the investment it belongs to (purchase, repair,
   service); `reference` is the ID an import tool gave the source receipt.
+
+### items.csv
+
+- A booking entered as a receipt has **items**: one row per line, joined on `transaction_id`. The booking's
+  `amount` in `transactions.csv` is minus the sum of its items, and its `category` is the one with the largest
+  items; for spending per category, use the items instead of such bookings.
+- `amount` is positive for a cost and negative for a discount or deposit refund.
+- `tags` lists the item's tags, separated by `;`. An item with several tags belongs **in full** to each of them,
+  so totals per tag overlap: never add them up. `person` is whom the item was for.
 
 ## Examples (pandas)
 

@@ -119,6 +119,69 @@ class Transaction(Base):
 
     account: Mapped["Account"] = relationship("Account", back_populates="transactions")
     category: Mapped["Category"] = relationship("Category")
+    # A receipt's items (issue #56); empty for a plain booking
+    items: Mapped[list["TransactionItem"]] = relationship(
+        "TransactionItem", order_by="TransactionItem.position", cascade="all, delete-orphan", passive_deletes=True
+    )
+    attachments: Mapped[list["Attachment"]] = relationship(
+        "Attachment", cascade="all, delete-orphan", passive_deletes=True
+    )
+
+
+class Tag(Base):
+    """What an item is for (Velo, Garten, ...), across categories; family-wide like categories."""
+
+    __tablename__ = "tags"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String, unique=True)
+    icon: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+
+
+class TransactionItemTag(Base):
+    __tablename__ = "transaction_item_tags"
+
+    item_id: Mapped[str] = mapped_column(
+        String, ForeignKey("transaction_items.id", ondelete="CASCADE"), primary_key=True
+    )
+    tag_id: Mapped[str] = mapped_column(String, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
+
+
+class TransactionItem(Base):
+    """One line of a receipt: what it is (category), what for (tags) and for whom (person)."""
+
+    __tablename__ = "transaction_items"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    transaction_id: Mapped[str] = mapped_column(String, ForeignKey("transactions.id", ondelete="CASCADE"), index=True)
+    position: Mapped[int] = mapped_column(Integer, default=0)
+    name: Mapped[str] = mapped_column(String)
+    # Positive = cost, negative = discount or deposit refund
+    amount: Mapped[float] = mapped_column(Money)
+    category_id: Mapped[str] = mapped_column(String, ForeignKey("categories.id"))
+    person_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+
+    category: Mapped["Category"] = relationship("Category")
+    tags: Mapped[list["Tag"]] = relationship("Tag", secondary="transaction_item_tags", order_by="Tag.name")
+
+
+class Attachment(Base):
+    """A stored receipt (photo, PDF, e-mail); pending (no booking yet) until the receipt is booked."""
+
+    __tablename__ = "attachments"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    transaction_id: Mapped[Optional[str]] = mapped_column(
+        String, ForeignKey("transactions.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    # Who uploaded it; a pending attachment can only be booked by them. Removing that person keeps the receipts
+    # on other people's bookings (their own bookings go with them anyway).
+    owner_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    filename: Mapped[str] = mapped_column(String)
+    content_type: Mapped[str] = mapped_column(String)
+    size: Mapped[int] = mapped_column(Integer)
+    sha256: Mapped[str] = mapped_column(String)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
 class Account(Base):
@@ -145,7 +208,9 @@ class Budget(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id: Mapped[str] = mapped_column(String, ForeignKey("users.id"), nullable=True)
-    category_id: Mapped[str] = mapped_column(String, ForeignKey("categories.id"), nullable=True)
+    category_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("categories.id"), nullable=True)
+    # A budget is for a category or for a tag (issue #56)
+    tag_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("tags.id"), nullable=True)
     limit: Mapped[float] = mapped_column(Money, nullable=True)
     period: Mapped[str] = mapped_column(String, default="MONTHLY", nullable=True)
 

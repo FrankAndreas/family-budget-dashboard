@@ -34,6 +34,10 @@ export default defineConfig({
                 SECRET_KEY: 'e2e-only',
                 CORS_ORIGINS: FRONTEND,
                 DEFAULT_LANGUAGE: 'en',
+                // Receipt reading with a fake AI: a fixed Migros receipt, never the real service (issue #56)
+                RECEIPT_AI_FAKE: '1',
+                INFOMANIAK_AI_TOKEN: 'fake',
+                INFOMANIAK_AI_PRODUCT_ID: 'fake',
             },
             reuseExistingServer: false,
             timeout: 60_000,

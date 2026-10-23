@@ -7,6 +7,7 @@ import Analytics from '../../components/Analytics';
 import DataManager from '../../components/DataManager';
 import FamilyManager from '../../components/FamilyManager';
 import CategoryManager from '../../components/CategoryManager';
+import TagManager from '../../components/TagManager';
 import ShareSettings from '../../components/ShareSettings';
 import Logins from '../../components/Logins';
 import CommonBudget from '../../components/CommonBudget';
@@ -170,6 +171,7 @@ export default function Dashboard() {
                             isParentAccount={ownerOf(selectedAccountObj)?.role === 'PARENT'}
                             isParent={isParent}
                             children={dependents(users)}
+                            people={users.filter(u => u.is_active !== false)}
                             splits={splits}
                             assets={assets}
                             onChanged={refresh}
@@ -189,6 +191,7 @@ export default function Dashboard() {
                 <div className="space-y-6">
                     {user?.role === 'PARENT' && <FamilyManager />}
                     {user?.role === 'PARENT' && <CategoryManager />}
+                    {user?.role === 'PARENT' && <TagManager />}
                     <ShareSettings />
                     <Logins />
                     <DataManager onDataChanged={refresh} />

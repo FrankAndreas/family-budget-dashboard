@@ -5,6 +5,8 @@ import { money, type Asset, type Split } from '../finance';
 import { formatDate } from '../format';
 import type { Account, Category, Transaction } from '../accounts';
 import type { FamilyUser } from '../family';
+import { openAttachment, useReceiptReading, useTags } from '../receipts';
+import ReceiptForm from './ReceiptForm';
 
 interface Props {
     account: Account;
@@ -18,6 +20,8 @@ interface Props {
     isParent: boolean;
     // Children without own allowance
     children: FamilyUser[];
+    // Family members a receipt item can be for
+    people: FamilyUser[];
     splits: Split[];
     assets: Asset[];
     // A transaction was added, changed or deleted
@@ -30,10 +34,28 @@ const field = 'w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 t
 
 // The selected account's transactions, with the form to add or edit one
 export default function Transactions({
-    account, transactions, categories, canEdit, ownerName, isParentAccount, isParent, children, splits, assets,
+    account, transactions, categories, canEdit, ownerName, isParentAccount, isParent, children, people, splits, assets,
     onChanged, onError
 }: Props) {
     const { t } = useTranslation();
+    const aiEnabled = useReceiptReading();
+    const { tags } = useTags();
+    // The receipt form: a new receipt, or an existing booking's items
+    const [receiptFor, setReceiptFor] = useState<'new' | Transaction | null>(null);
+    // Bookings whose items are shown
+    const [expanded, setExpanded] = useState<Set<string>>(new Set());
+    const toggleExpanded = (id: string) => setExpanded(current => {
+        const next = new Set(current);
+        if (next.has(id)) next.delete(id);
+        else next.add(id);
+        return next;
+    });
+    const categoryName = (id: string) => categories.find(c => c.id === id)?.name ?? '';
+    const personName = (id?: string | null) => people.find(p => p.id === id)?.username;
+    const tagLabel = (id: string) => {
+        const tag = tags.find(x => x.id === id);
+        return tag ? `${tag.icon ? `${tag.icon} ` : ''}${tag.name}` : '';
+    };
     const [showForm, setShowForm] = useState(false);
     const [form, setForm] = useState(emptyForm);
     // Set while the form is editing an existing transaction instead of adding one
@@ -116,11 +138,30 @@ export default function Transactions({
             <div className="flex justify-between items-center mb-4">
                 <h2 className="text-xl font-bold">{t('transactions.title')}</h2>
                 {canEdit && (
-                    <button onClick={() => showForm ? closeForm() : setShowForm(true)} className="btn-primary text-sm">
-                        {t('transactions.add')}
-                    </button>
+                    <div className="flex gap-2">
+                        <button onClick={() => { closeForm(); setReceiptFor(receiptFor ? null : 'new'); }} className="btn-primary text-sm">
+                            {aiEnabled ? t('receipt.open') : t('receipt.openWithoutAi')}
+                        </button>
+                        <button onClick={() => { setReceiptFor(null); if (showForm) closeForm(); else setShowForm(true); }}
+                            className="btn-primary text-sm">
+                            {t('transactions.add')}
+                        </button>
+                    </div>
                 )}
             </div>
+
+            {receiptFor && canEdit && (
+                <ReceiptForm
+                    key={receiptFor === 'new' ? 'new' : receiptFor.id}
+                    account={account}
+                    categories={expenseCategories}
+                    people={people}
+                    aiEnabled={aiEnabled}
+                    transaction={receiptFor === 'new' ? undefined : receiptFor}
+                    onSaved={() => { setReceiptFor(null); onChanged(); }}
+                    onCancel={() => setReceiptFor(null)}
+                />
+            )}
 
             {!canEdit && (
                 <p className="text-sm text-slate-400 mb-3">
@@ -218,7 +259,8 @@ export default function Transactions({
                     <p className="text-slate-400 text-center py-8">{t('transactions.none')}</p>
                 ) : (
                     transactions.map(transaction => (
-                        <div key={transaction.id} className="p-3 bg-slate-800/30 rounded-lg flex justify-between items-center">
+                        <div key={transaction.id} className="p-3 bg-slate-800/30 rounded-lg">
+                        <div className="flex justify-between items-center">
                             <div>
                                 <p className="font-semibold">
                                     {transaction.description || t('transactions.noDescription')}
@@ -238,15 +280,35 @@ export default function Transactions({
                                         </span>
                                     )}
                                 </p>
-                                <p className="text-sm text-slate-400">{formatDate(transaction.date)}</p>
+                                <p className="text-sm text-slate-400">
+                                    {formatDate(transaction.date)}
+                                    {(transaction.items?.length || transaction.attachments?.length) ? (
+                                        <button onClick={() => toggleExpanded(transaction.id)} className="ml-3 text-sky-400 hover:underline">
+                                            {transaction.items?.length ? t('receipt.items', { count: transaction.items.length }) : ''}
+                                            {transaction.attachments?.length ? ` ${t('receipt.attachmentsCount', { count: transaction.attachments.length })}` : ''}
+                                        </button>
+                                    ) : null}
+                                </p>
                             </div>
                             <div className="flex items-center gap-3">
                                 <p className={`text-xl font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                     {transaction.amount >= 0 ? '+ ' : ''}{money(transaction.amount)}
                                 </p>
+                                {canEdit && !transaction.items?.length && isExpense(transaction.category_id) && (
+                                    <button
+                                        onClick={() => { closeForm(); setReceiptFor(transaction); }}
+                                        className="text-slate-500 hover:text-blue-400 transition-colors"
+                                        title={t('receipt.split')}
+                                        aria-label={t('receipt.split')}
+                                    >
+                                        🧾
+                                    </button>
+                                )}
                                 {canEdit && !isTransfer(transaction) && (
                                     <button
-                                        onClick={() => handleEdit(transaction)}
+                                        onClick={() => transaction.items?.length
+                                            ? (closeForm(), setReceiptFor(transaction))
+                                            : handleEdit(transaction)}
                                         className="text-slate-500 hover:text-blue-400 transition-colors"
                                         title={t('transactions.edit')}
                                         aria-label={t('transactions.edit')}
@@ -266,6 +328,29 @@ export default function Transactions({
                                     </button>
                                 )}
                             </div>
+                        </div>
+                        {expanded.has(transaction.id) && (
+                            <div className="mt-2 pt-2 border-t border-slate-700 text-sm space-y-1">
+                                {transaction.items?.map(item => (
+                                    <div key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                        <span className="flex-1 min-w-32">{item.name}</span>
+                                        <span className="text-slate-400">{categoryName(item.category_id)}</span>
+                                        {item.tag_ids.map(id => (
+                                            <span key={id} className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200">{tagLabel(id)}</span>
+                                        ))}
+                                        {personName(item.person_id) && (
+                                            <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300">{personName(item.person_id)}</span>
+                                        )}
+                                        <span className="w-24 text-right">{money(item.amount)}</span>
+                                    </div>
+                                ))}
+                                {transaction.attachments?.map(a => (
+                                    <button key={a.id} onClick={() => openAttachment(a)} className="block text-sky-400 hover:underline">
+                                        📎 {a.filename}
+                                    </button>
+                                ))}
+                            </div>
+                        )}
                         </div>
                     ))
                 )}

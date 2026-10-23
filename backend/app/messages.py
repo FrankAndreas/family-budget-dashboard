@@ -128,6 +128,27 @@ MESSAGES: dict[str, dict[str, str]] = {
         "duplicate_reference_booked": "Same reference, booked on {date}",
         "duplicate_reference_line": "Same reference as line {line}",
         "duplicate_booked": "Already booked on {date}",
+        "only_parents_tags": "Only parents can manage tags",
+        "tag_name_taken": "A tag with that name already exists",
+        "tag_not_found": "Tag not found",
+        "tag_in_budget": "A budget uses this tag; delete the budget first",
+        "items_need_expense_category": "Items need an expense category",
+        "item_tag_not_found": "Unknown tag for an item",
+        "item_person_not_found": "Unknown person for an item",
+        "items_sum_positive": "The items must add up to more than 0",
+        "edit_items_instead": "Change the items instead",
+        "used_items_one": "{count} receipt item",
+        "used_items_other": "{count} receipt items",
+        "attachment_too_large": "The file is larger than 10 MB",
+        "file_type_unsupported": "This file can't be read",
+        "attachment_not_found": "Attachment not found",
+        "receipt_ai_off": "Reading receipts is not set up",
+        "receipt_ai_unavailable": "The AI service can't be reached right now",
+        "receipt_ai_unreadable": "The AI's answer could not be read",
+        "receipt_reads_used_up_one": "You have used up your receipt reads for this hour. Try again in {count} minute.",
+        "receipt_reads_used_up_other": (
+            "You have used up your receipt reads for this hour." " Try again in {count} minutes."
+        ),
     },
     "de": {
         "not_logged_in": "Anmeldung ungültig, bitte melde dich neu an",
@@ -249,6 +270,29 @@ MESSAGES: dict[str, dict[str, str]] = {
         "duplicate_reference_booked": "Gleiche Referenz, gebucht am {date}",
         "duplicate_reference_line": "Gleiche Referenz wie Zeile {line}",
         "duplicate_booked": "Schon gebucht am {date}",
+        "only_parents_tags": "Nur Eltern können Tags verwalten",
+        "tag_name_taken": "Einen Tag mit diesem Namen gibt es schon",
+        "tag_not_found": "Tag nicht gefunden",
+        "tag_in_budget": "Ein Budget verwendet diesen Tag; lösche zuerst das Budget",
+        "items_need_expense_category": "Positionen brauchen eine Ausgaben-Kategorie",
+        "item_tag_not_found": "Unbekannter Tag bei einer Position",
+        "item_person_not_found": "Unbekannte Person bei einer Position",
+        "items_sum_positive": "Die Positionen müssen zusammen mehr als 0 ergeben",
+        "edit_items_instead": "Ändere stattdessen die Positionen",
+        "used_items_one": "{count} Belegposition",
+        "used_items_other": "{count} Belegpositionen",
+        "attachment_too_large": "Die Datei ist grösser als 10 MB",
+        "file_type_unsupported": "Diese Datei kann nicht gelesen werden",
+        "attachment_not_found": "Anhang nicht gefunden",
+        "receipt_ai_off": "Das Lesen von Belegen ist nicht eingerichtet",
+        "receipt_ai_unavailable": "Der KI-Dienst ist gerade nicht erreichbar",
+        "receipt_ai_unreadable": "Die Antwort der KI konnte nicht gelesen werden",
+        "receipt_reads_used_up_one": (
+            "Du hast deine Beleg-Lesungen für diese Stunde aufgebraucht." " Versuche es in {count} Minute wieder."
+        ),
+        "receipt_reads_used_up_other": (
+            "Du hast deine Beleg-Lesungen für diese Stunde aufgebraucht." " Versuche es in {count} Minuten wieder."
+        ),
     },
 }
 

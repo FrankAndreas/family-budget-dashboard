@@ -13,6 +13,9 @@ interface Amounts { income: number; expenses: number }
 interface Summary extends Amounts {
     by_category: { category_id: string; name: string; amount: number }[];
     by_child: { member_id: string; name: string; amount: number }[];
+    // Receipt items (issue #56): per tag (overlapping: an item counts in each of its tags) and per person
+    by_tag: { tag_id: string; name: string; icon?: string | null; amount: number }[];
+    by_person: { person_id: string; name: string; amount: number }[];
     // The last 6 months ("2026-10") and every day of the current month ("2026-10-15")
     months: (Amounts & { month: string })[];
     days: (Amounts & { date: string })[];
@@ -151,6 +154,37 @@ export default function Analytics() {
                             <div key={child.name} className="flex items-center justify-between p-2 bg-slate-800/30 rounded">
                                 <span>{child.name}</span>
                                 <span className="font-bold">{money(child.value)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* Receipt items by tag: a list without a sum, since an item with several tags counts in each */}
+            {(summary?.by_tag.length ?? 0) > 0 && (
+                <div className="glass-card p-6">
+                    <h2 className="text-xl font-bold mb-1">{t('analytics.byTag', { range: rangeLabel })}</h2>
+                    <p className="text-sm text-slate-400 mb-4">{t('analytics.tagsOverlap')}</p>
+                    <div className="space-y-2">
+                        {summary!.by_tag.map(tag => (
+                            <div key={tag.tag_id} className="flex items-center justify-between p-2 bg-slate-800/30 rounded">
+                                <span>{tag.icon ? `${tag.icon} ` : ''}{tag.name}</span>
+                                <span className="font-bold">{money(tag.amount)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {(summary?.by_person.length ?? 0) > 0 && (
+                <div className="glass-card p-6">
+                    <h2 className="text-xl font-bold mb-1">{t('analytics.byPerson', { range: rangeLabel })}</h2>
+                    <p className="text-sm text-slate-400 mb-4">{t('analytics.byPersonIntro')}</p>
+                    <div className="space-y-2">
+                        {summary!.by_person.map(person => (
+                            <div key={person.person_id} className="flex items-center justify-between p-2 bg-slate-800/30 rounded">
+                                <span>{person.name}</span>
+                                <span className="font-bold">{money(person.amount)}</span>
                             </div>
                         ))}
                     </div>
