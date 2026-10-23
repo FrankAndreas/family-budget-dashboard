@@ -132,6 +132,27 @@ def fit(db: Session, transaction: models.Transaction) -> None:
     db.flush()
 
 
+def candidates_for_line(
+    db: Session, account: models.Account, day: Optional[date], amount: float, exclude: set[str]
+) -> list[models.Transaction]:
+    """Bookings a bank line could confirm: on its account, no bank row yet, same direction, the amount within
+    TOLERANCE, dated from 30 days before the line to 3 days after it. Exact amounts first, then the nearest date."""
+    if day is None:
+        return []
+    bookings = db.query(models.Transaction).filter(
+        models.Transaction.account_id == account.id, ~models.Transaction.bank_rows.any()
+    )
+    found = [
+        t
+        for t in bookings
+        if t.id not in exclude
+        and (t.amount < 0) == (amount < 0)
+        and abs(t.amount - amount) <= TOLERANCE
+        and day - timedelta(days=30) <= swiss_day(t) <= day + timedelta(days=3)
+    ]
+    return sorted(found, key=lambda t: (to_cents(t.amount) != to_cents(amount), abs((swiss_day(t) - day).days)))
+
+
 def get_row(db: Session, row_id: str) -> models.BankRow:
     row = db.get(models.BankRow, row_id)
     if not row:
