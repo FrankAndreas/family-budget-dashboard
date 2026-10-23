@@ -158,7 +158,9 @@ menus from time to time.
    rules → Custom addresses → Create address** `invoice`, action **Send to a Worker**, `family-budget-inbound`.
 8. **Register the addresses** you forward from in **Settings → Family** (one or more per person).
 9. **Test:** forward a receipt mail from your registered mailbox to `invoice@<domain>`; it shows on the Accounts tab
-   within a few seconds. A mail from an unregistered address must bounce.
+   within a few seconds. A mail from an unregistered address must bounce. The first accepted mail also proves that
+   Cloudflare puts its check result (`mx.cloudflare.net; … dmarc=pass`) on mails it hands to the worker: without it
+   the worker rejects every mail with "Absender nicht bestätigt" (see `npx wrangler tail` while you send one).
 
 The waiting mails are files in `data/attachments/inbox`; they are part of the attachments backup.
 
