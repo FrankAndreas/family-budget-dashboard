@@ -16,7 +16,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from . import auth, crud, database, i18n, import_rules, models, privacy, schemas, messages
+from . import auth, bank_csv, crud, database, i18n, ibans, import_rules, models, privacy, schemas, messages
 from .api import check_asset, check_member_tag, check_shared, is_dependent
 from .common_api import visible_owner
 from .seed import SETTLE_UP
@@ -65,16 +65,19 @@ def text_value(value) -> str:
     return str(value).strip()
 
 
-def parse_file(filename: str, content: bytes) -> list[dict[str, Any]]:
-    """The file's rows as {field: text}, each with its "_line" (CSV line, or position in the JSON list)."""
+def parse_file(filename: str, content: bytes) -> tuple[list[dict[str, Any]], bool]:
+    """The file's rows as {field: text}, each with its "_line" (CSV line, or position in the JSON list); and whether
+    it is a bank account's export (bank_csv.py)."""
     if len(content) > MAX_BYTES:
         raise messages.api_error(400, "file_too_large")
-    try:
-        text = content.decode("utf-8-sig")
-    except UnicodeDecodeError:
+    text = bank_csv.decode(content)
+    if text is None:
         raise messages.api_error(400, "file_not_utf8")
 
-    if filename.lower().endswith(".json") or text.lstrip().startswith(("{", "[")):
+    bank = bank_csv.is_bank(text)
+    if bank:
+        rows = bank_csv.rows(text, FIELDS)
+    elif filename.lower().endswith(".json") or text.lstrip().startswith(("{", "[")):
         rows = parse_json(text)
     else:
         rows = parse_csv(text)
@@ -82,7 +85,7 @@ def parse_file(filename: str, content: bytes) -> list[dict[str, Any]]:
         raise messages.api_error(400, "file_empty")
     if len(rows) > MAX_ROWS:
         raise messages.api_error(400, "max_rows", count=MAX_ROWS)
-    return rows
+    return rows, bank
 
 
 def parse_json(text: str) -> list[dict[str, Any]]:
@@ -169,7 +172,8 @@ class Lookups:
 
 
 def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen: dict[str, int]) -> dict:
-    errors: list[str] = []
+    # A bank line found its account by IBAN already (or carries why it didn't)
+    errors: list[str] = list(raw.get("_errors", []))
     row = {field: raw[field] for field in FIELDS}
     out = {"line": raw["_line"], "status": "ok", "errors": errors, "duplicate_of": None, "note": None, **row}
 
@@ -195,11 +199,13 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
         errors.append(messages.text("amount_positive"))
         amount = None
 
-    account, problem = (
-        (None, messages.text("account_required"))
-        if not row["account"]
-        else lookups.account(row["account"], row["owner"])
-    )
+    account: Optional[models.Account]
+    if "_iban" in raw:
+        account, problem = raw.get("_account"), None
+    elif not row["account"]:
+        account, problem = None, messages.text("account_required")
+    else:
+        account, problem = lookups.account(row["account"], row["owner"])
     if problem:
         errors.append(problem)
 
@@ -298,8 +304,40 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
     return out
 
 
-def check_file(db: Session, user: models.User, file: UploadFile, changes: Optional[dict] = None) -> list[dict]:
-    raw_rows = parse_file(file.filename or "", file.file.read(MAX_BYTES + 1))
+def find_accounts(lookups: Lookups, raw_rows: list[dict]) -> None:
+    """A bank line's account is the writable one with its IBAN; without one the line says so."""
+    by_iban = {a.iban: a for a in lookups.writable if a.iban}
+    for raw in raw_rows:
+        account = by_iban.get(raw["_iban"])
+        if account:
+            raw.update(_account=account, account=account.name or "", owner=lookups.names.get(account.user_id, ""))
+        else:
+            raw["_errors"] = [messages.text("no_account_for_iban", iban=ibans.grouped(raw["_iban"]))]
+
+
+def skipped(raw: dict) -> dict:
+    """A bank line with amount 0 (e.g. a closing without interest): shown, never booked."""
+    fields = {field: raw[field] for field in FIELDS}
+    note = messages.text("bank_zero_amount")
+    return {"line": raw["_line"], "status": "skipped", "errors": [], "duplicate_of": None, "note": note, **fields}
+
+
+def source(raw: dict, change: Optional[dict], rule: Optional[str]) -> Optional[str]:
+    """Where a bank row's category came from; None for other files."""
+    if "_iban" not in raw:
+        return None
+    if change:
+        return "ai" if change.get("source") == "ai" else "change"
+    return "rule" if rule else "fallback"
+
+
+def check_file(
+    db: Session, user: models.User, file: UploadFile, changes: Optional[dict] = None
+) -> tuple[list[dict], bool]:
+    """The checked rows, and whether the file is a bank export."""
+    raw_rows, bank = parse_file(file.filename or "", file.file.read(MAX_BYTES + 1))
+    if bank and user.role != models.UserRole.PARENT:
+        raise messages.api_error(403, "only_parents_import_bank")
     changes = changes or {}
     unknown = set(changes) - {raw["_line"] for raw in raw_rows}
     if unknown:
@@ -307,10 +345,15 @@ def check_file(db: Session, user: models.User, file: UploadFile, changes: Option
     if any(c.get("remember") for c in changes.values()):
         import_rules.require_parent(user)
     lookups = Lookups(db, user)
+    if bank:
+        find_accounts(lookups, raw_rows)
     rules = import_rules.load(db)
     seen: dict[str, int] = {}
     rows = []
     for raw in raw_rows:
+        if raw.get("_skip"):
+            rows.append({**skipped(raw), "file_category": raw["category"], "rule": None, "source": None})
+            continue
         change = changes.get(raw["_line"])
         adjusted, problem, rule = import_rules.adjust(raw, change, lookups, rules)
         out = check_row(db, user, lookups, adjusted, seen)
@@ -322,19 +365,58 @@ def check_file(db: Session, user: models.User, file: UploadFile, changes: Option
             out["status"] = "error"
         # The file's category by its name in the person's language when known, like the category list
         known = lookups.categories.get(key(raw["category"]))
-        out.update(file_category=i18n.category_name(known) if known else raw["category"], rule=rule)
+        out.update(
+            file_category=i18n.category_name(known) if known else raw["category"],
+            rule=rule,
+            source=source(raw, change, rule),
+            _account=raw.get("_account"),
+            _booked=raw.get("_booked"),
+            _balance=raw.get("_balance"),
+        )
         rows.append(out)
-    return rows
+    return rows, bank
 
 
-def public(rows: list[dict]) -> dict:
-    counts = {status: sum(r["status"] == status for r in rows) for status in ("ok", "duplicate", "error")}
-    return {
+def balances(rows: list[dict]) -> list[dict]:
+    """Per account in a bank file: the balance of its latest line, next to the app's after booking the ok rows."""
+    latest: dict[str, tuple] = {}
+    added: dict[str, float] = {}
+    for row in rows:
+        account = row.get("_account")
+        if account is None:
+            continue
+        if row.get("_balance") is not None and row.get("_booked"):
+            when = (row["_booked"], row["line"])
+            if account.id not in latest or when > latest[account.id][0]:
+                latest[account.id] = (when, row["_balance"])
+        if row["status"] == "ok":
+            transaction, category, _ = row["_create"]
+            added[account.id] = added.get(account.id, 0.0) + crud.signed_amount(transaction.amount, category)
+    accounts = {row["_account"].id: row["_account"] for row in rows if row.get("_account") is not None}
+    return [
+        {
+            "account_id": account.id,
+            "account": account.name,
+            "file_balance": latest[account.id][1] if account.id in latest else None,
+            "app_balance": round((account.balance or 0) + added.get(account.id, 0.0), 2),
+        }
+        for account in accounts.values()
+    ]
+
+
+def public(rows: list[dict], bank: bool = False) -> dict:
+    statuses = ("ok", "duplicate", "error", "skipped")
+    counts = {status: sum(r["status"] == status for r in rows) for status in statuses}
+    result = {
         "rows": [{k: v for k, v in row.items() if not k.startswith("_")} for row in rows],
         "ok": counts["ok"],
         "duplicates": counts["duplicate"],
         "errors": counts["error"],
+        "skipped": counts["skipped"],
     }
+    if bank:
+        result["balances"] = balances(rows)
+    return result
 
 
 @router.post("/import/preview")
@@ -344,7 +426,7 @@ def preview_import(
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
-    return public(check_file(db, current_user, file, import_rules.parse_changes(changes)))
+    return public(*check_file(db, current_user, file, import_rules.parse_changes(changes)))
 
 
 @router.post("/import")
@@ -356,9 +438,9 @@ def run_import(
     db: Session = Depends(database.get_db),
 ):
     changed = import_rules.parse_changes(changes)
-    rows = check_file(db, current_user, file, changed)
+    rows, bank = check_file(db, current_user, file, changed)
     if any(row["status"] == "error" for row in rows):
-        raise HTTPException(status_code=400, detail={"message": messages.text("file_has_errors"), **public(rows)})
+        raise HTTPException(status_code=400, detail={"message": messages.text("file_has_errors"), **public(rows, bank)})
     included = {int(line) for line in include_duplicates.split(",") if line.strip().isdigit()}
     chosen = [row for row in rows if row["status"] == "ok" or row["line"] in included]
     try:
