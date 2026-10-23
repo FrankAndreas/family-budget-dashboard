@@ -23,6 +23,7 @@ from . import (
     attachments,
     receipt_ai,
     emails_api,
+    inbox,
     i18n,
 )
 from .seed import seed_admin, seed_categories
@@ -38,6 +39,9 @@ with database.SessionLocal() as db:
     seed_categories(db)
     initial_pin = seed_admin(db)
     attachments.sweep(db)
+logger.info(
+    "Receipt mails: %s", "configured" if os.getenv("INBOUND_SECRET") else "not configured (INBOUND_SECRET empty)"
+)
 if initial_pin:
     logger.warning(
         "Created the first parent 'Admin' with INITIAL PIN %s. Log in and change it in Settings > Family.", initial_pin
@@ -80,6 +84,7 @@ app.include_router(tags_api.router, prefix="/api/v1")
 app.include_router(attachments.router, prefix="/api/v1")
 app.include_router(receipt_ai.router, prefix="/api/v1")
 app.include_router(emails_api.router, prefix="/api/v1")
+app.include_router(inbox.router, prefix="/api/v1")
 
 # Configure CORS
 app.add_middleware(
