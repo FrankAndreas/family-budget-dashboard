@@ -137,11 +137,19 @@ jobs:
             frontend/package-lock.json
             e2e/package-lock.json
 
+      # Only the headless browser, without --with-deps: the runner image already has Chrome's system libraries,
+      # and apt-get from the Ubuntu mirror once took 11 minutes
+      - name: Cache Playwright browser
+        uses: actions/cache@v6
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('e2e/package-lock.json') }}
+
       - name: Install frontend and test dependencies
         run: |
           cd frontend && npm ci
           cd ../e2e && npm ci
-          npx playwright install --with-deps chromium
+          npx playwright install --only-shell chromium
 
       - name: Run browser tests
         run: |
