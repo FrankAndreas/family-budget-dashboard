@@ -26,12 +26,13 @@ class TestSystemCategories:
 
     def test_seeding_keeps_renamed_and_deleted_defaults_away(self, client):
         with database.SessionLocal() as db:
-            db.query(models.Category).filter(models.Category.name == "Groceries").one().name = "Lebensmittel"
+            groceries = db.query(models.Category).filter(models.Category.name == "Groceries").one()
+            groceries.name, groceries.default_key = "Essen", None
             db.delete(db.query(models.Category).filter(models.Category.name == "Education").one())
             db.commit()
             assert seed.seed_categories(db) == 0
         names = set(categories(client))
-        assert "Lebensmittel" in names and "Groceries" not in names and "Education" not in names
+        assert "Essen" in names and "Groceries" not in names and "Education" not in names
 
     def test_missing_system_category_is_recreated(self, client):
         with database.SessionLocal() as db:
@@ -83,8 +84,8 @@ class TestApi:
         assert response.status_code == 403 and response.json()["detail"] == "Only parents can manage categories"
 
     def test_rename_a_default(self, client, mum):
-        assert update(client, mum, "Groceries", name="Lebensmittel", icon="🥖").status_code == 200
-        assert "Lebensmittel" in categories(client)
+        assert update(client, mum, "Groceries", name="Essen", icon="🥖").status_code == 200
+        assert "Essen" in categories(client)
 
     def test_system_category_locked_except_icon(self, client, mum):
         locked = "This category is used by the app and can't be changed"

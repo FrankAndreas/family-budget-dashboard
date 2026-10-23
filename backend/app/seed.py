@@ -13,29 +13,29 @@ UNSORTED = "UNSORTED"
 UNKNOWN_EXPENSE = "UNKNOWN_EXPENSE"
 OTHER_INCOME = "OTHER_INCOME"
 
-# "de": the name a new German install gets (DEFAULT_LANGUAGE); the 🔒 ones are translated when shown (i18n.py)
+# Shown in each person's language (i18n.py): the 🔒 ones always, the others (default_key) until a parent renames them
 DEFAULT_CATEGORIES = [
     # Income categories
-    {"name": "Salary", "de": "Lohn", "type": "INCOME", "icon": "💰"},
-    {"name": "Freelance", "de": "Nebenerwerb", "type": "INCOME", "icon": "💼"},
-    {"name": "Investment", "de": "Kapitalertrag", "type": "INCOME", "icon": "📈"},
-    {"name": "Gift", "de": "Geschenk", "type": "INCOME", "icon": "🎁"},
+    {"name": "Salary", "default_key": "SALARY", "type": "INCOME", "icon": "💰"},
+    {"name": "Freelance", "default_key": "FREELANCE", "type": "INCOME", "icon": "💼"},
+    {"name": "Investment", "default_key": "INVESTMENT", "type": "INCOME", "icon": "📈"},
+    {"name": "Gift", "default_key": "GIFT", "type": "INCOME", "icon": "🎁"},
     # Also the month check's booking when receipts exceed the money, and the income fallback of imports
     {"name": "Other Income", "type": "INCOME", "icon": "💵", "system_key": OTHER_INCOME},
     # Expense categories
-    {"name": "Groceries", "de": "Lebensmittel", "type": "EXPENSE", "icon": "🛒"},
-    {"name": "Rent", "de": "Miete", "type": "EXPENSE", "icon": "🏠"},
-    {"name": "Utilities", "de": "Nebenkosten", "type": "EXPENSE", "icon": "💡"},
-    {"name": "Transportation", "de": "Mobilität", "type": "EXPENSE", "icon": "🚗"},
-    {"name": "Entertainment", "de": "Freizeit", "type": "EXPENSE", "icon": "🎬"},
-    {"name": "Healthcare", "de": "Gesundheit", "type": "EXPENSE", "icon": "🏥"},
-    {"name": "Education", "de": "Bildung", "type": "EXPENSE", "icon": "📚"},
-    {"name": "Clothing", "de": "Kleidung", "type": "EXPENSE", "icon": "👕"},
-    {"name": "Dining Out", "de": "Auswärts essen", "type": "EXPENSE", "icon": "🍽️"},
-    {"name": "Other Expense", "de": "Übrige Ausgaben", "type": "EXPENSE", "icon": "💸"},
+    {"name": "Groceries", "default_key": "GROCERIES", "type": "EXPENSE", "icon": "🛒"},
+    {"name": "Rent", "default_key": "RENT", "type": "EXPENSE", "icon": "🏠"},
+    {"name": "Utilities", "default_key": "UTILITIES", "type": "EXPENSE", "icon": "💡"},
+    {"name": "Transportation", "default_key": "TRANSPORTATION", "type": "EXPENSE", "icon": "🚗"},
+    {"name": "Entertainment", "default_key": "ENTERTAINMENT", "type": "EXPENSE", "icon": "🎬"},
+    {"name": "Healthcare", "default_key": "HEALTHCARE", "type": "EXPENSE", "icon": "🏥"},
+    {"name": "Education", "default_key": "EDUCATION", "type": "EXPENSE", "icon": "📚"},
+    {"name": "Clothing", "default_key": "CLOTHING", "type": "EXPENSE", "icon": "👕"},
+    {"name": "Dining Out", "default_key": "DINING_OUT", "type": "EXPENSE", "icon": "🍽️"},
+    {"name": "Other Expense", "default_key": "OTHER_EXPENSE", "type": "EXPENSE", "icon": "💸"},
     # Fallbacks for imported bookings no rule recognised, and money paid back by others
     {"name": "Unsorted", "type": "EXPENSE", "icon": "❓", "system_key": UNSORTED},
-    {"name": "Reimbursements", "de": "Rückerstattungen", "type": "INCOME", "icon": "↩️"},
+    {"name": "Reimbursements", "default_key": "REIMBURSEMENTS", "type": "INCOME", "icon": "↩️"},
     # The month check's booking for money on a clearing account without receipts
     {"name": "Unknown expense", "type": "EXPENSE", "icon": "🫥", "system_key": UNKNOWN_EXPENSE},
     # Booked only by settling up in the common budget
@@ -52,9 +52,10 @@ def seed_categories(db: Session) -> int:
     if db.query(models.Category).count() == 0:
         german = i18n.default_language() == "de"
         for cat_data in DEFAULT_CATEGORIES:
-            columns = {k: v for k, v in cat_data.items() if k != "de"}
-            if german and "de" in cat_data:
-                columns["name"] = cat_data["de"]
+            columns = dict(cat_data)
+            # A new German install stores the German name (shown when a category loses its key by a rename)
+            if german and cat_data.get("default_key"):
+                columns["name"] = i18n.DEFAULT_NAMES[cat_data["default_key"]]["de"]
             db.add(models.Category(**columns, is_global=True))
         created = len(DEFAULT_CATEGORIES)
     else:

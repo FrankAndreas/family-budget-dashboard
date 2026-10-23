@@ -91,6 +91,8 @@ class Category(Base):
     is_global: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
     # Fixed key of a category the code needs (seed.TRANSFER, SETTLE_UP, ...); None for ordinary categories
     system_key: Mapped[Optional[str]] = mapped_column(String, nullable=True, unique=True, index=True)
+    # An untouched default category (GROCERIES, ...): shown in each person's language until a parent renames it
+    default_key: Mapped[Optional[str]] = mapped_column(String, nullable=True, unique=True, index=True)
 
 
 class Transaction(Base):

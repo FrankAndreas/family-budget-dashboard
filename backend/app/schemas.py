@@ -138,11 +138,13 @@ class Category(CategoryBase):
     is_global: bool = True
     # Fixed key of a category the app needs (TRANSFER, SETTLE_UP, ...); None for ordinary ones
     system_key: Optional[str] = None
+    # Set while a default category (GROCERIES, ...) still has its default name
+    default_key: Optional[str] = None
 
     @model_validator(mode="after")
     def name_in_language(self) -> "Category":
-        # The app's own categories are shown in the request's language
-        self.name = i18n.system_name(self.system_key, self.name)
+        # The app's own and the untouched default categories are shown in the request's language
+        self.name = i18n.system_name(self.system_key or self.default_key, self.name)
         return self
 
     class Config:
