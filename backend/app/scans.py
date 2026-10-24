@@ -31,7 +31,7 @@ def get_photo(db: Session, photo_id: str) -> models.InboxPhoto:
         .first()
     )
     if not photo:
-        raise messages.api_error(404, "inbox_not_found")
+        raise messages.api_error(404, "photo_not_found")
     return photo
 
 
@@ -71,8 +71,12 @@ def read_into(db: Session, photo: models.InboxPhoto, reader: models.User) -> boo
     i18n.set_current(i18n.user_language(reader))
     receipt_ai.take_read(db, reader.id, settings.reads_per_hour)
     try:
-        draft = receipt_ai.ai_draft(db, filename(photo, ""), file_of(photo).read_bytes())
-    except HTTPException:
+        content = receipt_ai.file_content(filename(photo, ""), file_of(photo).read_bytes())
+        draft = receipt_ai.ai_draft(db, content)
+    except Exception as error:
+        # Never left "reading": a failed photo is typed in, and opening it tries once more
+        if not isinstance(error, HTTPException):
+            logger.exception("Reading a scanned receipt failed")
         photo.read_state = "failed"
         db.commit()
         return False
@@ -191,5 +195,14 @@ async def open_photo(
             pass
     data = file_of(photo).read_bytes()
     draft: Optional[dict] = photo.draft if photo.read_state == "read" else None
-    attachment = attachments.store(db, current_user, filename(photo, attachments.detect(data, "") or ""), data, None)
+    # Opened again (after Skip or Cancel): the same pending attachment, not one more
+    attachment = (
+        db.query(models.Attachment)
+        .filter(
+            models.Attachment.owner_id == current_user.id,
+            models.Attachment.transaction_id.is_(None),
+            models.Attachment.sha256 == photo.sha256,
+        )
+        .first()
+    ) or attachments.store(db, current_user, filename(photo, attachments.detect(data, "") or ""), data, None)
     return {"draft": draft, "attachment_id": attachment.id, "attachment": attachments.out(attachment)}
