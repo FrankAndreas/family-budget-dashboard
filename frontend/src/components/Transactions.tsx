@@ -27,8 +27,6 @@ interface Props {
     // A transaction was added, changed or deleted
     onChanged: () => void;
     onError: (message: string) => void;
-    // Parents: photograph a pile of receipts into the inbox (receipt scan)
-    onScan?: () => void;
 }
 
 const emptyForm = { amount: '', description: '', category_id: '', member_id: '', split_id: '', asset_id: '' };
@@ -37,7 +35,7 @@ const field = 'w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 t
 // The selected account's transactions, with the form to add or edit one
 export default function Transactions({
     account, transactions, categories, canEdit, ownerName, isParentAccount, isParent, children, people, splits, assets,
-    onChanged, onError, onScan
+    onChanged, onError
 }: Props) {
     const { t } = useTranslation();
     const aiEnabled = useReceiptReading();
@@ -183,7 +181,7 @@ export default function Transactions({
 
     return (
         <div className="glass-card p-6">
-            <div className="flex justify-between items-center mb-4">
+            <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
                 <h2 className="text-xl font-bold">
                     {t('transactions.title')}
                     {(account.open_points ?? 0) > 0 && (
@@ -195,7 +193,6 @@ export default function Transactions({
                 </h2>
                 {canEdit && (
                     <div className="flex flex-wrap justify-end gap-2">
-                        {onScan && <button onClick={onScan} className="btn-primary text-sm">{t('scan.open')}</button>}
                         <button onClick={() => { closeForm(); setReceiptFor(receiptFor ? null : 'new'); }} className="btn-primary text-sm">
                             {aiEnabled ? t('receipt.open') : t('receipt.openWithoutAi')}
                         </button>
@@ -342,27 +339,27 @@ export default function Transactions({
                 ) : (
                     shown.map(transaction => (
                         <div key={transaction.id} className="p-3 bg-slate-800/30 rounded-lg">
-                        <div className="flex justify-between items-center">
-                            <div>
-                                <p className="font-semibold">
+                        <div className="flex justify-between items-start sm:items-center gap-2">
+                            <div className="min-w-0 flex-1">
+                                <p className="font-semibold break-words">
                                     {transaction.description || t('transactions.noDescription')}
                                     {memberName(transaction.member_id) && (
-                                        <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300">
+                                        <span className="ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300">
                                             {t('transactions.forBadge', { name: memberName(transaction.member_id) })}
                                         </span>
                                     )}
                                     {assetName(transaction.asset_id) && (
-                                        <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
+                                        <span className="ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
                                             {assetName(transaction.asset_id)}
                                         </span>
                                     )}
                                     {(transaction.split_id || transaction.split_shares) && (
-                                        <span className="ml-2 text-xs font-normal px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300">
+                                        <span className="ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300">
                                             {t('transactions.sharedBadge')}
                                         </span>
                                     )}
                                     {badges(transaction).map(badge => (
-                                        <span key={badge.text} className={`ml-2 text-xs font-normal px-2 py-0.5 rounded-full ${badge.warn
+                                        <span key={badge.text} className={`ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full ${badge.warn
                                             ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-500/20 text-slate-300'}`}>
                                             {badge.text}
                                         </span>
@@ -380,14 +377,15 @@ export default function Transactions({
                                     ) : null}
                                 </p>
                             </div>
-                            <div className="flex items-center gap-3">
-                                <p className={`text-xl font-bold ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2 shrink-0">
+                                <p className={`text-lg sm:text-xl font-bold whitespace-nowrap ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                     {transaction.amount >= 0 ? '+ ' : ''}{money(transaction.amount)}
                                 </p>
+                                <div className="flex items-center gap-1">
                                 {canEdit && !transaction.items?.length && isExpense(transaction.category_id) && (
                                     <button
                                         onClick={() => { closeForm(); setReceiptFor(transaction); }}
-                                        className="text-slate-500 hover:text-blue-400 transition-colors"
+                                        className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 hover:text-blue-400 transition-colors"
                                         title={t('receipt.split')}
                                         aria-label={t('receipt.split')}
                                     >
@@ -399,7 +397,7 @@ export default function Transactions({
                                         onClick={() => transaction.items?.length
                                             ? (closeForm(), setReceiptFor(transaction))
                                             : handleEdit(transaction)}
-                                        className="text-slate-500 hover:text-blue-400 transition-colors"
+                                        className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 hover:text-blue-400 transition-colors"
                                         title={t('transactions.edit')}
                                         aria-label={t('transactions.edit')}
                                     >
@@ -410,13 +408,14 @@ export default function Transactions({
                                 {canEdit && !isSettleUp(transaction) && (
                                     <button
                                         onClick={() => handleDelete(transaction)}
-                                        className="text-slate-500 hover:text-red-400 transition-colors"
+                                        className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 ml-2 hover:text-red-400 transition-colors"
                                         title={t('transactions.delete')}
                                         aria-label={t('transactions.delete')}
                                     >
                                         ✕
                                     </button>
                                 )}
+                                </div>
                             </div>
                         </div>
                         {expanded.has(transaction.id) && (
