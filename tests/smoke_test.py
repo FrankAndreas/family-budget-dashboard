@@ -64,8 +64,38 @@ def check(description, condition):
         sys.exit(1)
 
 
+def headers_of(url):
+    try:
+        with urllib.request.urlopen(url) as response:
+            return response.headers, response.read().decode(errors="replace")
+    except urllib.error.HTTPError as error:
+        return error.headers, ""
+
+
+def security_headers(base_url):
+    """Through nginx (issue #87): the app's pages, built files and API answers carry the security headers."""
+    page_headers, page = headers_of(base_url + "/")
+    if '<div id="root">' not in page:
+        return  # the backend on its own: no nginx in front
+    asset = page.split('src="', 1)[1].split('"', 1)[0]
+    for name, (headers, _) in {
+        "page": (page_headers, page),
+        "built file": headers_of(base_url + asset),
+        "API answer": headers_of(base_url + "/api/v1/categories"),
+        "unknown API path": headers_of(base_url + "/api/v1/no-such-path"),
+    }.items():
+        policy = headers.get("Content-Security-Policy") or ""
+        check(f"{name}: CSP allows only the app itself", "default-src 'self'" in policy)
+        check(f"{name}: not shown in a frame", "frame-ancestors 'none'" in policy)
+        check(f"{name}: X-Frame-Options", headers.get("X-Frame-Options") == "DENY")
+        check(f"{name}: no MIME sniffing", headers.get("X-Content-Type-Options") == "nosniff")
+        check(f"{name}: no referrer", headers.get("Referrer-Policy") == "no-referrer")
+    check("index.html still checked on every load", page_headers.get("Cache-Control") == "no-cache")
+
+
 def main(base_url, admin_pin):
     username = f"smoke_{int(time.time())}"
+    security_headers(base_url)
 
     status, categories = call(base_url, "GET", "/categories")
     check("categories are seeded", status == 200 and len(categories) > 0)

@@ -17,6 +17,7 @@ FROM nginxinc/nginx-unprivileged:alpine
 
 COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
+COPY --chown=nginx:nginx security-headers.conf /etc/nginx/security-headers.conf
 
 EXPOSE 8080
 
