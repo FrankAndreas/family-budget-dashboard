@@ -707,6 +707,8 @@ const de = {
         waitingIntro_other: '{{count}} fotografierte Belege zu prüfen, in der Reihenfolge der Aufnahme.',
         takenBy: 'fotografiert von {{name}}',
         takerGone: 'Fotograf:in entfernt',
+        duplicate: 'vielleicht doppelt',
+        notYourAccounts: 'Die Konten von {{name}} sind nicht zum Buchen mit dir geteilt: wähle eines von deinen oder lass ihn {{name}}.',
         noShop: 'Beleg',
         confirmDelete: 'Dieses Foto aus dem Eingang löschen? Der Beleg ist dann weg.',
         openFailed: 'Foto konnte nicht geöffnet werden',

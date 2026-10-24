@@ -12,6 +12,10 @@ export const formatDate = (value: string | Date) =>
         ? { day: '2-digit', month: '2-digit', year: 'numeric' }
         : { day: 'numeric', month: 'short', year: 'numeric' });
 
+// 14:05 in both languages
+export const formatTime = (value: string | Date) =>
+    toDate(value).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' });
+
 export const formatMonth = (value: string | Date) =>
     toDate(value).toLocaleDateString(locale(), { month: 'long', year: 'numeric' });
 

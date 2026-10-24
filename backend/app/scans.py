@@ -8,13 +8,15 @@ A pile scanned with "Read with AI" off (ai=0) is "manual": never sent to the AI,
 """
 
 import hashlib
+import io
 import logging
 import threading
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Response, UploadFile
 from fastapi.concurrency import run_in_threadpool
+from PIL import Image
 from sqlalchemy.orm import Session
 
 from . import attachments, auth, database, i18n, inbox, messages, models, receipt_ai
@@ -24,6 +26,8 @@ logger = logging.getLogger(__name__)
 
 PHOTOS = "/inbox/photos"
 IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png"}
+# The list's thumbnails are shown at about 50 px; 160 is sharp on a phone's screen too
+THUMBNAIL_SIDE = 160
 
 
 def get_photo(db: Session, photo_id: str) -> models.InboxPhoto:
@@ -37,7 +41,7 @@ def get_photo(db: Session, photo_id: str) -> models.InboxPhoto:
     return photo
 
 
-def photo_out(db: Session, user: models.User, photo: models.InboxPhoto) -> dict:
+def photo_out(db: Session, user: models.User, photo: models.InboxPhoto, duplicate: bool = False) -> dict:
     taker = db.get(models.User, photo.person_id) if photo.person_id else None
     draft = photo.draft or {}
     return {
@@ -49,7 +53,31 @@ def photo_out(db: Session, user: models.User, photo: models.InboxPhoto) -> dict:
         "shop": draft.get("shop") or None,
         "total": draft.get("total"),
         "suggested_account_id": inbox.suggested_account(db, user, taker),
+        "duplicate": duplicate,
     }
+
+
+def reading_of(photo: models.InboxPhoto) -> Optional[tuple]:
+    """What the AI read that makes a receipt: shop, total and date; None when it didn't read all three."""
+    draft = photo.draft or {}
+    shop, total, date = str(draft.get("shop") or "").strip().casefold(), draft.get("total"), draft.get("date")
+    return (shop, total, date) if shop and total is not None and date else None
+
+
+def likely_duplicates(db: Session) -> set[str]:
+    """Photos that repeat an earlier one, booked or not: the same picture, or the same shop, total and date as read
+    by the AI. The earliest stays the original, so deleting a duplicate is always safe."""
+    seen_files: set[str] = set()
+    seen_readings: set[tuple] = set()
+    duplicates: set[str] = set()
+    for photo in db.query(models.InboxPhoto).order_by(models.InboxPhoto.taken_at, models.InboxPhoto.id):
+        reading = reading_of(photo)
+        if photo.sha256 in seen_files or (reading is not None and reading in seen_readings):
+            duplicates.add(photo.id)
+        seen_files.add(photo.sha256)
+        if reading is not None:
+            seen_readings.add(reading)
+    return duplicates
 
 
 def file_of(photo: models.InboxPhoto):
@@ -164,7 +192,28 @@ def list_photos(
         .order_by(models.InboxPhoto.taken_at, models.InboxPhoto.id)
         .all()
     )
-    return [photo_out(db, current_user, photo) for photo in waiting]
+    duplicates = likely_duplicates(db)
+    return [photo_out(db, current_user, photo, photo.id in duplicates) for photo in waiting]
+
+
+@router.get(PHOTOS + "/{photo_id}/thumbnail")
+def photo_thumbnail(
+    photo_id: str,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+) -> Response:
+    """A small copy of the photo for the list, so photos with the same shop and total can be told apart."""
+    inbox.require_parent(current_user)
+    photo = get_photo(db, photo_id)
+    image = Image.open(file_of(photo)).convert("RGB")
+    image.thumbnail((THUMBNAIL_SIDE, THUMBNAIL_SIDE))
+    out = io.BytesIO()
+    image.save(out, format="JPEG", quality=80)
+    return Response(
+        out.getvalue(),
+        media_type="image/jpeg",
+        headers={"X-Content-Type-Options": "nosniff", "Cache-Control": "private, max-age=3600"},
+    )
 
 
 @router.delete(PHOTOS + "/{photo_id}")
