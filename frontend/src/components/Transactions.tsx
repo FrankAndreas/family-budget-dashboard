@@ -27,6 +27,8 @@ interface Props {
     // A transaction was added, changed or deleted
     onChanged: () => void;
     onError: (message: string) => void;
+    // Parents: photograph a pile of receipts into the inbox (receipt scan)
+    onScan?: () => void;
 }
 
 const emptyForm = { amount: '', description: '', category_id: '', member_id: '', split_id: '', asset_id: '' };
@@ -35,7 +37,7 @@ const field = 'w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 t
 // The selected account's transactions, with the form to add or edit one
 export default function Transactions({
     account, transactions, categories, canEdit, ownerName, isParentAccount, isParent, children, people, splits, assets,
-    onChanged, onError
+    onChanged, onError, onScan
 }: Props) {
     const { t } = useTranslation();
     const aiEnabled = useReceiptReading();
@@ -192,7 +194,8 @@ export default function Transactions({
                     )}
                 </h2>
                 {canEdit && (
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap justify-end gap-2">
+                        {onScan && <button onClick={onScan} className="btn-primary text-sm">{t('scan.open')}</button>}
                         <button onClick={() => { closeForm(); setReceiptFor(receiptFor ? null : 'new'); }} className="btn-primary text-sm">
                             {aiEnabled ? t('receipt.open') : t('receipt.openWithoutAi')}
                         </button>

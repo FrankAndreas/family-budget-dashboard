@@ -31,3 +31,6 @@ dist/
 # Personal converter config (tools/converters; contains IBANs and names)
 converter.toml
 *-import.csv
+
+# Skill workspaces and brainstorming mockups (local only)
+.superpowers/

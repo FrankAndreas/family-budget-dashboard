@@ -192,6 +192,8 @@ def sweep(db: Session, now: Optional[datetime] = None) -> int:
     for entry_id in gone:
         (inbox_dir() / entry_id).unlink(missing_ok=True)
     waiting = {e.id for e in db.query(models.InboxMail.id).filter(models.InboxMail.booked_at.is_(None))}
+    # Scanned photos share the folder and are never removed here (receipt scan)
+    waiting |= {p.id for p in db.query(models.InboxPhoto.id)}
     attachments.remove_orphans(inbox_dir(), waiting)
     return removed
 

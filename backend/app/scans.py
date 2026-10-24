@@ -1,0 +1,195 @@
+"""Receipts photographed on a parent's phone, a whole pile at a time (receipt scan).
+
+Each photo is uploaded as soon as it is taken and waits in the inbox, next to the forwarded mails, until a parent books
+it or deletes it: the paper has been thrown away, so nothing here removes a photo on its own. Opening one makes it the
+parent's pending attachment, like releasing a mail; booking that attachment marks the photo booked.
+"""
+
+import hashlib
+import logging
+import threading
+from datetime import datetime
+from typing import Optional
+
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
+from sqlalchemy.orm import Session
+
+from . import attachments, auth, database, i18n, inbox, messages, models, receipt_ai
+
+router = APIRouter()
+logger = logging.getLogger(__name__)
+
+PHOTOS = "/inbox/photos"
+IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png"}
+
+
+def get_photo(db: Session, photo_id: str) -> models.InboxPhoto:
+    photo = (
+        db.query(models.InboxPhoto)
+        .filter(models.InboxPhoto.id == photo_id, models.InboxPhoto.booked_at.is_(None))
+        .first()
+    )
+    if not photo:
+        raise messages.api_error(404, "inbox_not_found")
+    return photo
+
+
+def photo_out(db: Session, user: models.User, photo: models.InboxPhoto) -> dict:
+    taker = db.get(models.User, photo.person_id) if photo.person_id else None
+    draft = photo.draft or {}
+    return {
+        "id": photo.id,
+        "person_id": photo.person_id,
+        "person_name": taker.username if taker else None,
+        "taken_at": photo.taken_at,
+        "read_state": photo.read_state,
+        "shop": draft.get("shop") or None,
+        "total": draft.get("total"),
+        "suggested_account_id": inbox.suggested_account(db, user, taker),
+    }
+
+
+def file_of(photo: models.InboxPhoto):
+    return inbox.inbox_dir() / photo.id
+
+
+# One reader at a time: the photos are read one after another, never twice at once
+reading = threading.Lock()
+
+
+def resume(db: Session) -> None:
+    """After a restart: photos whose reading was cut off are read again."""
+    db.query(models.InboxPhoto).filter(models.InboxPhoto.read_state == "reading").update({"read_state": "waiting"})
+    db.commit()
+
+
+def read_into(db: Session, photo: models.InboxPhoto, reader: models.User) -> bool:
+    """Read the photo with the AI, counting toward the reader's hourly limit, in their language. True when read; a
+    429 (limit used up) is raised for the caller, any other problem leaves the photo failed."""
+    settings = receipt_ai.Settings.from_env()
+    i18n.set_current(i18n.user_language(reader))
+    receipt_ai.take_read(db, reader.id, settings.reads_per_hour)
+    try:
+        draft = receipt_ai.ai_draft(db, filename(photo, ""), file_of(photo).read_bytes())
+    except HTTPException:
+        photo.read_state = "failed"
+        db.commit()
+        return False
+    photo.read_state, photo.draft = "read", draft
+    db.commit()
+    return True
+
+
+def read_waiting() -> int:
+    """Read the waiting photos, oldest first, in the background; how many were read. A person whose hourly reads are
+    used up is skipped until the next run (every 15 minutes, or a new upload)."""
+    if not receipt_ai.Settings.from_env().enabled or not reading.acquire(blocking=False):
+        return 0
+    done = 0
+    used_up: set[str] = set()
+    try:
+        with database.SessionLocal() as db:
+            while True:
+                waiting = db.query(models.InboxPhoto).filter(
+                    models.InboxPhoto.read_state == "waiting",
+                    models.InboxPhoto.booked_at.is_(None),
+                    models.InboxPhoto.person_id.is_not(None),
+                    models.InboxPhoto.person_id.not_in(used_up),
+                )
+                photo = waiting.order_by(models.InboxPhoto.taken_at, models.InboxPhoto.id).first()
+                if photo is None or photo.person_id is None:
+                    return done
+                taker = db.get(models.User, photo.person_id)
+                if taker is None:
+                    used_up.add(photo.person_id)
+                    continue
+                photo.read_state = "reading"
+                db.commit()
+                try:
+                    done += read_into(db, photo, taker)
+                except HTTPException:
+                    # The taker's reads are used up: back in line for later
+                    photo.read_state = "waiting"
+                    db.commit()
+                    used_up.add(taker.id)
+    except Exception:
+        logger.exception("Reading scanned receipts failed")
+        return done
+    finally:
+        reading.release()
+
+
+@router.post(PHOTOS)
+async def upload_photo(
+    background: BackgroundTasks,
+    file: UploadFile = File(...),
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+) -> dict:
+    inbox.require_parent(current_user)
+    data = await file.read(attachments.MAX_BYTES + 1)
+    if attachments.check(data, file.filename or "") not in IMAGE_TYPES:
+        raise messages.api_error(400, "file_type_unsupported")
+    photo = models.InboxPhoto(
+        person_id=current_user.id, taken_at=datetime.utcnow(), size=len(data), sha256=hashlib.sha256(data).hexdigest()
+    )
+    db.add(photo)
+    db.flush()
+    file_of(photo).write_bytes(data)
+    db.commit()
+    background.add_task(read_waiting)
+    return photo_out(db, current_user, photo)
+
+
+@router.get(PHOTOS)
+def list_photos(
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+) -> list[dict]:
+    inbox.require_parent(current_user)
+    waiting = (
+        db.query(models.InboxPhoto)
+        .filter(models.InboxPhoto.booked_at.is_(None))
+        .order_by(models.InboxPhoto.taken_at, models.InboxPhoto.id)
+        .all()
+    )
+    return [photo_out(db, current_user, photo) for photo in waiting]
+
+
+@router.delete(PHOTOS + "/{photo_id}")
+def delete_photo(
+    photo_id: str,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+) -> dict:
+    inbox.require_parent(current_user)
+    photo = get_photo(db, photo_id)
+    db.delete(photo)
+    db.commit()
+    (inbox.inbox_dir() / photo_id).unlink(missing_ok=True)
+    return {"deleted": photo_id}
+
+
+def filename(photo: models.InboxPhoto, content_type: str) -> str:
+    return f"beleg-{photo.taken_at:%Y-%m-%d}.{IMAGE_TYPES.get(content_type, 'jpg')}"
+
+
+@router.post(PHOTOS + "/{photo_id}/open")
+async def open_photo(
+    photo_id: str,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+) -> dict:
+    """A parent checks the photo: its draft (if the AI read it) and the photo as their pending attachment."""
+    inbox.require_parent(current_user)
+    photo = get_photo(db, photo_id)
+    if photo.read_state != "read" and receipt_ai.Settings.from_env().enabled:
+        # Not read yet (waiting, failed, or over the limit): one more try, on the opener's reads
+        try:
+            await run_in_threadpool(read_into, db, photo, current_user)
+        except HTTPException:
+            pass
+    data = file_of(photo).read_bytes()
+    draft: Optional[dict] = photo.draft if photo.read_state == "read" else None
+    attachment = attachments.store(db, current_user, filename(photo, attachments.detect(data, "") or ""), data, None)
+    return {"draft": draft, "attachment_id": attachment.id, "attachment": attachments.out(attachment)}

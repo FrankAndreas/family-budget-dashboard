@@ -328,6 +328,34 @@ def status(_user: models.User = Depends(auth.get_current_user_from_token)) -> di
     return {"enabled": Settings.from_env().enabled}
 
 
+def file_content(filename: str, data: bytes) -> list[dict]:
+    """The file as the AI's input; a 400 if it isn't a receipt the AI can read."""
+    try:
+        return receipt_files.ai_content(attachments.check(data, filename), data)
+    except receipt_files.Unreadable:
+        raise messages.api_error(400, "file_type_unsupported")
+
+
+def ai_draft(db: Session, filename: str, data: bytes) -> dict:
+    """The AI's draft of a receipt file, in the current language; a 502 if the AI is down or answers nonsense. The
+    caller counts the read."""
+    content = file_content(filename, data)
+    expense = [c for c in db.query(models.Category) if c.type == models.CategoryType.EXPENSE]
+    category_ids = {name.casefold(): c.id for c in expense for name in i18n.all_names(c)}
+    shown = sorted({i18n.category_name(c) for c in expense}, key=str.casefold)
+    all_tags = db.query(models.Tag).all()
+    unsorted = next((c.id for c in expense if c.system_key == "UNSORTED"), expense[0].id if expense else "")
+    question = [{"type": "text", "text": prompt(shown, sorted(t.name for t in all_tags), i18n.current())}]
+    try:
+        answer = client_for(Settings.from_env()).complete(question + content)
+    except AiUnavailable:
+        raise messages.api_error(502, "receipt_ai_unavailable")
+    try:
+        return parse(answer, category_ids, {t.name.casefold(): t.id for t in all_tags}, unsorted)
+    except ValueError, json.JSONDecodeError:
+        raise messages.api_error(502, "receipt_ai_unreadable")
+
+
 def read(db: Session, user: models.User, filename: str, data: bytes) -> dict:
     """Read a receipt file with the AI: the draft, and the file kept as the user's pending attachment (its id, and
     how it was stored)."""
@@ -335,29 +363,11 @@ def read(db: Session, user: models.User, filename: str, data: bytes) -> dict:
     if not settings.enabled:
         raise messages.api_error(400, "receipt_ai_off")
     # The file is checked before a read is counted or anything is stored
-    try:
-        content = receipt_files.ai_content(attachments.check(data, filename), data)
-    except receipt_files.Unreadable:
-        raise messages.api_error(400, "file_type_unsupported")
-
-    expense = [c for c in db.query(models.Category) if c.type == models.CategoryType.EXPENSE]
-    category_ids = {name.casefold(): c.id for c in expense for name in i18n.all_names(c)}
-    shown = sorted({i18n.category_name(c) for c in expense}, key=str.casefold)
-    all_tags = db.query(models.Tag).all()
-    unsorted = next((c.id for c in expense if c.system_key == "UNSORTED"), expense[0].id if expense else "")
-
+    file_content(filename, data)
     take_read(db, user.id, settings.reads_per_hour)
     # Kept as a pending attachment: booking the receipt links it, otherwise the sweep removes it after a day
     attachment = attachments.store(db, user, filename, data, None)
-    question = [{"type": "text", "text": prompt(shown, sorted(t.name for t in all_tags), i18n.current())}]
-    try:
-        answer = client_for(settings).complete(question + content)
-    except AiUnavailable:
-        raise messages.api_error(502, "receipt_ai_unavailable")
-    try:
-        draft = parse(answer, category_ids, {t.name.casefold(): t.id for t in all_tags}, unsorted)
-    except ValueError, json.JSONDecodeError:
-        raise messages.api_error(502, "receipt_ai_unreadable")
+    draft = ai_draft(db, filename, data)
     return {"draft": draft, "attachment_id": attachment.id, "attachment": attachments.out(attachment)}
 
 

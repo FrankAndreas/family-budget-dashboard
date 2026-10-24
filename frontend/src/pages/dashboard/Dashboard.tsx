@@ -31,6 +31,8 @@ export default function Dashboard() {
     const { splits, reload: reloadSplits } = useSplits();
     const { assets, reload: reloadAssets } = useAssets();
     const [activeTab, setActiveTab] = useState('overview');
+    // Photographing a pile of receipts into the inbox (receipt scan)
+    const [scanning, setScanning] = useState(false);
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
@@ -149,6 +151,9 @@ export default function Dashboard() {
                             aiEnabled={aiEnabled}
                             version={dataVersion}
                             onBooked={refresh}
+                            scanning={scanning}
+                            onScan={() => setScanning(true)}
+                            onScanDone={() => { setScanning(false); refresh(); }}
                         />
                     )}
                     <AccountCards
@@ -190,6 +195,7 @@ export default function Dashboard() {
                             assets={assets}
                             onChanged={refresh}
                             onError={setError}
+                            onScan={isParent ? () => { setScanning(true); window.scrollTo({ top: 0, behavior: 'smooth' }); } : undefined}
                         />
                     )}
                 </div>

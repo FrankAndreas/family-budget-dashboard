@@ -26,6 +26,7 @@ from . import (
     receipt_ai,
     emails_api,
     inbox,
+    scans,
     i18n,
 )
 from .seed import seed_admin
@@ -49,6 +50,8 @@ with database.SessionLocal() as db:
     initial_pin = seed_admin(db)
     attachments.sweep(db)
     inbox.sweep(db)
+    # Scanned receipts whose reading a restart cut off are read again
+    scans.resume(db)
 logger.info(
     "Receipt mails: %s", "configured" if os.getenv("INBOUND_SECRET") else "not configured (INBOUND_SECRET empty)"
 )
@@ -66,11 +69,19 @@ async def sweep_daily() -> None:
             inbox.sweep(session)
 
 
+async def read_scans_regularly() -> None:
+    """Scanned receipts still waiting (e.g. over the hourly AI limit) are read now and every 15 minutes."""
+    while True:
+        await asyncio.to_thread(scans.read_waiting)
+        await asyncio.sleep(15 * 60)
+
+
 @asynccontextmanager
 async def lifespan(_app: FastAPI) -> AsyncIterator[None]:
-    task = asyncio.create_task(sweep_daily())
+    tasks = [asyncio.create_task(sweep_daily()), asyncio.create_task(read_scans_regularly())]
     yield
-    task.cancel()
+    for task in tasks:
+        task.cancel()
 
 
 app = FastAPI(
@@ -98,6 +109,7 @@ app.include_router(attachments.router, prefix="/api/v1")
 app.include_router(receipt_ai.router, prefix="/api/v1")
 app.include_router(emails_api.router, prefix="/api/v1")
 app.include_router(inbox.router, prefix="/api/v1")
+app.include_router(scans.router, prefix="/api/v1")
 
 # Configure CORS
 app.add_middleware(

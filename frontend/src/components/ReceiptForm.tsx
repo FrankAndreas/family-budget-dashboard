@@ -5,6 +5,7 @@ import type { Account, Category, Transaction } from '../accounts';
 import type { FamilyUser } from '../family';
 import { money } from '../finance';
 import { type AttachmentInfo, type Draft, type Item, openAttachment, useTags } from '../receipts';
+import { shrink } from '../scan';
 
 interface Props {
     account: Account;
@@ -21,6 +22,9 @@ interface Props {
     attachment?: AttachmentInfo;
     onSaved: () => void;
     onCancel: () => void;
+    // Checking scanned receipts one after another (receipt scan): "Book & next" and "Skip"
+    submitLabel?: string;
+    onSkip?: () => void;
 }
 
 interface Row extends Omit<Item, 'amount'> {
@@ -28,25 +32,14 @@ interface Row extends Omit<Item, 'amount'> {
 }
 
 const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
-const MAX_SIDE = 1600;
 const today = () => new Date().toISOString().slice(0, 10);
-
-// A photo is shrunk in the browser before upload (receipts don't need more than 1600 px)
-async function shrink(file: File): Promise<Blob> {
-    if (!file.type.startsWith('image/')) return file;
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return new Promise(resolve => canvas.toBlob(blob => resolve(blob ?? file), 'image/jpeg', 0.85));
-}
 
 const toRow = (item: Item): Row => ({ ...item, amount: item.amount.toFixed(2), person_id: item.person_id ?? null });
 
 // A receipt as one booking with its items (issue #56): read by the AI or typed in, checked here, then booked
-export default function ReceiptForm({ account, categories, people, aiEnabled, transaction, draft, attachment, onSaved, onCancel }: Props) {
+export default function ReceiptForm({
+    account, categories, people, aiEnabled, transaction, draft, attachment, onSaved, onCancel, submitLabel, onSkip,
+}: Props) {
     const { t } = useTranslation();
     const { tags } = useTags();
     const existing = transaction?.items?.length ? transaction.items : undefined;
@@ -241,7 +234,8 @@ export default function ReceiptForm({ account, categories, people, aiEnabled, tr
                 </label>
             )}
             <div className="flex gap-2">
-                <button type="submit" className="btn-primary" disabled={reading || sum <= 0}>{t('receipt.book')}</button>
+                <button type="submit" className="btn-primary" disabled={reading || sum <= 0}>{submitLabel ?? t('receipt.book')}</button>
+                {onSkip && <button type="button" onClick={onSkip} className="px-4 text-slate-300 hover:text-white">{t('scan.skip')}</button>}
                 <button type="button" onClick={onCancel} className="px-4 text-slate-400 hover:text-white">{t('common.cancel')}</button>
             </div>
         </form>

@@ -49,6 +49,7 @@ On a failure, `test-results/` has a screenshot and a trace (`npx playwright show
 | `month-check.spec.ts` | Accounts tab, clearing account, month check books the gap |
 | `receipt-mails.spec.ts` | a forwarded receipt mail is released, read and booked |
 | `receipt-onto-payment.spec.ts` | a receipt read after the statement goes onto the bank booking that paid it |
+| `receipt-scan.spec.ts` | a pile of receipts scanned (one failed upload retried), then checked and booked one after another |
 | `receipts.spec.ts` | receipt read by the AI, an item with two tags, analytics and a tag budget |
 | `reconciliation.spec.ts` | a statement confirms a receipt typed in before it; badges and open points |
 | `reports.spec.ts` | budget spending and analytics totals |
