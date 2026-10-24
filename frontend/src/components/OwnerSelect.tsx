@@ -13,16 +13,22 @@ export default function OwnerSelect({ value, onChange }: { value: string; onChan
     const { splits } = useSplits();
     const others = users.filter(u => u.id !== user?.id && user && accessTo(user, u.id, users, shares) === 'EDIT');
 
+    // The other parent or a child with own allowance only shows up once they let me manage their money
+    const missing = users.some(u => u.id !== user?.id && !others.includes(u));
+
     return (
-        <select
-            value={value}
-            onChange={(e) => onChange(e.target.value)}
-            className="w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
-            aria-label={t('owner.label')}
-        >
-            <option value={`owner:${user?.id}`}>{t('owner.mine')}</option>
-            {others.map(u => <option key={u.id} value={`owner:${u.id}`}>{t('owner.someones', { name: u.username })}</option>)}
-            {splits.map(split => <option key={split.id} value={`split:${split.id}`}>{t('owner.common', { name: split.name })}</option>)}
-        </select>
+        <div>
+            <select
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                className="w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                aria-label={t('owner.label')}
+            >
+                <option value={`owner:${user?.id}`}>{t('owner.mine')}</option>
+                {others.map(u => <option key={u.id} value={`owner:${u.id}`}>{t('owner.someones', { name: u.username })}</option>)}
+                {splits.map(split => <option key={split.id} value={`split:${split.id}`}>{t('owner.common', { name: split.name })}</option>)}
+            </select>
+            {missing && <p className="mt-1 text-xs text-slate-400">{t('owner.othersHint')}</p>}
+        </div>
     );
 }

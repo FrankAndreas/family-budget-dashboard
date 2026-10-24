@@ -7,6 +7,7 @@ import { useFamily } from '../useFamily';
 import { money, useSplits } from '../finance';
 import { ownerFields, ownerValue } from '../ownership';
 import OwnerSelect from './OwnerSelect';
+import { useScrollIntoView } from '../useScrollIntoView';
 
 interface Wish {
     id: string;
@@ -69,6 +70,7 @@ export default function Wishes() {
     const [wishes, setWishes] = useState<Wish[]>([]);
     const [plan, setPlan] = useState<PlanRow[]>([]);
     const [form, setForm] = useState<Form | null>(null);
+    const formRef = useScrollIntoView<HTMLFormElement>(form?.id);
     const [searching, setSearching] = useState<string | null>(null);
     const [showBought, setShowBought] = useState<Record<string, boolean>>({});
     const [error, setError] = useState('');
@@ -185,7 +187,7 @@ export default function Wishes() {
                 {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
 
                 {form && (
-                    <form onSubmit={save} className="mt-4 p-4 bg-slate-800/30 rounded-lg grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <form ref={formRef} onSubmit={save} className="scroll-mt-4 mt-4 p-4 bg-slate-800/30 rounded-lg grid grid-cols-1 md:grid-cols-2 gap-2">
                         <input aria-label={t('wishes.name')} placeholder={t('wishes.namePlaceholder')} value={form.name} required maxLength={120}
                             onChange={e => setForm({ ...form, name: e.target.value })} className={input} />
                         <input aria-label={t('wishes.estimate')} placeholder={t('wishes.estimatePlaceholder')} type="number" min="0" step="0.01" value={form.estimate}

@@ -79,6 +79,7 @@ const de = {
         mine: 'Mir',
         someones: '{{name}}',
         common: 'Gemeinsam: {{name}}',
+        othersHint: 'Andere erscheinen hier, sobald sie dir erlauben, ihr Geld zu verwalten (Einstellungen → Teilen).',
     },
     accounts: {
         myBalance: 'Mein Saldo',

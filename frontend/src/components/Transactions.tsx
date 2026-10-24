@@ -7,6 +7,7 @@ import type { Account, BankRow, Category, Transaction } from '../accounts';
 import type { FamilyUser } from '../family';
 import { openAttachment, useReceiptReading, useTags } from '../receipts';
 import ReceiptForm from './ReceiptForm';
+import { useScrollIntoView } from '../useScrollIntoView';
 
 interface Props {
     account: Account;
@@ -106,6 +107,7 @@ export default function Transactions({
     const [form, setForm] = useState(emptyForm);
     // Set while the form is editing an existing transaction instead of adding one
     const [editingId, setEditingId] = useState<string | null>(null);
+    const formRef = useScrollIntoView<HTMLFormElement>(editingId);
 
     const incomeCategories = categories.filter(c => c.type === 'INCOME');
     const expenseCategories = categories.filter(c => c.type === 'EXPENSE');
@@ -224,7 +226,7 @@ export default function Transactions({
             )}
 
             {showForm && canEdit && (
-                <form onSubmit={handleSubmit} className="mb-4 p-4 bg-slate-800/30 rounded-lg">
+                <form ref={formRef} onSubmit={handleSubmit} className="scroll-mt-4 mb-4 p-4 bg-slate-800/30 rounded-lg">
                     <input
                         type="number"
                         step="0.01"
