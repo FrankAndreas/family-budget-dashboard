@@ -106,6 +106,10 @@ def delete_tag(
         raise messages.api_error(409, "tag_in_budget")
     # Items keep their other tags; the link rows go with the tag (ON DELETE CASCADE)
     db.query(models.TransactionItemTag).filter(models.TransactionItemTag.tag_id == tag.id).delete()
+    # Investments with it move to "no tag"
+    db.query(models.Asset).filter(models.Asset.tag_id == tag.id).update(
+        {models.Asset.tag_id: None}, synchronize_session=False
+    )
     db.delete(tag)
     db.commit()
     return {"deleted": True}

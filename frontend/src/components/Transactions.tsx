@@ -294,7 +294,7 @@ export default function Transactions({
                             aria-label={t('transactions.forItem')}
                         >
                             <option value="">{t('transactions.forNoItem')}</option>
-                            {assets.map(asset => <option key={asset.id} value={asset.id}>{t('transactions.forItemName', { name: asset.name })}</option>)}
+                            {assets.filter(asset => !asset.archived_on || asset.id === form.asset_id).map(asset => <option key={asset.id} value={asset.id}>{t('transactions.forItemName', { name: asset.name })}</option>)}
                         </select>
                     )}
                     <div className="flex gap-2">

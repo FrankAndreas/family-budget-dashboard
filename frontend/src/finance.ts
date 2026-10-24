@@ -48,6 +48,9 @@ export interface Asset {
     owner_id: string | null;
     split_id: string | null;
     notes: string | null;
+    tag_id: string | null;
+    // Sold or scrapped on this day: out of every total
+    archived_on: string | null;
     age_years: number;
     // Purchase date in the future: not bought yet
     planned: boolean;
@@ -57,6 +60,24 @@ export interface Asset {
     total_cost: number;
     cost_per_year: number;
     shares: Record<string, number>;
+}
+
+const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
+
+// What a set of investments costs together
+export function assetTotals(assets: Asset[]) {
+    const sum = (pick: (a: Asset) => number) => Math.round(assets.reduce((s, a) => s + pick(a), 0) * 100) / 100;
+    const next = [...assets].sort((a, b) => a.replacement_due.localeCompare(b.replacement_due))[0];
+    return {
+        monthly: sum(a => a.monthly_set_aside),
+        price: sum(a => a.price),
+        followUps: sum(a => a.total_cost - a.price),
+        total: sum(a => a.total_cost),
+        perYear: sum(a => a.cost_per_year),
+        next,
+        // Due, or due within a year
+        dueSoon: assets.some(a => a.is_due || new Date(a.replacement_due).getTime() - Date.now() < YEAR_MS),
+    };
 }
 
 // Investments the current parent can see (empty for children)

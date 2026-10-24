@@ -154,3 +154,65 @@ def test_removing_member_without_items(client, parents):
     timmy = client.post(f"{BASE_URL}/members", json={"username": "timmy"}, headers=parents["mum"]).json()
     assert client.get(f"{BASE_URL}/users/{timmy['id']}/items", headers=parents["mum"]).json() == []
     assert remove_member(client, parents["mum"], timmy["id"]).status_code == 200
+
+
+def test_asset_tag(client, parents):
+    mobility = client.post(f"{BASE_URL}/tags", json={"name": "Mobilität"}, headers=parents["mum"]).json()
+    car = add_asset(client, parents["mum"], split_id=parents["split"], tag_id=mobility["id"]).json()
+    assert car["tag_id"] == mobility["id"]
+    assert add_asset(client, parents["mum"], split_id=parents["split"], tag_id="nope").status_code == 400
+    # Deleting the tag moves the investment to "no tag"
+    assert client.delete(f"{BASE_URL}/tags/{mobility['id']}", headers=parents["mum"]).status_code == 200
+    assert client.get(f"{BASE_URL}/assets/{car['id']}", headers=parents["mum"]).json()["tag_id"] is None
+
+
+def archive(client, headers, asset_id, on="2026-10-01"):
+    return client.post(f"{BASE_URL}/assets/{asset_id}/archive", json={"archived_on": on}, headers=headers)
+
+
+def test_archived_asset_leaves_the_totals(client, parents):
+    car = add_asset(client, parents["mum"], split_id=parents["split"]).json()
+    transport = category_id(client, "Transportation")
+    linked = add_transaction(client, parents["mum"], parents["mum_account"], transport, 600, asset_id=car["id"]).json()
+    response = archive(client, parents["mum"], car["id"])
+    assert response.status_code == 200
+    archived = response.json()
+    assert archived["archived_on"] == "2026-10-01"
+    assert (archived["monthly_set_aside"], archived["shares"], archived["is_due"]) == (0, {}, False)
+    # Frozen at the archive date: 2022-10-14 → 2026-10-01 is 4.0 years
+    assert archived["age_years"] == 4.0 and archived["total_cost"] == 24600
+    overview = client.get(f"{BASE_URL}/common/overview", headers=parents["dad"]).json()
+    assert overview["items"] == [] and overview["totals"] == {}
+
+    # No new links, but the booking that is linked keeps it when edited
+    assert (
+        add_transaction(client, parents["mum"], parents["mum_account"], transport, 5, asset_id=car["id"]).status_code
+        == 400
+    )
+    edit = client.put(
+        f"{BASE_URL}/transactions/{linked['id']}",
+        json={"description": "Service", "asset_id": car["id"]},
+        headers=parents["mum"],
+    )
+    assert edit.status_code == 200 and edit.json()["asset_id"] == car["id"]
+
+    restored = client.delete(f"{BASE_URL}/assets/{car['id']}/archive", headers=parents["mum"]).json()
+    assert restored["archived_on"] is None and restored["monthly_set_aside"] == 250
+
+
+def test_archive_checks(client, parents):
+    bike = add_asset(client, parents["mum"], name="Bike", owner_id=parents["mum_id"]).json()
+    assert archive(client, parents["dad"], bike["id"]).status_code == 404
+    assert archive(client, parents["mum"], bike["id"], on="2022-10-13").status_code == 400
+    assert archive(client, parents["mum"], bike["id"], on="2026-10-15").status_code == 400
+    # Editing an archived investment keeps it archived
+    archive(client, parents["mum"], bike["id"])
+    body = {
+        "name": "E-Bike",
+        "price": 24000,
+        "purchase_date": "2022-10-14",
+        "lifespan_years": 8,
+        "owner_id": parents["mum_id"],
+    }
+    edited = client.put(f"{BASE_URL}/assets/{bike['id']}", json=body, headers=parents["mum"]).json()
+    assert edited["archived_on"] == "2026-10-01"

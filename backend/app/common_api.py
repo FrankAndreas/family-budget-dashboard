@@ -231,6 +231,11 @@ def check_owner(db: Session, current_user: models.User, owner_id: Optional[str],
         raise messages.api_error(403, "cant_manage_items")
 
 
+def check_tag(db: Session, tag_id: Optional[str]) -> None:
+    if tag_id and not db.query(models.Tag).filter(models.Tag.id == tag_id).first():
+        raise messages.api_error(400, "tag_not_found")
+
+
 def monthly_shares(db: Session, monthly: float, owner_id: Optional[str], split_id: Optional[str]) -> dict[str, float]:
     if split_id:
         split = db.query(models.Split).filter(models.Split.id == split_id).first()
@@ -340,18 +345,38 @@ def common_overview(_: models.User = Depends(require_parent), db: Session = Depe
     return {"items": items, "totals": totals}
 
 
-ASSET_FIELDS = ("id", "name", "price", "purchase_date", "lifespan_years", "owner_id", "split_id", "notes")
+ASSET_FIELDS = (
+    "id",
+    "name",
+    "price",
+    "purchase_date",
+    "lifespan_years",
+    "owner_id",
+    "split_id",
+    "notes",
+    "tag_id",
+    "archived_on",
+)
 
 
 def asset_out(db: Session, asset: models.Asset) -> dict:
     follow_ups = db.query(models.Transaction).filter(models.Transaction.asset_id == asset.id).all()
+    # An archived investment is seen as on the day it left: age and cost per year stop there
     stats = finance.asset_stats(
-        asset.price, asset.purchase_date, asset.lifespan_years, sum(abs(t.amount) for t in follow_ups), today()
+        asset.price,
+        asset.purchase_date,
+        asset.lifespan_years,
+        sum(abs(t.amount) for t in follow_ups),
+        asset.archived_on or today(),
     )
+    if asset.archived_on:
+        stats |= {"monthly_set_aside": 0.0, "is_due": False}
     return {
         **{field: getattr(asset, field) for field in ASSET_FIELDS},
         **stats,
-        "shares": monthly_shares(db, stats["monthly_set_aside"], asset.owner_id, asset.split_id),
+        "shares": (
+            {} if asset.archived_on else monthly_shares(db, stats["monthly_set_aside"], asset.owner_id, asset.split_id)
+        ),
     }
 
 
@@ -364,7 +389,7 @@ def get_asset(db: Session, current_user: models.User, asset_id: str, write: bool
 
 def common_asset_items(db: Session) -> list[dict]:
     items: list[dict[str, Any]] = []
-    for asset in db.query(models.Asset).filter(models.Asset.split_id.isnot(None)):
+    for asset in db.query(models.Asset).filter(models.Asset.split_id.isnot(None), models.Asset.archived_on.is_(None)):
         monthly = finance.cents(asset.price / (asset.lifespan_years * 12))
         shares = monthly_shares(db, monthly, None, asset.split_id)
         items.append({"kind": "asset", "id": asset.id, "name": asset.name, "monthly": monthly, "shares": shares})
@@ -396,6 +421,7 @@ def create_asset(
     asset: schemas.AssetIn, current_user: models.User = Depends(require_parent), db: Session = Depends(database.get_db)
 ):
     check_owner(db, current_user, asset.owner_id, asset.split_id)
+    check_tag(db, asset.tag_id)
     data = asset.model_dump()
     data["price"] = finance.cents(data["price"])
     db_asset = models.Asset(**data)
@@ -414,10 +440,36 @@ def update_asset(
 ):
     db_asset = get_asset(db, current_user, asset_id, write=True)
     check_owner(db, current_user, asset.owner_id, asset.split_id)
+    check_tag(db, asset.tag_id)
     for key, value in asset.model_dump().items():
         setattr(db_asset, key, finance.cents(value) if key == "price" else value)
     db.commit()
     db.refresh(db_asset)
+    return asset_out(db, db_asset)
+
+
+@router.post("/assets/{asset_id}/archive", response_model=schemas.Asset)
+def archive_asset(
+    asset_id: str,
+    body: schemas.AssetArchive,
+    current_user: models.User = Depends(require_parent),
+    db: Session = Depends(database.get_db),
+):
+    db_asset = get_asset(db, current_user, asset_id, write=True)
+    if not db_asset.purchase_date <= body.archived_on <= today():
+        raise messages.api_error(400, "archive_date_invalid")
+    db_asset.archived_on = body.archived_on
+    db.commit()
+    return asset_out(db, db_asset)
+
+
+@router.delete("/assets/{asset_id}/archive", response_model=schemas.Asset)
+def restore_asset(
+    asset_id: str, current_user: models.User = Depends(require_parent), db: Session = Depends(database.get_db)
+):
+    db_asset = get_asset(db, current_user, asset_id, write=True)
+    db_asset.archived_on = None
+    db.commit()
     return asset_out(db, db_asset)
 
 
