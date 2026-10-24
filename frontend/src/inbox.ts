@@ -16,6 +16,18 @@ export interface InboxMail {
     suggested_account_id: string | null;
 }
 
+// A receipt photographed on a parent's phone (receipt scan), waiting until it is booked
+export interface InboxPhoto {
+    id: string;
+    person_id: string | null;
+    person_name: string | null;
+    taken_at: string;
+    read_state: 'waiting' | 'reading' | 'read' | 'failed';
+    shop: string | null;
+    total: number | null;
+    suggested_account_id: string | null;
+}
+
 export interface PersonEmail {
     id: string;
     user_id: string;

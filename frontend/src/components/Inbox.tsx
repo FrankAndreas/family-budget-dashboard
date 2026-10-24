@@ -5,6 +5,7 @@ import type { Account, Category } from '../accounts';
 import type { FamilyUser } from '../family';
 import { type InboxMail, type Release, release, useInbox } from '../inbox';
 import ReceiptForm from './ReceiptForm';
+import ScanReceipts from './ScanReceipts';
 
 interface Props {
     // Accounts the parent may book on
@@ -14,20 +15,23 @@ interface Props {
     aiEnabled: boolean;
     version: number;
     onBooked: () => void;
+    // Photographing a pile of receipts (receipt scan)
+    scanning: boolean;
+    onScan: () => void;
+    onScanDone: () => void;
 }
 
 const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
 
-// Parents only: receipt mails forwarded by the family (issue #57), unopened until one is released
-export default function Inbox({ accounts, categories, people, aiEnabled, version, onBooked }: Props) {
+// Parents only: receipt mails forwarded by the family (issue #57), unopened until one is released, and receipts
+// photographed on the phone (receipt scan)
+export default function Inbox({ accounts, categories, people, aiEnabled, version, onBooked, scanning, onScan, onScanDone }: Props) {
     const { t, i18n } = useTranslation();
     const { mails, failed, reload } = useInbox(true, version);
     const [chosen, setChosen] = useState<Record<string, string>>({});
     const [open, setOpen] = useState<{ mail: InboxMail; account: Account; result: Release } | null>(null);
     const [busy, setBusy] = useState<string | null>(null);
     const [error, setError] = useState('');
-
-    if (mails.length === 0 && !failed) return null;
 
     const accountFor = (mail: InboxMail) => chosen[mail.id] ?? mail.suggested_account_id ?? '';
     const date = (value: string | null) => (value ? new Date(value).toLocaleDateString(i18n.language) : '');
@@ -58,12 +62,19 @@ export default function Inbox({ accounts, categories, people, aiEnabled, version
 
     return (
         <div className="glass-card p-6">
-            <h2 className="text-xl font-bold mb-1">{t('inbox.title', { count: mails.length })}</h2>
-            <p className="text-sm text-slate-400 mb-4">{t('inbox.intro')}</p>
+            <div className="flex flex-wrap justify-between items-center gap-2 mb-1">
+                <h2 className="text-xl font-bold">
+                    {mails.length ? t('inbox.title', { count: mails.length }) : t('inbox.titleEmpty')}
+                </h2>
+                {!scanning && <button type="button" className="btn-primary text-sm" onClick={onScan}>{t('scan.open')}</button>}
+            </div>
+            {mails.length > 0 && <p className="text-sm text-slate-400 mb-4">{t('inbox.intro')}</p>}
             {failed && <p className="text-red-400 text-sm mb-3">{t('inbox.loadFailed')}</p>}
             {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
-            {open ? (
+            {scanning ? (
+                <ScanReceipts onDone={() => { onScanDone(); reload(); }} />
+            ) : open ? (
                 <ReceiptForm
                     account={open.account}
                     categories={categories}

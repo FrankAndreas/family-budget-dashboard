@@ -5,6 +5,7 @@ import type { Account, Category, Transaction } from '../accounts';
 import type { FamilyUser } from '../family';
 import { money } from '../finance';
 import { type AttachmentInfo, type Draft, type Item, openAttachment, useTags } from '../receipts';
+import { shrink } from '../scan';
 
 interface Props {
     account: Account;
@@ -28,20 +29,7 @@ interface Row extends Omit<Item, 'amount'> {
 }
 
 const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
-const MAX_SIDE = 1600;
 const today = () => new Date().toISOString().slice(0, 10);
-
-// A photo is shrunk in the browser before upload (receipts don't need more than 1600 px)
-async function shrink(file: File): Promise<Blob> {
-    if (!file.type.startsWith('image/')) return file;
-    const bitmap = await createImageBitmap(file);
-    const scale = Math.min(1, MAX_SIDE / Math.max(bitmap.width, bitmap.height));
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.round(bitmap.width * scale);
-    canvas.height = Math.round(bitmap.height * scale);
-    canvas.getContext('2d')?.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-    return new Promise(resolve => canvas.toBlob(blob => resolve(blob ?? file), 'image/jpeg', 0.85));
-}
 
 const toRow = (item: Item): Row => ({ ...item, amount: item.amount.toFixed(2), person_id: item.person_id ?? null });
 
