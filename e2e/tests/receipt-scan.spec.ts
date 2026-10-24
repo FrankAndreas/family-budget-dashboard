@@ -35,7 +35,8 @@ test('scan a pile of receipts, then check and book them one after another', asyn
     await page.getByRole('button', { name: 'Done (2)' }).click();
 
     const rows = page.getByText('Migros · CHF 83.40');
-    await expect(rows).toHaveCount(2);
+    // The AI reads in the background and the inbox looks again every 5 seconds: allow a few rounds on a slow runner
+    await expect(rows).toHaveCount(2, { timeout: 20_000 });
     // Each row has a thumbnail and the app's date format; the fake AI reads both as the same receipt, so the later
     // one is flagged (earlier tests' photos read the same, so the first may be flagged too)
     await expect(page.getByRole('img', { name: 'Photo 2' })).toBeVisible();
@@ -90,8 +91,9 @@ test('a pile scanned without the AI is typed in', async ({ page, request }) => {
     await page.getByRole('button', { name: 'Check next' }).click();
     await expect(page.getByRole('img', { name: 'Photo of the receipt' })).toBeVisible();
     await expect(page.getByText('Sum CHF 0.00')).toBeVisible();
-    const [photo] = await call(request, parent, 'GET', '/inbox/photos');
-    expect(photo.read_state).toBe('manual');
+    // All parents see all photos (other tests' may still wait): this parent's own
+    const photos: { person_name: string; read_state: string }[] = await call(request, parent, 'GET', '/inbox/photos');
+    expect(photos.find(photo => photo.person_name === parent.name)?.read_state).toBe('manual');
     expect(errors).toEqual([]);
 });
 
