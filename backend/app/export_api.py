@@ -113,6 +113,21 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
         transaction_rows,
     )
 
+    bank_rows = (
+        db.query(models.BankRow)
+        .filter(models.BankRow.account_id.in_(account_by_id))
+        .order_by(models.BankRow.booked_on, models.BankRow.imported_at)
+        .all()
+    )
+    files["bank_rows.csv"] = to_csv(
+        "bank_row_id,account_id,account,booked_on,valuta_on,text,amount,balance,transaction_id,reference".split(","),
+        [
+            [r.id, r.account_id, account_by_id[r.account_id].name, r.booked_on, r.valuta_on, r.text, r.amount]
+            + [r.balance, r.transaction_id, r.reference]
+            for r in bank_rows
+        ],
+    )
+
     share_rows = []
     if is_parent:
         for t, payer in reversed(shared_transactions(db)):

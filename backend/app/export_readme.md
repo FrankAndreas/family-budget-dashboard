@@ -22,6 +22,7 @@ other family members share with them, and (for parents) the common budget, inves
 | `transactions.csv` | booking | see below |
 | `shared_expense_shares.csv` | parent and shared expense | how a shared expense is divided: `percent` and `share` (CHF) per parent; `payer` paid the full `amount` |
 | `settlements.csv` | settle-up payment | `from` paid `to` to settle the common budget |
+| `bank_rows.csv` | line of an imported bank statement | see below |
 | `items.csv` | receipt item | the lines of a booking entered as a receipt; see below |
 | `tags.csv` | tag | what items are for (e.g. "Velo"), across categories |
 | `budgets.csv` | budget | spending limit per `category` **or** per `tag`, and `period` (`MONTHLY` or `YEARLY`) |
@@ -39,6 +40,16 @@ other family members share with them, and (for parents) the common budget, inves
   their account. Each parent's part is in `shared_expense_shares.csv` (join on `transaction_id`).
 - `for_member` is the child an expense was for; `investment` the investment it belongs to (purchase, repair,
   service); `reference` is the ID an import tool gave the source receipt.
+
+### bank_rows.csv
+
+- One row per line of a bank statement uploaded in the import, on the accounts in `accounts.csv`. `amount` has a
+  sign like in `transactions.csv`; `balance` is the bank's balance after the line; `booked_on` and `valuta_on` are
+  the bank's dates.
+- `transaction_id` is the booking the line created or confirmed (join on `transactions.csv`); empty if that
+  booking was deleted. Bookings with no bank row on a bank account are the ones the bank hasn't confirmed yet.
+- `text` is the bank's text without card numbers and IBANs; `reference` recognises the line when the statement is
+  uploaded again.
 
 ### items.csv
 
