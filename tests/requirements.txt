@@ -1,3 +1,5 @@
 pytest>=7.4.0
 # FastAPI TestClient; 0.28 dropped the API the pinned starlette uses
 httpx>=0.25,<0.28
+# Runs the tests in parallel: pytest -n auto
+pytest-xdist>=3.8,<4
