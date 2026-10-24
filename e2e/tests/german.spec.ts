@@ -26,7 +26,7 @@ test('switch the app to German and back', async ({ page, request }) => {
 
     // The 🔒 category by its German name, and a backend error in German
     await page.getByRole('button', { name: 'Einstellungen' }).click();
-    const section = page.locator('section', { has: page.getByRole('heading', { name: 'Kategorien' }) });
+    const section = page.locator('details', { has: page.getByRole('heading', { name: 'Kategorien' }) });
     // Exactly "Unsortiert" followed by the lock (not a longer word)
     await expect(section.locator('li', { hasText: /Unsortiert\s*🔒/ })).toHaveCount(1);
     await section.getByLabel('Name der neuen Kategorie').fill('Ausgleich');

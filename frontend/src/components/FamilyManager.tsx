@@ -9,6 +9,7 @@ import RemoveMember from './RemoveMember';
 import EmailAddresses from './EmailAddresses';
 import type { PersonEmail } from '../inbox';
 import { isValidPin } from '../pin';
+import Section from './Section';
 
 type MemberType = 'PARENT' | 'ALLOWANCE_CHILD' | 'DEPENDENT_CHILD';
 
@@ -177,8 +178,7 @@ export default function FamilyManager() {
     };
 
     return (
-        <div className="glass-card p-6">
-            <h2 className="text-2xl font-bold mb-2">{t('family.title')}</h2>
+        <Section id="family" title={t('family.title')}>
             <p className="text-slate-400 mb-6 text-sm">{t('family.intro')}</p>
 
             {(error || notice) && (
@@ -323,6 +323,6 @@ export default function FamilyManager() {
                 )}
                 <button type="submit" className="btn-primary w-full">{newType === 'PARENT' ? t('family.addParent') : t('family.addChild')}</button>
             </form>
-        </div>
+        </Section>
     );
 }

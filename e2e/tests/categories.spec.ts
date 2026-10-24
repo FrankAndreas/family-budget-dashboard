@@ -6,7 +6,7 @@ test('manage categories in Settings', async ({ page, request }) => {
     const parent = await newParent(request);
     const errors = await login(page, parent);
     await page.getByRole('button', { name: 'Settings' }).click();
-    const section = page.locator('section', { has: page.getByRole('heading', { name: 'Categories' }) });
+    const section = page.locator('details', { has: page.getByRole('heading', { name: 'Categories' }) });
 
     // Unique name: categories are family-wide, and other tests share the database
     const name = `Leasing ${parent.name}`;

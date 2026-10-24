@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import { useFamily } from '../useFamily';
+import Section from './Section';
 
 type Level = 'NONE' | 'VIEW' | 'EDIT';
 
@@ -35,8 +36,7 @@ export default function ShareSettings() {
     if (!user || parents.length === 0 || (isChild && !user.has_allowance)) return null;
 
     return (
-        <div className="glass-card p-6">
-            <h2 className="text-2xl font-bold mb-2">{t('sharing.title')}</h2>
+        <Section id="sharing" title={t('sharing.title')}>
             <p className="text-slate-400 mb-4 text-sm">
                 {isChild ? t('sharing.introChild') : t('sharing.introParent')}
             </p>
@@ -57,6 +57,6 @@ export default function ShareSettings() {
                     </label>
                 ))}
             </div>
-        </div>
+        </Section>
     );
 }

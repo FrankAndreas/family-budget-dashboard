@@ -32,6 +32,8 @@ test('category changed in the preview becomes an import rule', async ({ page, re
     await page.getByLabel('Rule text for line 2').fill(shop);
     await page.getByRole('button', { name: 'Import 2 transactions' }).click();
     await expect(page.getByText('Imported 2 transactions')).toBeVisible();
+    // The rule list is folded (issue #89): the search finds the new rule
+    await page.getByLabel('Search rules').fill(shop);
     await expect(page.getByText(`${shop} → Groceries`)).toBeVisible();
 
     const rule = page.locator('li', { hasText: `${shop} → Groceries` });
