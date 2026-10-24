@@ -113,12 +113,15 @@ the one path the worker posts to, behind Cloudflare Access. Unreleased mails are
 The setup is the same as family-job-tracking's "Incoming e-mails", with these names. Cloudflare renames dashboard
 menus from time to time.
 
-1. **Secret for the app.** Add it to `.env`, then restart:
+1. **Secret for the app.** Add it to `.env`. If your `compose.yaml` is older than this feature, also add the line
+   `- INBOUND_SECRET=${INBOUND_SECRET:-}` to the backend's `environment:` (see [Updates](#updates)). Then restart:
    ```bash
    echo "INBOUND_SECRET=$(openssl rand -hex 32)" | sudo tee -a .env
    sudo docker-compose up -d
+   sudo docker logs budget-backend 2>&1 | grep "Receipt mails"
    ```
-   The backend log says `Receipt mails: configured`.
+   The log must say `Receipt mails: configured`; `not configured` means the container doesn't get the variable.
+   Mails then bounce or go to the fallback address, and the backend answers the worker with 503.
 2. **Tunnel route for the worker only.** In **Zero Trust → Networks → Connectors → Cloudflare Tunnels**, open the
    NAS's tunnel → **Published application routes** → **Add**:
    - subdomain e.g. `budget-inbound`, your domain, **path `^/api/v1/inbound$`**
@@ -171,6 +174,16 @@ Set up [Automatic Updates](#automatic-updates) to install them nightly, or updat
 ```bash
 sudo docker-compose pull
 sudo docker-compose up -d
+```
+
+Updates never change your `compose.yaml` or `.env`. When a new feature needs a setting, it is listed in the
+backend's `environment:` of this repository's [`docker-compose.yml`](docker-compose.yml): add the same line to the
+`environment:` of `budget-backend` in your `compose.yaml`, put the value in `.env`, and run
+`sudo docker-compose up -d`. A value only in `.env` doesn't reach the app. To see which settings the backend gets
+(names only, no values):
+
+```bash
+sudo docker exec budget-backend printenv | cut -d= -f1 | sort
 ```
 
 ## Automatic Updates
