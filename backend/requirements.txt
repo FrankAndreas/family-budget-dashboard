@@ -4,7 +4,7 @@ sqlalchemy==2.1.5
 pydantic==2.14.1
 python-multipart==0.0.32
 bcrypt==5.0.0
-python-jose[cryptography]==3.5.0
+PyJWT==2.15.1
 tzdata==2026.5
 alembic==1.20.0
 pypdf==6.21.1

@@ -2,7 +2,7 @@
 
 import time
 
-from jose import jwt
+import jwt
 
 from helpers import (
     ADMIN,
@@ -30,7 +30,7 @@ class TestSetupAndAuth:
     def test_token_lasts_configured_time(self, client):
         register(client, "p")
         token = client.post(f"{BASE_URL}/login", json={"username": "p", "pin": "1234"}).json()["access_token"]
-        minutes_left = (jwt.get_unverified_claims(token)["exp"] - time.time()) / 60
+        minutes_left = (jwt.decode(token, options={"verify_signature": False})["exp"] - time.time()) / 60
         assert minutes_left > 2900
 
     def test_pin_is_four_digits(self, client):

@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 
-from jose import jwt
+import jwt
 
 from app import auth
 from helpers import BASE_URL, admin_headers, login, register, user_id

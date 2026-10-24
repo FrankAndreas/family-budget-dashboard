@@ -3,7 +3,7 @@ import os
 import secrets
 from datetime import datetime, timedelta
 from typing import Optional
-from jose import JWTError, jwt
+import jwt
 import bcrypt
 from fastapi.security import OAuth2PasswordBearer
 from fastapi import Depends, HTTPException, status
@@ -71,13 +71,13 @@ async def get_current_user_from_token(
     try:
         payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
         # The subject is the user id, so renaming a user keeps their session valid
-        user_id: str = payload.get("sub")
+        user_id: Optional[str] = payload.get("sub")
         if user_id is None:
             raise credentials_exception
         # Tokens issued before session versions existed have none: version 0
         version = payload.get("ver", 0)
         token_data = schemas.TokenData(user_id=user_id)
-    except JWTError:
+    except jwt.PyJWTError:
         raise credentials_exception
 
     user = db.query(models.User).filter(models.User.id == token_data.user_id).first()
