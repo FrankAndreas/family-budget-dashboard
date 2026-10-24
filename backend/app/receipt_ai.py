@@ -336,10 +336,9 @@ def file_content(filename: str, data: bytes) -> list[dict]:
         raise messages.api_error(400, "file_type_unsupported")
 
 
-def ai_draft(db: Session, filename: str, data: bytes) -> dict:
-    """The AI's draft of a receipt file, in the current language; a 502 if the AI is down or answers nonsense. The
-    caller counts the read."""
-    content = file_content(filename, data)
+def ai_draft(db: Session, content: list[dict]) -> dict:
+    """The AI's draft of a receipt (the file as file_content made it), in the current language; a 502 if the AI is
+    down or answers nonsense. The caller counts the read."""
     expense = [c for c in db.query(models.Category) if c.type == models.CategoryType.EXPENSE]
     category_ids = {name.casefold(): c.id for c in expense for name in i18n.all_names(c)}
     shown = sorted({i18n.category_name(c) for c in expense}, key=str.casefold)
@@ -363,11 +362,11 @@ def read(db: Session, user: models.User, filename: str, data: bytes) -> dict:
     if not settings.enabled:
         raise messages.api_error(400, "receipt_ai_off")
     # The file is checked before a read is counted or anything is stored
-    file_content(filename, data)
+    content = file_content(filename, data)
     take_read(db, user.id, settings.reads_per_hour)
     # Kept as a pending attachment: booking the receipt links it, otherwise the sweep removes it after a day
     attachment = attachments.store(db, user, filename, data, None)
-    draft = ai_draft(db, filename, data)
+    draft = ai_draft(db, content)
     return {"draft": draft, "attachment_id": attachment.id, "attachment": attachments.out(attachment)}
 
 

@@ -97,8 +97,20 @@ def link(db: Session, user: models.User, transaction: models.Transaction, ids: l
         attachment = db.query(models.Attachment).filter(models.Attachment.id == attachment_id).first()
         if not attachment or attachment.owner_id != user.id or attachment.transaction_id is not None:
             raise messages.api_error(400, "attachment_not_found")
+        if already_booked(db, attachment.sha256):
+            raise messages.api_error(409, "receipt_already_booked")
         attachment.transaction_id = transaction.id
         booked_from_inbox(db, attachment.sha256)
+
+
+def already_booked(db: Session, sha256: str) -> bool:
+    """A mail or photo from the inbox that was booked already, and isn't waiting a second time: e.g. two parents opened
+    the same photo, and the other one booked it first."""
+    entries: list[models.InboxMail | models.InboxPhoto] = [
+        *db.query(models.InboxMail).filter(models.InboxMail.sha256 == sha256),
+        *db.query(models.InboxPhoto).filter(models.InboxPhoto.sha256 == sha256),
+    ]
+    return bool(entries) and all(entry.booked_at is not None for entry in entries)
 
 
 def booked_from_inbox(db: Session, sha256: str) -> None:

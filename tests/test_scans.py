@@ -231,3 +231,67 @@ def test_receipts_read_unchanged(client, ai):
     assert response.json()["draft"]["shop"] == "Migros" and response.json()["attachment_id"]
     with database.SessionLocal() as db:
         assert db.query(models.ReceiptRead).count() == 1
+
+
+# The four minors from the receipt-scan review
+def test_unexpected_error_marks_failed_not_reading(client, ai, monkeypatch):
+    mum = register(client, "mum")
+
+    def broken(*args, **kwargs):
+        raise RuntimeError("disk")
+
+    monkeypatch.setattr(receipt_ai, "ai_draft", broken)
+    photo = scanned(client, mum)
+    assert states(client, mum) == ["failed"]
+    # Opening still works: the form gets the photo without a draft
+    assert opened(client, mum, photo["id"])["draft"] is None
+
+
+def test_receipt_file_prepared_once(client, ai, monkeypatch):
+    from app import receipt_files
+
+    calls = []
+    real = receipt_files.ai_content
+    monkeypatch.setattr(receipt_files, "ai_content", lambda *args: calls.append(1) or real(*args))
+    mum = register(client, "mum")
+    response = client.post(f"{BASE_URL}/receipts/read", files={"file": ("beleg.png", image_png())}, headers=mum)
+    assert response.status_code == 200, response.text
+    assert len(calls) == 1
+
+
+def test_opening_again_reuses_the_attachment(client):
+    mum = register(client, "mum")
+    photo = scanned(client, mum)
+    first = opened(client, mum, photo["id"])["attachment_id"]
+    assert opened(client, mum, photo["id"])["attachment_id"] == first
+    with database.SessionLocal() as db:
+        assert db.query(models.Attachment).count() == 1
+
+
+def test_photo_booked_once_only(client):
+    mum = register(client, "mum")
+    dad = register(client, "dad")
+    mum_account = create_account(client, mum, "Mum bank")
+    dad_account = create_account(client, dad, "Dad bank")
+    photo = scanned(client, mum)
+    mine, theirs = opened(client, mum, photo["id"]), opened(client, dad, photo["id"])
+
+    def book(headers, account, result):
+        return client.post(
+            f"{BASE_URL}/transactions",
+            json={"account_id": account, "items": items(client), "attachment_ids": [result["attachment_id"]]},
+            headers=headers,
+        )
+
+    assert book(mum, mum_account, mine).status_code == 200
+    response = book(dad, dad_account, theirs)
+    assert response.status_code == 409
+    assert response.json()["detail"] == "This receipt has already been booked"
+    with database.SessionLocal() as db:
+        assert db.query(models.Transaction).count() == 1
+
+
+def test_photo_not_found_message(client):
+    mum = register(client, "mum")
+    response = client.post(f"{PHOTOS}/nope/open", headers=mum)
+    assert (response.status_code, response.json()["detail"]) == (404, "Photo not found in the inbox")
