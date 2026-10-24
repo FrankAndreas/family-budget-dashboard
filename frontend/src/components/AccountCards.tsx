@@ -85,18 +85,19 @@ export default function AccountCards({
     return (
         <>
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="glass-card p-6">
-                    <h3 className="text-emerald-400 text-lg font-semibold mb-2">{t('accounts.myBalance')}</h3>
-                    <p className="text-3xl font-bold">{money(totalBalance)}</p>
+            {/* On a phone the balance spans the row and the two counts sit side by side below it */}
+            <div data-testid="summary-cards" className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+                <div className="glass-card p-3 md:p-6 col-span-2 md:col-span-1">
+                    <h3 className="text-emerald-400 text-sm md:text-lg font-semibold md:mb-2">{t('accounts.myBalance')}</h3>
+                    <p className="text-2xl md:text-3xl font-bold">{money(totalBalance)}</p>
                 </div>
-                <div className="glass-card p-6">
-                    <h3 className="text-sky-400 text-lg font-semibold mb-2">{t('accounts.title')}</h3>
-                    <p className="text-3xl font-bold">{accounts.length}</p>
+                <div className="glass-card p-3 md:p-6">
+                    <h3 className="text-sky-400 text-sm md:text-lg font-semibold md:mb-2">{t('accounts.title')}</h3>
+                    <p className="text-xl md:text-3xl font-bold">{accounts.length}</p>
                 </div>
-                <div className="glass-card p-6">
-                    <h3 className="text-indigo-400 text-lg font-semibold mb-2">{t('accounts.transactionsInSelected')}</h3>
-                    <p className="text-3xl font-bold">{transactionCount}</p>
+                <div className="glass-card p-3 md:p-6">
+                    <h3 className="text-indigo-400 text-sm md:text-lg font-semibold md:mb-2">{t('accounts.transactionsInSelected')}</h3>
+                    <p className="text-xl md:text-3xl font-bold">{transactionCount}</p>
                 </div>
             </div>
 

@@ -47,6 +47,7 @@ const de = {
         hide: 'PIN verbergen',
     },
     dashboard: {
+        moreTabs: 'Weitere Tabs',
         welcome: 'Willkommen zurück, {{name}} ({{role}})',
         logout: 'Abmelden',
         loadCategoriesFailed: 'Kategorien konnten nicht geladen werden',
@@ -518,7 +519,7 @@ const de = {
         bookAs: 'Kategorie für {{text}}',
         chooseCategory: 'Kategorie wählen',
         book: 'Buchen',
-        ofWhichNotConfirmed: 'davon von der Bank nicht bestätigt: {{amount}}',
+        ofWhichNotConfirmed: '{{amount}} noch nicht auf einem Kontoauszug',
         ontoPayment: 'Bezahlt mit dieser Bankbuchung',
         newBooking: 'keine: neue Buchung',
     },

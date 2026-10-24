@@ -1,5 +1,5 @@
 import { useAuth } from '../../AuthContext';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage, fetchAllTransactions } from '../../api';
 import BudgetManager from '../../components/BudgetManager';
@@ -33,6 +33,18 @@ export default function Dashboard() {
     const [activeTab, setActiveTab] = useState('overview');
     // Photographing a pile of receipts into the inbox (receipt scan)
     const [scanning, setScanning] = useState(false);
+    // On a phone the tab row doesn't fit: a fade with an arrow at its end shows there are more tabs
+    const tabRow = useRef<HTMLDivElement>(null);
+    const [moreTabs, setMoreTabs] = useState(false);
+    const updateMoreTabs = () => {
+        const row = tabRow.current;
+        setMoreTabs(!!row && row.scrollLeft + row.clientWidth < row.scrollWidth - 4);
+    };
+    useEffect(() => {
+        updateMoreTabs();
+        window.addEventListener('resize', updateMoreTabs);
+        return () => window.removeEventListener('resize', updateMoreTabs);
+    }, [user?.role]);
     const [accounts, setAccounts] = useState<Account[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [selectedAccount, setSelectedAccount] = useState<string | null>(null);
@@ -90,12 +102,12 @@ export default function Dashboard() {
     ] as const;
 
     return (
-        <div className="min-h-screen p-6">
+        <div className="min-h-screen p-3 sm:p-6">
             {/* Header */}
-            <div className="glass-card p-6 mb-6">
-                <div className="flex justify-between items-center">
-                    <div>
-                        <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-transparent">
+            <div className="glass-card p-4 sm:p-6 mb-4 sm:mb-6">
+                <div className="flex justify-between items-center gap-3">
+                    <div className="min-w-0">
+                        <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-transparent">
                             {t('common.appName')}
                         </h1>
                         <p className="text-slate-400 mt-1">
@@ -116,19 +128,20 @@ export default function Dashboard() {
             )}
 
             {/* Tab Navigation */}
-            <div className="glass-card p-2 mb-6">
-                <div className="flex gap-2 overflow-x-auto">
+            <div className="glass-card p-2 mb-4 sm:mb-6 relative">
+                <div ref={tabRow} onScroll={updateMoreTabs} className="flex gap-2 overflow-x-auto">
                     {tabs.map(tab => (
                         <button
                             key={tab}
-                            onClick={() => {
+                            onClick={event => {
+                                event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
                                 setActiveTab(tab);
                                 // Other tabs may have changed the family, splits or investments the forms here offer
                                 reloadFamily();
                                 reloadSplits();
                                 reloadAssets();
                             }}
-                            className={`flex-1 whitespace-nowrap py-3 px-4 rounded-lg font-semibold transition-all ${activeTab === tab
+                            className={`flex-1 whitespace-nowrap py-2 px-3 sm:py-3 sm:px-4 rounded-lg font-semibold transition-all ${activeTab === tab
                                 ? 'bg-blue-500/20 text-blue-400 border-2 border-blue-400'
                                 : 'text-slate-400 hover:bg-slate-800/30'
                                 }`}
@@ -137,6 +150,13 @@ export default function Dashboard() {
                         </button>
                     ))}
                 </div>
+                {moreTabs && (
+                    <button type="button" aria-label={t('dashboard.moreTabs')}
+                        onClick={() => tabRow.current?.scrollBy({ left: tabRow.current.clientWidth * 0.8, behavior: 'smooth' })}
+                        className="absolute right-0 inset-y-0 w-12 rounded-r-2xl flex items-center justify-end pr-2 text-2xl text-slate-300 bg-gradient-to-l from-slate-900 via-slate-900/80 to-transparent">
+                        ›
+                    </button>
+                )}
             </div>
 
             {/* Tab Content */}
@@ -195,7 +215,6 @@ export default function Dashboard() {
                             assets={assets}
                             onChanged={refresh}
                             onError={setError}
-                            onScan={isParent ? () => { setScanning(true); window.scrollTo({ top: 0, behavior: 'smooth' }); } : undefined}
                         />
                     )}
                 </div>
