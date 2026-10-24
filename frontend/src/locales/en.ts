@@ -49,6 +49,9 @@ const en: Messages = {
         hide: 'Hide PIN',
     },
     dashboard: {
+        wrongPins_one: "{{count}} wrong PIN was entered for your name since your last login. If that wasn't you, choose a new PIN (or ask a parent).",
+        wrongPins_other: "{{count}} wrong PINs were entered for your name since your last login. If that wasn't you, choose a new PIN (or ask a parent).",
+        wrongPinsOk: 'Got it',
         moreTabs: 'More tabs',
         welcome: 'Welcome back, {{name}} ({{role}})',
         logout: 'Logout',

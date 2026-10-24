@@ -68,6 +68,9 @@ class User(Base):
     # Wrong PINs in a row, and until when logins are refused after too many (see auth.MAX_WRONG_PINS)
     failed_logins: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
     locked_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Lockouts in a row (each doubles the lock), and wrong PINs since the last login (shown at the next one)
+    lockouts: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
+    wrong_pins: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
     # Part of every login token; raising it ends all of the user's logins ("log out everywhere", new PIN)
     token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=True)
 

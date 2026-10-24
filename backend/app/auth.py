@@ -21,6 +21,10 @@ ALGORITHM = "HS256"
 # A PIN has only 4 digits: after this many wrong ones in a row, the username is locked for a while
 MAX_WRONG_PINS = 5
 LOCK_MINUTES = 15
+# Each lockout in a row doubles the lock, up to a day: about 5 guesses a day once it is reached (issue #86). A day
+# after a lock ended, or after a correct login or a new PIN, it starts again at 15 minutes.
+MAX_LOCK_MINUTES = 24 * 60
+LOCKOUTS_FORGOTTEN_AFTER = timedelta(days=1)
 ACCESS_TOKEN_EXPIRE_MINUTES = 3000
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
@@ -43,6 +47,11 @@ PIN_HASH_ROUNDS = 12
 
 def get_pin_hash(pin: str) -> str:
     return bcrypt.hashpw(pin.encode(), bcrypt.gensalt(rounds=PIN_HASH_ROUNDS)).decode()
+
+
+def lock_minutes(lockouts: int) -> int:
+    """15, 30, 60, ... minutes for the first, second, third lockout in a row; at most a day."""
+    return min(LOCK_MINUTES << max(lockouts - 1, 0), MAX_LOCK_MINUTES)
 
 
 def now() -> datetime:

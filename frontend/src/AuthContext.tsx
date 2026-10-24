@@ -17,6 +17,9 @@ interface AuthContextType {
     logout: () => void;
     refreshUser: () => Promise<void>;
     isLoading: boolean;
+    // Wrong PINs entered for this name since the last login (issue #86), shown once after logging in
+    wrongPins: number;
+    dismissWrongPins: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -24,6 +27,7 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const [wrongPins, setWrongPins] = useState(0);
 
     // The app speaks the person's own language once they are logged in
     const signedIn = (me: User) => {
@@ -50,6 +54,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const login = async (username: string, pin: string) => {
         const response = await api.post('/api/v1/login', { username, pin });
         localStorage.setItem('token', response.data.access_token);
+        setWrongPins(response.data.wrong_pins ?? 0);
         const userResponse = await api.get('/api/v1/me');
         signedIn(userResponse.data);
     };
@@ -63,11 +68,12 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const logout = () => {
         localStorage.removeItem('token');
         setUser(null);
+        setWrongPins(0);
         applyLanguage(browserLanguage());
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, refreshUser, isLoading }}>
+        <AuthContext.Provider value={{ user, login, logout, refreshUser, isLoading, wrongPins, dismissWrongPins: () => setWrongPins(0) }}>
             {children}
         </AuthContext.Provider>
     );

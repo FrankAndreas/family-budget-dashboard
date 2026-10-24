@@ -80,35 +80,45 @@ def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
     # Locked after too many wrong PINs: refused even with the right PIN, so guessing can't go on
     if db_user and db_user.locked_until and db_user.locked_until > now:
         minutes = math.ceil((db_user.locked_until - now).total_seconds() / 60)
-        raise HTTPException(
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail=messages.plural("login_locked", minutes),
+        detail = (
+            messages.plural("login_locked_hours", math.ceil(minutes / 60))
+            if minutes >= 60
+            else messages.plural("login_locked", minutes)
         )
+        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail)
     if not db_user or not db_user.pin_hash or not auth.verify_pin(user.pin, db_user.pin_hash):
         # Unknown names aren't counted (nothing to protect, and it doesn't reveal which names exist)
         if db_user and db_user.pin_hash:
             db_user.failed_logins = (db_user.failed_logins or 0) + 1
+            db_user.wrong_pins = (db_user.wrong_pins or 0) + 1
             if db_user.failed_logins >= auth.MAX_WRONG_PINS:
-                db_user.locked_until = now + timedelta(minutes=auth.LOCK_MINUTES)
+                # The last lock ended long ago (or there was none): this one counts as the first again
+                recent = db_user.locked_until and db_user.locked_until > now - auth.LOCKOUTS_FORGOTTEN_AFTER
+                db_user.lockouts = (db_user.lockouts or 0) + 1 if recent else 1
+                minutes = auth.lock_minutes(db_user.lockouts)
+                db_user.locked_until = now + timedelta(minutes=minutes)
                 db_user.failed_logins = 0
                 logger.warning(
-                    "Login for '%s' locked for %d minutes after %d wrong PINs",
+                    "Login for '%s' locked for %d minutes after %d wrong PINs (lockout %d in a row)",
                     db_user.username,
-                    auth.LOCK_MINUTES,
+                    minutes,
                     auth.MAX_WRONG_PINS,
+                    db_user.lockouts,
                 )
             db.commit()
         raise messages.api_error(status.HTTP_401_UNAUTHORIZED, "wrong_login", headers={"WWW-Authenticate": "Bearer"})
     if not db_user.is_active:
         raise messages.api_error(status.HTTP_403_FORBIDDEN, "login_deactivated")
-    if db_user.failed_logins or db_user.locked_until:
-        db_user.failed_logins, db_user.locked_until = 0, None
+    # The person learns about wrong PINs entered for their name since their last login (issue #86)
+    wrong_pins = db_user.wrong_pins or 0
+    if db_user.failed_logins or db_user.locked_until or db_user.lockouts or wrong_pins:
+        db_user.failed_logins, db_user.locked_until, db_user.lockouts, db_user.wrong_pins = 0, None, 0, 0
         db.commit()
     access_token = auth.create_access_token(
         data={"sub": db_user.id, "ver": db_user.token_version or 0},
         expires_delta=timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {"access_token": access_token, "token_type": "bearer", "wrong_pins": wrong_pins}
 
 
 @router.get("/users", response_model=List[schemas.User])

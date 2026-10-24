@@ -62,6 +62,8 @@ class UserUpdate(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    # Wrong PINs entered for this name since the last login
+    wrong_pins: int = 0
 
 
 class TokenData(BaseModel):
