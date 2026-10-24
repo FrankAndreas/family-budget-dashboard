@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { call, login, newParent } from './helpers';
+import { API, call, login, newParent } from './helpers';
 
 // Two different 1×1 PNGs (black, red): the fake AI ignores the picture and answers with a fixed Migros receipt
 // (2026-10-20, CHF 83.40); different pictures, so the two photos are two receipts
@@ -36,6 +36,11 @@ test('scan a pile of receipts, then check and book them one after another', asyn
 
     const rows = page.getByText('Migros · CHF 83.40');
     await expect(rows).toHaveCount(2);
+    // Each row has a thumbnail and the app's date format; the fake AI reads both as the same receipt, so the later
+    // one is flagged (earlier tests' photos read the same, so the first may be flagged too)
+    await expect(page.getByRole('img', { name: 'Photo 2' })).toBeVisible();
+    await expect(page.getByText(/photographed by .* · \d{1,2} [A-Z][a-z]{2} \d{4}, \d\d:\d\d/)).toHaveCount(2);
+    await expect(page.getByText('possibly a duplicate').last()).toBeVisible();
     await page.getByRole('button', { name: 'Check next' }).click();
     await expect(page.getByText('Sum CHF 83.40')).toBeVisible();
     // The photo is shown to check the reading against; no file to choose, the photo is already attached
@@ -87,5 +92,23 @@ test('a pile scanned without the AI is typed in', async ({ page, request }) => {
     await expect(page.getByText('Sum CHF 0.00')).toBeVisible();
     const [photo] = await call(request, parent, 'GET', '/inbox/photos');
     expect(photo.read_state).toBe('manual');
+    expect(errors).toEqual([]);
+});
+
+// The other parent's photo, when their accounts aren't shared for booking: the row says why no account is chosen
+test("the other parent's photo explains the missing account", async ({ page, request }) => {
+    const parent = await newParent(request);
+    const other = await newParent(request);
+    await call(request, parent, 'POST', '/accounts', { name: 'Konto', type: 'BANK' });
+    const uploaded = await request.post(`${API}/inbox/photos`, {
+        multipart: { file: PHOTOS[0] },
+        headers: { Authorization: `Bearer ${other.token}` },
+    });
+    expect(uploaded.ok(), await uploaded.text()).toBeTruthy();
+    const photo = await uploaded.json();
+    const errors = await login(page, parent);
+    await expect(page.getByText(`${other.name}'s accounts aren't shared with you for booking`)).toBeVisible();
+    // Left as it was: the other tests count the Migros rows
+    await call(request, other, 'DELETE', `/inbox/photos/${photo.id}`);
     expect(errors).toEqual([]);
 });

@@ -318,3 +318,63 @@ def test_suggested_account_prefers_a_bank_account(client):
     client.post(f"{BASE_URL}/accounts", json={"name": "Bargeld", "type": "CASH"}, headers=mum)
     bank = create_account(client, mum, "Zürcher Bank")
     assert scanned(client, mum)["suggested_account_id"] == bank
+
+
+# The list of scanned receipts (issue #90): a thumbnail per photo, and likely duplicates flagged
+
+
+def test_thumbnail(client):
+    from PIL import Image
+    import io
+
+    mum = register(client, "mum")
+    photo = scanned(client, mum)
+    response = client.get(f"{PHOTOS}/{photo['id']}/thumbnail", headers=mum)
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "image/jpeg"
+    assert response.headers["x-content-type-options"] == "nosniff"
+    assert max(Image.open(io.BytesIO(response.content)).size) == scans.THUMBNAIL_SIDE
+    teen = register(client, "teen", role="CHILD", by=mum)
+    assert client.get(f"{PHOTOS}/{photo['id']}/thumbnail", headers=teen).status_code == 403
+    assert client.get(f"{PHOTOS}/no-such-photo/thumbnail", headers=mum).status_code == 404
+
+
+def test_same_photo_twice_is_a_likely_duplicate(client):
+    mum = register(client, "mum")
+    data = image_png("MIGROS 12.50")
+    first = scan(client, mum, data).json()
+    second = scan(client, mum, data).json()
+    listed = {p["id"]: p["duplicate"] for p in photos(client, mum)}
+    # The earlier one is the original; only the later one is flagged
+    assert listed == {first["id"]: False, second["id"]: True}
+
+
+def test_same_shop_total_and_date_is_a_likely_duplicate(client, ai):
+    mum = register(client, "mum")
+    first = scanned(client, mum, "ONE")
+    second = scanned(client, mum, "TWO")
+    listed = {p["id"]: p["duplicate"] for p in photos(client, mum)}
+    assert listed == {first["id"]: False, second["id"]: True}
+
+
+def test_a_booked_photo_still_counts_for_duplicates(client):
+    mum = register(client, "mum")
+    bank = create_account(client, mum)
+    data = image_png("MIGROS 12.50")
+    first = scan(client, mum, data).json()
+    attachment = opened(client, mum, first["id"])["attachment_id"]
+    booked = client.post(
+        f"{BASE_URL}/transactions",
+        json={"account_id": bank, "items": items(client), "attachment_ids": [attachment]},
+        headers=mum,
+    )
+    assert booked.status_code == 200, booked.text
+    again = scan(client, mum, data).json()
+    assert [(p["id"], p["duplicate"]) for p in photos(client, mum)] == [(again["id"], True)]
+
+
+def test_different_receipts_are_not_duplicates(client):
+    mum = register(client, "mum")
+    scanned(client, mum, "ONE")
+    scanned(client, mum, "TWO")
+    assert [p["duplicate"] for p in photos(client, mum)] == [False, False]

@@ -709,6 +709,8 @@ const en: Messages = {
         waitingIntro_other: '{{count}} photographed receipts to check, in the order they were taken.',
         takenBy: 'photographed by {{name}}',
         takerGone: 'photographer removed',
+        duplicate: 'possibly a duplicate',
+        notYourAccounts: "{{name}}'s accounts aren't shared with you for booking: choose one of yours, or leave it for {{name}}.",
         noShop: 'Receipt',
         confirmDelete: 'Delete this photo from the inbox? The receipt is then gone.',
         openFailed: 'Failed to open the photo',

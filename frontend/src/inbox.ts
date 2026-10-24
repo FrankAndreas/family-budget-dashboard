@@ -27,6 +27,8 @@ export interface InboxPhoto {
     shop: string | null;
     total: number | null;
     suggested_account_id: string | null;
+    // The same picture, or the same shop, total and date, as an earlier photo
+    duplicate: boolean;
 }
 
 export interface PersonEmail {
