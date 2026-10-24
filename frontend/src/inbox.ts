@@ -54,6 +54,34 @@ export function useInbox(enabled: boolean, version: number) {
     return { mails, failed, reload };
 }
 
+export function usePhotos(enabled: boolean, version: number) {
+    const [photos, setPhotos] = useState<InboxPhoto[]>([]);
+    const [own, setOwn] = useState(0);
+    useEffect(() => {
+        if (!enabled) return;
+        api.get('/api/v1/inbox/photos').then(response => setPhotos(response.data)).catch(() => setPhotos([]));
+    }, [enabled, version, own]);
+    const reload = useCallback(() => setOwn(v => v + 1), []);
+    // The AI reads new photos in the background: look again until it is through
+    const pending = photos.some(photo => photo.read_state === 'waiting' || photo.read_state === 'reading');
+    useEffect(() => {
+        if (!enabled || !pending) return;
+        const timer = setTimeout(reload, 5000);
+        return () => clearTimeout(timer);
+    }, [enabled, pending, photos, reload]);
+    return { photos, reload };
+}
+
+// Opening a photo: the AI's draft (if it read it) and the photo as the parent's pending attachment
+export async function openPhoto(photo: InboxPhoto): Promise<Release> {
+    const response = await api.post(`/api/v1/inbox/photos/${photo.id}/open`);
+    return { draft: response.data.draft, attachment: response.data.attachment };
+}
+
+export async function deletePhoto(photo: InboxPhoto): Promise<void> {
+    await api.delete(`/api/v1/inbox/photos/${photo.id}`);
+}
+
 export async function release(mail: InboxMail): Promise<Release> {
     const response = await api.post(`/api/v1/inbox/${mail.id}/release`);
     return {

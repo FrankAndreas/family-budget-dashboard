@@ -98,6 +98,17 @@ local LLM; a README inside explains the columns) and imports transactions in bul
 for example one written by a receipt-reading tool. The import format is described in
 [`docs/import-format.md`](docs/import-format.md).
 
+### Scanning a pile of receipts with the phone
+
+Parents open the app on the phone (home Wi-Fi) and tap **📷 Scan receipts** in the inbox or above the bookings. The
+phone's camera opens; after each photo, **📷 Next receipt** opens it again. Each photo is uploaded right away and
+waits in the inbox; the AI reads it in the background (it counts toward the hourly reads of whoever took it). Later,
+**Check next** opens the photos one after another in the order they were taken, and **Book & next** books one and
+opens the next. Photos stay in the inbox until they are booked or deleted: nothing removes them automatically.
+
+The photos are meant to stay in the app only. After the first deploy, check once on each phone that photos taken
+this way don't show up in the phone's gallery (some camera apps keep a copy).
+
 ### Receipt mails (Cloudflare Email Worker, optional)
 
 Parents forward receipt mails (webshop orders, invoices) to e.g. `invoice@<domain>`. They wait unopened in an inbox
