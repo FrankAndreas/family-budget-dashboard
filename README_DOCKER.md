@@ -53,7 +53,8 @@ Same setup as the family-chore app (SQLite variant), so both run side by side on
    ```
    Or in Container Manager: **Project → Create**, choose the folder (it must contain `compose.yaml`
    and `.env`), **Next → Done**.
-5. **Open** `http://<NAS_IP>:8081`.
+5. **Open** `http://<NAS_IP>:8081`. For daily use, set up [HTTPS at home](#https-at-home-recommended):
+   on plain HTTP the PINs cross the Wi-Fi unencrypted.
 
 ### First login
 On an empty database the backend creates the parent **Admin** with a random 4-digit PIN,
@@ -79,6 +80,58 @@ If you lose the PIN before anyone uses the app, stop it, delete `data/budget.db`
 
 `data/` holds everything worth keeping: the database `budget.db` and the stored receipts in
 `data/attachments/`. Back up the whole folder: the update script's database backup does not include the receipts.
+
+### HTTPS at home (recommended)
+
+On `http://<NAS_IP>:8081` the PIN at login and the login token (valid 50 hours) cross the Wi-Fi unencrypted, so any
+device on the network (guest Wi-Fi, a smart-home gadget) could read them. The NAS's own reverse proxy fixes this
+with a free Let's Encrypt certificate. You need a domain whose DNS is at Cloudflare (the one the receipt mails use is
+fine). Nothing is opened to the internet: the names point to the NAS's home address, and the router forwards no port.
+
+The example names are `budget.local.<domain>` for the app and `nas.local.<domain>` for DSM. One wildcard
+certificate for `*.local.<domain>` covers all of them.
+
+1. **DNS record.** In the Cloudflare dashboard: your domain → **DNS → Records → Add record**: type `A`, name
+   `*.local` (with the star), IPv4 address `<NAS_IP>`, proxy status **DNS only** (grey cloud). Records you already
+   have, such as the tunnel's, keep working: a name of its own wins over the wildcard. Check from a home device:
+   ```bash
+   nslookup budget.local.<domain>    # must answer <NAS_IP>
+   ```
+   If it answers but the browser can't connect, or it answers nothing although the record is there, the router
+   blocks DNS answers with home addresses. Then use the **DNS Server** package on the NAS instead.
+2. **Certificate.** DSM's built-in Let's Encrypt can't issue a wildcard certificate for your own domain, so use
+   [acme.sh](https://github.com/acmesh-official/acme.sh) on the NAS with a Cloudflare API token that may edit that
+   zone's DNS (acme.sh adds a short-lived `_acme-challenge` record and removes it again). Keep the token in
+   acme.sh's config, never in this folder. As root (`sudo -i`; acme.sh refuses `sudo <command>`), with acme.sh in
+   `~/.acme.sh` of your DSM user:
+   ```bash
+   ACME=/var/services/homes/<user>/.acme.sh
+   $ACME/acme.sh --issue --dns dns_cf -d '<domain>' -d '*.local.<domain>' --ecc --home $ACME
+   # Copy it into DSM; acme.sh remembers this, so every renewal updates DSM too
+   env SYNO_USE_TEMP_ADMIN=1 SYNO_CERTIFICATE="<domain>" $ACME/acme.sh --deploy -d '<domain>' --ecc \
+     --deploy-hook synology_dsm --home $ACME
+   ```
+   `SYNO_CERTIFICATE` is the description of the certificate in **Control Panel → Security → Certificate**; a new
+   one is created if none has it. For renewals, add a daily task in **Control Panel → Task Scheduler → Create →
+   Scheduled Task → User-defined script**, user `root`:
+   `/var/services/homes/<user>/.acme.sh/acme.sh --cron --home /var/services/homes/<user>/.acme.sh`.
+   Certificates last 90 days and are renewed after 60, so a failed renewal leaves a month to notice it.
+3. **Reverse proxy.** **Control Panel → Login Portal → Advanced → Reverse Proxy → Create**:
+
+   | | Source | Destination |
+   |---|---|---|
+   | App | HTTPS, `budget.local.<domain>`, port 443, **Enable HSTS** | HTTP, `localhost`, port 8081 |
+   | DSM (optional) | HTTPS, `nas.local.<domain>`, port 443, **Enable HSTS** | **HTTPS**, `localhost`, port 5001 |
+
+   For DSM also add **Custom Header → Create → WebSocket**. HSTS makes a browser use HTTPS on its own after the
+   first visit.
+4. **Assign the certificate.** **Control Panel → Security → Certificate → Settings**: pick the `*.local.<domain>`
+   certificate for both reverse proxy entries.
+5. **Open** `https://budget.local.<domain>` on each phone (type `https://` the first time) and save it to the home
+   screen again: the old `http://<NAS_IP>:8081` shortcut keeps working, but unencrypted.
+
+Port 8081 stays open on plain HTTP: the Cloudflare tunnel for [receipt mails](#receipt-mails-cloudflare-email-worker-optional)
+reaches the app there. That last step stays inside the NAS when the tunnel runs on it; the PINs never take it.
 
 ### Reading receipts with the Infomaniak AI (optional)
 
@@ -324,3 +377,6 @@ Check the generated file in `app/migrations/versions/`, and add a test in `tests
 | Email from Task Scheduler: *up to date, but the backend is not healthy* | The backend keeps crashing without an update, e.g. after a change to `.env` (wrong `PUID`/`PGID`) | Check `logs/update.log`, fix the cause, then `sudo docker-compose up -d` and `sudo docker restart budget-frontend` |
 | Email from Task Scheduler: *backend not healthy* | A new version fails to start | Check `logs/update.log` (it ends with the backend's log), then [roll back](#rolling-back-an-update) |
 | Login says *Too many wrong PINs. Try again in … minutes* (or *hours*) | 5 wrong PINs in a row lock that name for 15 minutes; each further lockout in a row doubles it, up to 24 hours (it starts at 15 minutes again a day after a lock ended, or after a correct login) | Wait, or have another parent set a new PIN in Settings → Family (that unlocks it at once). After the next login, the person sees how many wrong PINs were entered for their name |
+| `http://<name>.local.<domain>` shows *Welcome to Synology Web Station* | The reverse proxy entries listen on HTTPS only; plain HTTP lands on Web Station | Type `https://`; with **Enable HSTS** the browser does it by itself after the first visit |
+| *400 The plain HTTP request was sent to HTTPS port* on `nas.local.<domain>` | The reverse proxy talks HTTP to DSM's HTTPS port 5001 | Set the entry's destination protocol to **HTTPS** |
+| `nslookup <name>.local.<domain>` says *NXDOMAIN* | The DNS record is named `local` instead of `*.local` | Rename it to `*.local` |
