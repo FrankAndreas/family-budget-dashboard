@@ -4,6 +4,9 @@
 - PDF: its text when it has a text layer, otherwise its pages as images (at most 5);
 - e-mail: its text (HTML reduced to text, without scripts or styles); when the text has no amounts, its first PDF or
   image attachment instead.
+
+Texts go without e-mail addresses, phone numbers and the From/To lines of a forwarded mail: the AI doesn't need them to
+read a receipt (2026-10-24 review). Street addresses and what an image shows still go as they are.
 """
 
 import base64
@@ -23,6 +26,11 @@ MAX_SIDE = 1600
 MAX_PAGES = 5
 # "12.50", "3,50": a receipt's text has amounts
 AMOUNT = re.compile(r"\d[.,]\d\d\b")
+# Who wrote to whom in a forwarded mail ("Von: Max Muster <max@example.ch>")
+HEADER_LINE = re.compile(r"^[ \t>]*(from|to|cc|bcc|reply-to|von|an|kopie|antwort an|de|à)[ \t]*:.*$", re.I | re.M)
+MAIL_ADDRESS = re.compile(r"[\w.+-]+@[\w-]+(?:\.[\w-]+)+")
+# Swiss numbers: +41 79 123 45 67, 0041 44 123 45 67, 044 123 45 67
+PHONE = re.compile(r"(?:(?:\+|\b00)41[ \t]?|\b0)\d\d[ \t]?\d{3}[ \t]?\d\d[ \t]?\d\d\b")
 
 
 class Unreadable(Exception):
@@ -38,8 +46,13 @@ def image_part(image: Image.Image) -> dict:
     return {"type": "image_url", "image_url": {"url": url}}
 
 
+def without_personal(text: str) -> str:
+    text = HEADER_LINE.sub("", text)
+    return PHONE.sub("[Tel.]", MAIL_ADDRESS.sub("[E-Mail]", text))
+
+
 def text_part(text: str) -> dict:
-    return {"type": "text", "text": text.strip()}
+    return {"type": "text", "text": without_personal(text).strip()}
 
 
 def pdf_parts(data: bytes) -> list[dict]:

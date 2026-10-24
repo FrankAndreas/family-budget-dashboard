@@ -55,3 +55,37 @@ def test_mail_with_a_pdf_and_no_amounts_reads_the_pdf():
 def test_empty_mail_is_unreadable():
     with pytest.raises(receipt_files.Unreadable):
         receipt_files.ai_content("message/rfc822", eml(body_text=""))
+
+
+# Personal data the AI doesn't need is taken out of a text before it is sent (2026-10-24 review). Invented data.
+FORWARDED = """Hallo, der Beleg.
+
+---------- Forwarded message ---------
+Von: Max Muster <max.muster@example.ch>
+Date: Fri, 23 Oct 2026 at 10:12
+Subject: Ihre Bestellung 4711
+To: <familie@example.ch>
+An: Erika Beispiel
+Cc: Beispiel AG <info@example.ch>
+
+Lieferadresse: Musterweg 1, 8000 Zürich, Tel. +41 79 123 45 67
+Rückfragen: 044 123 45 67 oder 0041 44 123 45 67
+Brot 3.50
+Total 3.50
+"""
+
+
+def test_mail_text_leaves_out_addresses_phones_and_header_lines():
+    [part] = receipt_files.ai_content("message/rfc822", eml(body_text=FORWARDED))
+    text = part["text"]
+    for personal in ("@", "Max Muster", "Erika Beispiel", "Beispiel AG", "79 123", "044 123", "44 123"):
+        assert personal not in text
+    assert "Ihre Bestellung 4711" in text
+    assert "Brot 3.50" in text and "Total 3.50" in text
+
+
+def test_pdf_text_leaves_out_addresses_and_phones():
+    data = pdf_with_text(["Kontakt info@example.ch, 044 123 45 67", "Velo-Hose 79.90", "Total 79.90"])
+    [part] = receipt_files.ai_content("application/pdf", data)
+    assert "@" not in part["text"] and "123 45 67" not in part["text"]
+    assert "Velo-Hose 79.90" in part["text"]

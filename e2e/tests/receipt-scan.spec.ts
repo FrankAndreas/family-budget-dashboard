@@ -38,6 +38,9 @@ test('scan a pile of receipts, then check and book them one after another', asyn
     await expect(rows).toHaveCount(2);
     await page.getByRole('button', { name: 'Check next' }).click();
     await expect(page.getByText('Sum CHF 83.40')).toBeVisible();
+    // The photo is shown to check the reading against; no file to choose, the photo is already attached
+    await expect(page.getByRole('img', { name: 'Photo of the receipt' })).toBeVisible();
+    await expect(page.getByLabel('Receipt file')).toHaveCount(0);
     const booked = async () => (await call(request, parent, 'GET', `/accounts/${account.id}/transactions`)).length;
     await page.getByRole('button', { name: 'Book & next' }).click();
     // The check view shows the next photo straight away, not the list
@@ -65,4 +68,24 @@ test('a photo that cannot be read shows as failed', async ({ page, request }) =>
     });
     await expect(page.getByText('upload failed')).toBeVisible();
     await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+});
+
+// "Read with AI" off: the photos are never sent to the AI and are typed in when checked
+test('a pile scanned without the AI is typed in', async ({ page, request }) => {
+    const parent = await newParent(request);
+    await call(request, parent, 'POST', '/accounts', { name: 'Konto', type: 'BANK' });
+    const errors = await login(page, parent);
+    await page.getByRole('button', { name: '📷 Scan receipts' }).first().click();
+    await page.getByLabel('Read with AI').uncheck();
+    await page.getByLabel('Receipt photo').setInputFiles(PHOTOS[0]);
+    await expect(page.getByText('✓ in the inbox')).toHaveCount(1);
+    await page.getByRole('button', { name: 'Done (1)' }).click();
+
+    await expect(page.getByText('without AI: type it in')).toBeVisible();
+    await page.getByRole('button', { name: 'Check next' }).click();
+    await expect(page.getByRole('img', { name: 'Photo of the receipt' })).toBeVisible();
+    await expect(page.getByText('Sum CHF 0.00')).toBeVisible();
+    const [photo] = await call(request, parent, 'GET', '/inbox/photos');
+    expect(photo.read_state).toBe('manual');
+    expect(errors).toEqual([]);
 });

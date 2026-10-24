@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next';
 import { shrink, uploadPhoto } from '../scan';
 
 interface Props {
+    // Reading with the AI is set up on the server
+    aiEnabled: boolean;
     // All photos are in the inbox (or left out on purpose)
     onDone: () => void;
 }
@@ -11,25 +13,28 @@ interface Shot {
     key: number;
     url: string;
     blob: Blob;
+    withAi: boolean;
     state: 'uploading' | 'done' | 'failed';
 }
 
 // A pile of receipts photographed one after another (receipt scan): each photo goes to the inbox as soon as it is
 // taken, so a closed tab loses at most the one being uploaded; a failed upload keeps its photo here for a retry
-export default function ScanReceipts({ onDone }: Props) {
+export default function ScanReceipts({ aiEnabled, onDone }: Props) {
     const { t } = useTranslation();
     const input = useRef<HTMLInputElement>(null);
     const [shots, setShots] = useState<Shot[]>([]);
+    // Off for a pile the AI shouldn't see (a doctor's bill): those photos are typed in when checked
+    const [withAi, setWithAi] = useState(true);
     const urls = useRef<string[]>([]);
     useEffect(() => () => urls.current.forEach(url => URL.revokeObjectURL(url)), []);
 
     const setState = (key: number, state: Shot['state']) =>
         setShots(list => list.map(shot => (shot.key === key ? { ...shot, state } : shot)));
 
-    const send = async (key: number, blob: Blob) => {
+    const send = async (key: number, blob: Blob, ai: boolean) => {
         setState(key, 'uploading');
         try {
-            await uploadPhoto(blob);
+            await uploadPhoto(blob, ai);
             setState(key, 'done');
         } catch {
             setState(key, 'failed');
@@ -45,8 +50,9 @@ export default function ScanReceipts({ onDone }: Props) {
         const key = Date.now() + Math.random();
         const url = URL.createObjectURL(blob);
         urls.current.push(url);
-        setShots(list => [...list, { key, url, blob, state: 'uploading' }]);
-        await send(key, blob);
+        const ai = aiEnabled && withAi;
+        setShots(list => [...list, { key, url, blob, withAi: ai, state: 'uploading' }]);
+        await send(key, blob, ai);
     };
 
     const uploading = shots.some(shot => shot.state === 'uploading');
@@ -63,6 +69,15 @@ export default function ScanReceipts({ onDone }: Props) {
                 <h3 className="text-lg font-semibold">{t('scan.title')}</h3>
                 <p className="text-sm text-slate-400">{t('scan.intro')}</p>
             </div>
+            {aiEnabled && (
+                <label className="flex items-start gap-2 text-sm">
+                    <input type="checkbox" className="mt-1" checked={withAi} onChange={e => setWithAi(e.target.checked)} />
+                    <span>
+                        {t('scan.withAi')}
+                        <span className="block text-slate-400">{withAi ? t('scan.withAiOn') : t('scan.withAiOff')}</span>
+                    </span>
+                </label>
+            )}
             <input ref={input} type="file" accept="image/*" capture="environment" aria-label={t('scan.camera')}
                 onChange={taken} className="sr-only" />
             {shots.length > 0 && (
@@ -77,7 +92,7 @@ export default function ScanReceipts({ onDone }: Props) {
                                 <>
                                     <p className="text-red-400">{t('scan.failed')}</p>
                                     <button type="button" className="text-blue-400 underline"
-                                        onClick={() => send(shot.key, shot.blob)}>{t('scan.retry')}</button>
+                                        onClick={() => send(shot.key, shot.blob, shot.withAi)}>{t('scan.retry')}</button>
                                 </>
                             )}
                         </li>

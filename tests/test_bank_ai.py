@@ -151,3 +151,20 @@ def test_already_booked_rows_not_sent(client, mum, ai):  # noqa: F811
     assert result["duplicates"] == 4
     assert ai.sent == []
     assert result["ai"]["suggestions"] == {}
+
+
+def test_person_to_person_texts_are_not_sent(client, mum, ai):  # noqa: F811
+    """Names of people in TWINT and transfer texts stay at home (2026-10-24 review); those rows stay unsorted."""
+    ai.answer = answer({})
+    file = bank_file(
+        line("TWINT Geld gesendet an Max Muster", "-20"),
+        line("TWINT Geld erhalten von Erika Beispiel", "15"),
+        line("Gutschrift von Erika Beispiel", "50"),
+        line("Überweisung an Max Muster", "-30"),
+        line("Einkauf TWINT Muster Stans", "-5"),
+    )
+    result = with_ai(client, mum, file)
+    text = sent_text(ai)
+    assert "Max Muster" not in text and "Erika Beispiel" not in text
+    assert "Einkauf TWINT Muster Stans" in text
+    assert [r["category"] for r in result["rows"]][:4] == ["Unsorted", "Other Income", "Other Income", "Unsorted"]

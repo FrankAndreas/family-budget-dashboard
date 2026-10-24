@@ -17,8 +17,10 @@ export async function shrink(file: File): Promise<Blob> {
     return new Promise(resolve => canvas.toBlob(blob => resolve(blob ?? file), 'image/jpeg', 0.85));
 }
 
-export async function uploadPhoto(blob: Blob): Promise<InboxPhoto> {
+// Without the AI, the photo waits to be typed in and is never sent to the AI service
+export async function uploadPhoto(blob: Blob, withAi = true): Promise<InboxPhoto> {
     const body = new FormData();
     body.append('file', blob, 'scan.jpg');
+    if (!withAi) body.append('ai', '0');
     return (await api.post('/api/v1/inbox/photos', body)).data;
 }
