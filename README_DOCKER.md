@@ -63,7 +63,8 @@ printed once in its log:
 sudo docker logs budget-backend 2>&1 | grep "INITIAL PIN"
 ```
 
-Log in as `Admin` with that PIN, change it, and rename Admin in **Settings → Family**. Add the
+Log in as `Admin` with that PIN and change it right away (the log keeps showing the first PIN until the container
+is recreated), then rename Admin in **Settings → Family**. Add the
 other family members there too: there is no sign-up page. Each parent's money is private; to let the other parent
 see or manage it, use **Settings → Sharing** (children with own allowance can share with their parents
 the same way). Costs the parents share, investments and yearly bills are in the **Common**,
