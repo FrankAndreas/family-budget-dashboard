@@ -1,12 +1,14 @@
 """Receipts photographed on the phone wait in the inbox until a parent books them (receipt scan). Invented images."""
 
+import json
 import os
 import time
 from datetime import datetime, timedelta
 
+import pytest
 from files import image_png, pdf_with_text
 
-from app import attachments, database, inbox, models
+from app import attachments, database, inbox, models, receipt_ai, scans
 from helpers import BASE_URL, category_id, create_account, register
 
 PHOTOS = f"{BASE_URL}/inbox/photos"
@@ -131,3 +133,101 @@ def test_suggested_account(client):
     bank = create_account(client, mum, "Mum bank")
     client.post(f"{BASE_URL}/transactions", json={"account_id": bank, "items": items(client)}, headers=mum)
     assert scanned(client, mum)["suggested_account_id"] == bank
+
+
+# Reading in the background (Task 2): a fake AI answers with a fixed receipt
+ANSWER = json.dumps({"shop": "Migros", "date": "2026-10-20", "total": 3.5, "items": [{"name": "Brot", "amount": 3.5}]})
+
+
+class Fake:
+    def __init__(self):
+        self.calls = 0
+        self.down = False
+        self.questions = []
+
+    def complete(self, content):
+        self.calls += 1
+        self.questions.append(content[0]["text"])
+        if self.down:
+            raise receipt_ai.AiUnavailable("down")
+        return ANSWER
+
+
+@pytest.fixture
+def ai(monkeypatch):
+    monkeypatch.setenv("INFOMANIAK_AI_TOKEN", "t")
+    monkeypatch.setenv("INFOMANIAK_AI_PRODUCT_ID", "p")
+    monkeypatch.delenv("RECEIPT_AI_READS_PER_HOUR", raising=False)
+    fake = Fake()
+    monkeypatch.setattr(receipt_ai, "client_for", lambda settings: fake)
+    return fake
+
+
+def states(client, headers):
+    return [p["read_state"] for p in photos(client, headers)]
+
+
+def test_upload_reads_in_background(client, ai):
+    mum = register(client, "mum")
+    photo = scanned(client, mum)
+    [listed] = photos(client, mum)
+    assert (listed["read_state"], listed["shop"], listed["total"]) == ("read", "Migros", 3.5)
+    assert ai.calls == 1
+    assert opened(client, mum, photo["id"])["draft"]["shop"] == "Migros"
+    assert ai.calls == 1
+
+
+def test_reads_in_takers_language(client, ai):
+    mum = register(client, "mum")
+    client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=mum)
+    scanned(client, mum)
+    german = receipt_ai.PROMPTS["de"].split("{")[0][:40]
+    assert ai.questions[0].startswith(german)
+
+
+def test_ai_down_marks_failed_and_open_still_works(client, ai):
+    mum = register(client, "mum")
+    ai.down = True
+    photo = scanned(client, mum)
+    assert states(client, mum) == ["failed"]
+    result = opened(client, mum, photo["id"])
+    assert ai.calls == 2
+    assert result["draft"] is None and result["attachment_id"]
+    ai.down = False
+    assert opened(client, mum, photo["id"])["draft"]["shop"] == "Migros"
+    assert states(client, mum) == ["read"]
+
+
+def test_over_the_limit_waits(client, ai, monkeypatch):
+    monkeypatch.setenv("RECEIPT_AI_READS_PER_HOUR", "1")
+    mum = register(client, "mum")
+    dad = register(client, "dad")
+    scanned(client, mum, "ONE")
+    second = scanned(client, mum, "TWO")
+    assert states(client, mum) == ["read", "waiting"]
+    assert scans.read_waiting() == 0
+    # Opening it uses the opener's reads
+    assert opened(client, dad, second["id"])["draft"]["shop"] == "Migros"
+    assert states(client, mum) == ["read", "read"]
+
+
+def test_resume_after_restart(client, ai):
+    mum = register(client, "mum")
+    ai.down = True
+    photo = scanned(client, mum)
+    ai.down = False
+    with database.SessionLocal() as db:
+        db.get(models.InboxPhoto, photo["id"]).read_state = "reading"
+        db.commit()
+        scans.resume(db)
+    assert scans.read_waiting() == 1
+    assert states(client, mum) == ["read"]
+
+
+def test_receipts_read_unchanged(client, ai):
+    mum = register(client, "mum")
+    response = client.post(f"{BASE_URL}/receipts/read", files={"file": ("beleg.png", image_png())}, headers=mum)
+    assert response.status_code == 200, response.text
+    assert response.json()["draft"]["shop"] == "Migros" and response.json()["attachment_id"]
+    with database.SessionLocal() as db:
+        assert db.query(models.ReceiptRead).count() == 1

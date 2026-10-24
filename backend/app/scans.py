@@ -6,15 +6,19 @@ parent's pending attachment, like releasing a mail; booking that attachment mark
 """
 
 import hashlib
+import logging
+import threading
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
-from . import attachments, auth, database, inbox, messages, models
+from . import attachments, auth, database, i18n, inbox, messages, models, receipt_ai
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 PHOTOS = "/inbox/photos"
 IMAGE_TYPES = {"image/jpeg": "jpg", "image/png": "png"}
@@ -50,8 +54,75 @@ def file_of(photo: models.InboxPhoto):
     return inbox.inbox_dir() / photo.id
 
 
+# One reader at a time: the photos are read one after another, never twice at once
+reading = threading.Lock()
+
+
+def resume(db: Session) -> None:
+    """After a restart: photos whose reading was cut off are read again."""
+    db.query(models.InboxPhoto).filter(models.InboxPhoto.read_state == "reading").update({"read_state": "waiting"})
+    db.commit()
+
+
+def read_into(db: Session, photo: models.InboxPhoto, reader: models.User) -> bool:
+    """Read the photo with the AI, counting toward the reader's hourly limit, in their language. True when read; a
+    429 (limit used up) is raised for the caller, any other problem leaves the photo failed."""
+    settings = receipt_ai.Settings.from_env()
+    i18n.set_current(i18n.user_language(reader))
+    receipt_ai.take_read(db, reader.id, settings.reads_per_hour)
+    try:
+        draft = receipt_ai.ai_draft(db, filename(photo, ""), file_of(photo).read_bytes())
+    except HTTPException:
+        photo.read_state = "failed"
+        db.commit()
+        return False
+    photo.read_state, photo.draft = "read", draft
+    db.commit()
+    return True
+
+
+def read_waiting() -> int:
+    """Read the waiting photos, oldest first, in the background; how many were read. A person whose hourly reads are
+    used up is skipped until the next run (every 15 minutes, or a new upload)."""
+    if not receipt_ai.Settings.from_env().enabled or not reading.acquire(blocking=False):
+        return 0
+    done = 0
+    used_up: set[str] = set()
+    try:
+        with database.SessionLocal() as db:
+            while True:
+                waiting = db.query(models.InboxPhoto).filter(
+                    models.InboxPhoto.read_state == "waiting",
+                    models.InboxPhoto.booked_at.is_(None),
+                    models.InboxPhoto.person_id.is_not(None),
+                    models.InboxPhoto.person_id.not_in(used_up),
+                )
+                photo = waiting.order_by(models.InboxPhoto.taken_at, models.InboxPhoto.id).first()
+                if photo is None or photo.person_id is None:
+                    return done
+                taker = db.get(models.User, photo.person_id)
+                if taker is None:
+                    used_up.add(photo.person_id)
+                    continue
+                photo.read_state = "reading"
+                db.commit()
+                try:
+                    done += read_into(db, photo, taker)
+                except HTTPException:
+                    # The taker's reads are used up: back in line for later
+                    photo.read_state = "waiting"
+                    db.commit()
+                    used_up.add(taker.id)
+    except Exception:
+        logger.exception("Reading scanned receipts failed")
+        return done
+    finally:
+        reading.release()
+
+
 @router.post(PHOTOS)
 async def upload_photo(
+    background: BackgroundTasks,
     file: UploadFile = File(...),
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
@@ -67,6 +138,7 @@ async def upload_photo(
     db.flush()
     file_of(photo).write_bytes(data)
     db.commit()
+    background.add_task(read_waiting)
     return photo_out(db, current_user, photo)
 
 
@@ -103,7 +175,7 @@ def filename(photo: models.InboxPhoto, content_type: str) -> str:
 
 
 @router.post(PHOTOS + "/{photo_id}/open")
-def open_photo(
+async def open_photo(
     photo_id: str,
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
@@ -111,6 +183,12 @@ def open_photo(
     """A parent checks the photo: its draft (if the AI read it) and the photo as their pending attachment."""
     inbox.require_parent(current_user)
     photo = get_photo(db, photo_id)
+    if photo.read_state != "read" and receipt_ai.Settings.from_env().enabled:
+        # Not read yet (waiting, failed, or over the limit): one more try, on the opener's reads
+        try:
+            await run_in_threadpool(read_into, db, photo, current_user)
+        except HTTPException:
+            pass
     data = file_of(photo).read_bytes()
     draft: Optional[dict] = photo.draft if photo.read_state == "read" else None
     attachment = attachments.store(db, current_user, filename(photo, attachments.detect(data, "") or ""), data, None)
