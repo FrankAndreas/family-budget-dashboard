@@ -31,7 +31,7 @@ export default defineConfig({
             env: {
                 DATABASE_URL: `sqlite:///${database}`,
                 INITIAL_ADMIN_PIN: '1111',
-                SECRET_KEY: 'e2e-only',
+                SECRET_KEY: 'e2e-only-key-not-used-anywhere-else',
                 CORS_ORIGINS: FRONTEND,
                 DEFAULT_LANGUAGE: 'en',
                 // Receipt reading with a fake AI: a fixed Migros receipt, never the real service (issue #56)
