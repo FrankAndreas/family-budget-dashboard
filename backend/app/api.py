@@ -49,13 +49,15 @@ def check_shared(db: Session, split_id: Optional[str], account_id: str, category
     return dict(split.shares)
 
 
-def check_asset(db: Session, current_user, asset_id: Optional[str]) -> None:
-    """An expense can belong to an investment the current user can see."""
+def check_asset(db: Session, current_user, asset_id: Optional[str], linked: Optional[str] = None) -> None:
+    """An expense can belong to an investment the current user can see; to an archived one only if it already did."""
     if asset_id is None:
         return
     asset = db.query(models.Asset).filter(models.Asset.id == asset_id).first()
     if not asset or not visible_owner(db, current_user, asset.owner_id, asset.split_id):
         raise messages.api_error(400, "investment_not_found")
+    if asset.archived_on and asset_id != linked:
+        raise messages.api_error(400, "investment_archived")
 
 
 # Auth Routes
@@ -403,7 +405,7 @@ def update_receipt(
         transaction.split_shares = check_shared(db, update.split_id, transaction.account_id, category)
         transaction.split_id = update.split_id
     if "asset_id" in fields:
-        check_asset(db, user, update.asset_id)
+        check_asset(db, user, update.asset_id, transaction.asset_id)
         transaction.asset_id = update.asset_id
     attachments.link(db, user, transaction, update.attachment_ids)
     db.commit()
@@ -475,7 +477,7 @@ def change_transaction(
     # The split's percents are read again only when the split itself changes; otherwise the
     # booked copy stays (also when that split was deleted since)
     if "asset_id" in fields:
-        check_asset(db, current_user, transaction_update.asset_id)
+        check_asset(db, current_user, transaction_update.asset_id, db_transaction.asset_id)
     if "split_id" in fields and transaction_update.split_id != db_transaction.split_id:
         split_shares = check_shared(db, transaction_update.split_id, db_transaction.account_id, category)
     else:

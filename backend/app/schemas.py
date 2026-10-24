@@ -454,10 +454,16 @@ class AssetIn(BaseModel):
     owner_id: Optional[str] = None
     split_id: Optional[str] = None
     notes: Optional[str] = None
+    tag_id: Optional[str] = None
+
+
+class AssetArchive(BaseModel):
+    archived_on: date
 
 
 class Asset(AssetIn):
     id: str
+    archived_on: Optional[date] = None
     age_years: float
     # Purchase date in the future: not bought yet
     planned: bool = False

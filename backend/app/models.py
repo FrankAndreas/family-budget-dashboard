@@ -355,6 +355,10 @@ class Asset(Base):
     owner_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     split_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("splits.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(String, nullable=True)
+    # Groups it on the Investments tab
+    tag_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("tags.id", ondelete="SET NULL"), nullable=True)
+    # Sold or scrapped on this day: out of every total, costs frozen at this day
+    archived_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
 
 
 class Settlement(Base):

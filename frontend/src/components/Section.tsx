@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRememberedOpen } from '../useRememberedOpen';
 
 interface Props {
     // Remembers whether the section is open, in this browser
@@ -7,32 +7,10 @@ interface Props {
     children: React.ReactNode;
 }
 
-const WIDE = '(min-width: 768px)';
-
-function initiallyOpen(key: string): boolean {
-    try {
-        const stored = localStorage.getItem(key);
-        if (stored !== null) return stored === '1';
-    } catch {
-        // No storage (private window): the default below
-    }
-    return window.matchMedia?.(WIDE).matches ?? true;
-}
-
 // A Settings section that folds (issue #89): on a phone they start folded, so Settings is a short list of headings;
 // on a wider screen they start open
 export default function Section({ id, title, children }: Props) {
-    const key = `settings.section.${id}`;
-    const [open, setOpen] = useState(() => initiallyOpen(key));
-    const toggle = (event: React.SyntheticEvent<HTMLDetailsElement>) => {
-        const now = event.currentTarget.open;
-        setOpen(now);
-        try {
-            localStorage.setItem(key, now ? '1' : '0');
-        } catch {
-            // Not remembered: fine
-        }
-    };
+    const { open, toggle } = useRememberedOpen(`settings.section.${id}`);
     return (
         <details open={open} onToggle={toggle} className="glass-card group">
             <summary className="p-4 sm:p-6 cursor-pointer list-none flex justify-between items-center gap-3 [&::-webkit-details-marker]:hidden">

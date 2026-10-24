@@ -4,15 +4,19 @@ import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import { useFamily } from '../useFamily';
 import { accessTo, canWrite } from '../family';
-import { money, useAssets, useSplits, type Asset } from '../finance';
-import { formatDate } from '../format';
+import { assetTotals, money, useAssets, useSplits, type Asset } from '../finance';
 import { ownerFields, ownerValue } from '../ownership';
+import { useTags } from '../receipts';
 import OwnerSelect from './OwnerSelect';
+import AssetCard from './AssetCard';
+import AssetGroup, { ArchivedGroup } from './AssetGroup';
 import { useScrollIntoView } from '../useScrollIntoView';
 
 interface Expense { id: string; amount: number; date: string; description: string | null }
 type Filter = 'all' | 'mine' | 'common' | 'others';
 const FILTERS: Filter[] = ['all', 'mine', 'common', 'others'];
+// The tag select's choice for making a new tag
+const NEW_TAG = 'new';
 
 const emptyForm = (userId: string) => ({
     id: null as string | null,
@@ -21,16 +25,20 @@ const emptyForm = (userId: string) => ({
     purchase_date: new Date().toISOString().slice(0, 10),
     lifespan_years: '5',
     owner: `owner:${userId}`,
+    tag: '',
+    newTag: '',
     notes: ''
 });
 
-// Big purchases (TV, fridge, car, bike): age, when to replace them, what to set aside, and what they cost so far
+// Big purchases (TV, fridge, car, bike): age, when to replace them, what to set aside, and what they cost so far;
+// grouped by tag, with what each group costs together
 export default function Investments() {
     const { t } = useTranslation();
     const { user } = useAuth();
     const { users, shares } = useFamily();
     const { splits } = useSplits();
     const { assets, reload } = useAssets();
+    const { tags, reload: reloadTags } = useTags();
     const [filter, setFilter] = useState<Filter>('all');
     const [form, setForm] = useState<ReturnType<typeof emptyForm> | null>(null);
     const [openId, setOpenId] = useState<string | null>(null);
@@ -54,6 +62,24 @@ export default function Investments() {
         (filter === 'common' && a.split_id) ||
         (filter === 'others' && a.owner_id && a.owner_id !== user?.id)
     );
+    const active = shown.filter(a => !a.archived_on);
+    const archived = shown.filter(a => a.archived_on);
+    // Per tag (an unknown or no tag: "No tag" last among equals), the costliest group first
+    const groups = [...tags.map(tag => ({ id: tag.id, title: `${tag.icon ? `${tag.icon} ` : ''}${tag.name}`, assets: active.filter(a => a.tag_id === tag.id) })),
+        { id: 'none', title: t('investments.noTag'), assets: active.filter(a => !a.tag_id || !tags.some(tag => tag.id === a.tag_id)) }]
+        .filter(g => g.assets.length > 0)
+        .sort((a, b) => assetTotals(b.assets).monthly - assetTotals(a.assets).monthly);
+    const all = assetTotals(active);
+
+    const call = async (request: () => Promise<unknown>, failed: string) => {
+        try {
+            await request();
+            setError('');
+            reload();
+        } catch (err) {
+            setError(errorMessage(err, failed));
+        }
+    };
 
     const toggle = async (asset: Asset) => {
         if (openId === asset.id) {
@@ -72,15 +98,21 @@ export default function Investments() {
     const save = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!form) return;
-        const body = {
-            name: form.name,
-            price: parseFloat(form.price),
-            purchase_date: form.purchase_date,
-            lifespan_years: parseInt(form.lifespan_years, 10),
-            notes: form.notes || null,
-            ...ownerFields(form.owner)
-        };
         try {
+            let tagId: string | null = form.tag || null;
+            if (form.tag === NEW_TAG) {
+                tagId = (await api.post('/api/v1/tags', { name: form.newTag })).data.id;
+                reloadTags();
+            }
+            const body = {
+                name: form.name,
+                price: parseFloat(form.price),
+                purchase_date: form.purchase_date,
+                lifespan_years: parseInt(form.lifespan_years, 10),
+                notes: form.notes || null,
+                tag_id: tagId,
+                ...ownerFields(form.owner)
+            };
             if (form.id) await api.put(`/api/v1/assets/${form.id}`, body);
             else await api.post('/api/v1/assets', body);
             setForm(null);
@@ -91,14 +123,9 @@ export default function Investments() {
         }
     };
 
-    const remove = async (asset: Asset) => {
+    const remove = (asset: Asset) => {
         if (!confirm(t('investments.confirmDelete', { name: asset.name }))) return;
-        try {
-            await api.delete(`/api/v1/assets/${asset.id}`);
-            reload();
-        } catch (err) {
-            setError(errorMessage(err, t('investments.deleteFailed')));
-        }
+        call(() => api.delete(`/api/v1/assets/${asset.id}`), t('investments.deleteFailed'));
     };
 
     const edit = (asset: Asset) => setForm({
@@ -108,8 +135,20 @@ export default function Investments() {
         purchase_date: asset.purchase_date,
         lifespan_years: String(asset.lifespan_years),
         owner: ownerValue(asset),
+        tag: asset.tag_id ?? '',
+        newTag: '',
         notes: asset.notes ?? ''
     });
+
+    const card = (asset: Asset) => (
+        <AssetCard key={asset.id} asset={asset} owner={ownerLabel(asset)} canChange={canChange(asset)}
+            expenses={openId === asset.id ? expenses : null}
+            onToggleCosts={() => toggle(asset)}
+            onEdit={() => edit(asset)}
+            onDelete={() => remove(asset)}
+            onArchive={(on) => call(() => api.post(`/api/v1/assets/${asset.id}/archive`, { archived_on: on }), t('investments.archiveFailed'))}
+            onRestore={() => call(() => api.delete(`/api/v1/assets/${asset.id}/archive`), t('investments.archiveFailed'))} />
+    );
 
     const input = 'w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
 
@@ -149,7 +188,19 @@ export default function Investments() {
                             onChange={(e) => setForm({ ...form, lifespan_years: e.target.value })} required />
                     </label>
                     <OwnerSelect value={form.owner} onChange={(owner) => setForm({ ...form, owner })} />
-                    <input className={input} placeholder={t('investments.notesPlaceholder')} value={form.notes}
+                    <div className="flex gap-2">
+                        <select className={input} value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })}
+                            aria-label={t('investments.tag')}>
+                            <option value="">{t('investments.noTag')}</option>
+                            {tags.map(tag => <option key={tag.id} value={tag.id}>{tag.icon ? `${tag.icon} ` : ''}{tag.name}</option>)}
+                            <option value={NEW_TAG}>{t('investments.newTag')}</option>
+                        </select>
+                        {form.tag === NEW_TAG && (
+                            <input className={input} value={form.newTag} onChange={(e) => setForm({ ...form, newTag: e.target.value })}
+                                aria-label={t('investments.newTagName')} placeholder={t('investments.newTagName')} required maxLength={50} />
+                        )}
+                    </div>
+                    <input className={`${input} md:col-span-2`} placeholder={t('investments.notesPlaceholder')} value={form.notes}
                         onChange={(e) => setForm({ ...form, notes: e.target.value })} aria-label={t('investments.notes')} />
                     <div className="flex gap-2 md:col-span-2">
                         <button type="submit" className="btn-primary flex-1">{form.id ? t('common.save') : t('investments.addItem')}</button>
@@ -161,61 +212,20 @@ export default function Investments() {
             {shown.length === 0 ? (
                 <p className="text-slate-400 text-center py-8">{t('investments.none')}</p>
             ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {shown.map(asset => {
-                        const used = Math.min(asset.age_years / asset.lifespan_years, 1);
-                        return (
-                            <div key={asset.id} className="p-4 rounded-lg bg-slate-800/30 border border-slate-700">
-                                <div className="flex justify-between gap-2">
-                                    <h3 className="font-semibold text-lg">{asset.name}</h3>
-                                    {asset.planned && (
-                                        <span className="text-xs px-2 py-0.5 h-fit rounded-full bg-sky-500/20 text-sky-300">{t('investments.planned')}</span>
-                                    )}
-                                    {asset.is_due && (
-                                        <span className="text-xs px-2 py-0.5 h-fit rounded-full bg-amber-500/20 text-amber-300">{t('investments.due')}</span>
-                                    )}
-                                </div>
-                                <p className="text-xs text-slate-500">{ownerLabel(asset)}</p>
-                                <div className="mt-3 h-2 rounded bg-slate-700" role="img"
-                                    aria-label={t('investments.age', { age: asset.age_years, lifespan: asset.lifespan_years })}>
-                                    <div className={`h-2 rounded ${asset.is_due ? 'bg-amber-400' : 'bg-cyan-400'}`}
-                                        style={{ width: `${used * 100}%` }} />
-                                </div>
-                                <p className="text-sm text-slate-400 mt-1">
-                                    {asset.planned
-                                        ? t('investments.plannedFor', { date: formatDate(asset.purchase_date) })
-                                        : t('investments.age', { age: asset.age_years, lifespan: asset.lifespan_years })}
-                                    {' · '}{t('investments.replace', { year: new Date(asset.replacement_due).getFullYear() })}
-                                </p>
-                                <p className="mt-2">
-                                    {t('investments.setAsideBefore')}<strong>{money(asset.monthly_set_aside)}</strong>{t('investments.setAsideAfter')}
-                                </p>
-                                <div className="flex gap-3 mt-3 text-sm">
-                                    <button onClick={() => toggle(asset)} className="text-slate-400 hover:text-white">
-                                        {openId === asset.id ? t('investments.hideCosts') : t('investments.costs')}
-                                    </button>
-                                    {canChange(asset) && (<>
-                                        <button onClick={() => edit(asset)} className="text-slate-400 hover:text-white">{t('common.edit')}</button>
-                                        <button onClick={() => remove(asset)} className="text-slate-400 hover:text-red-400">{t('common.delete')}</button>
-                                    </>)}
-                                </div>
-                                {openId === asset.id && (
-                                    <div className="mt-3 pt-3 border-t border-slate-700 text-sm space-y-1">
-                                        <p>{t('investments.boughtFor', { amount: money(asset.price), date: formatDate(asset.purchase_date) })}</p>
-                                        {expenses.map(e => (
-                                            <p key={e.id} className="text-slate-400">
-                                                {formatDate(e.date)} · {e.description || t('common.noDescription')} · {money(Math.abs(e.amount))}
-                                            </p>
-                                        ))}
-                                        <p className="font-semibold">
-                                            {t('investments.total', { total: money(asset.total_cost), perYear: money(asset.cost_per_year) })}
-                                        </p>
-                                        {asset.notes && <p className="text-slate-400">📝 {asset.notes}</p>}
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
+                <div className="space-y-3">
+                    {active.length > 0 && (
+                        <p data-testid="investments-total" className="text-sm">
+                            {t('investments.allTotal')}{' · '}<strong>{t('investments.perMonth', { amount: money(all.monthly) })}</strong>
+                            {' · '}{t('investments.soFar', { amount: money(all.total) })}
+                            {' · '}{t('investments.perYearTotal', { amount: money(all.perYear) })}
+                        </p>
+                    )}
+                    {groups.map(group => (
+                        <AssetGroup key={group.id} id={group.id} title={group.title} assets={group.assets}>
+                            {[...group.assets].sort((a, b) => a.replacement_due.localeCompare(b.replacement_due)).map(card)}
+                        </AssetGroup>
+                    ))}
+                    {archived.length > 0 && <ArchivedGroup count={archived.length}>{archived.map(card)}</ArchivedGroup>}
                 </div>
             )}
         </div>

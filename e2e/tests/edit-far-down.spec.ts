@@ -35,6 +35,8 @@ test('the form comes into view when editing an entry far down', async ({ page, r
     await expect(page.getByPlaceholder('Description', { exact: true })).toHaveValue('Buchung 1');
 
     await tab(page, '📦 Investments');
+    // On a phone the groups start folded
+    await page.getByText('No tag', { exact: true }).click();
     await expect(page.getByText('Gerät 12')).toBeVisible();
     await editLast(page, 'Edit');
     await expect(page.getByLabel('Name', { exact: true })).toBeInViewport();
