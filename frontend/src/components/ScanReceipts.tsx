@@ -40,7 +40,8 @@ export default function ScanReceipts({ onDone }: Props) {
         const file = event.target.files?.[0];
         event.target.value = '';
         if (!file) return;
-        const blob = await shrink(file);
+        // A photo the browser can't shrink goes up as it is: the server decides, and a failure shows with a retry
+        const blob = await shrink(file).catch(() => file);
         const key = Date.now() + Math.random();
         const url = URL.createObjectURL(blob);
         urls.current.push(url);

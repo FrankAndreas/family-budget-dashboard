@@ -53,3 +53,16 @@ test('scan a pile of receipts, then check and book them one after another', asyn
         .toEqual([[2, 1], [2, 1]]);
     expect(errors).toEqual([]);
 });
+
+// A photo the browser can't decode is never dropped silently: it shows as failed, so the paper isn't thrown away
+test('a photo that cannot be read shows as failed', async ({ page, request }) => {
+    const parent = await newParent(request);
+    await call(request, parent, 'POST', '/accounts', { name: 'Konto', type: 'BANK' });
+    await login(page, parent);
+    await page.getByRole('button', { name: '📷 Scan receipts' }).first().click();
+    await page.getByLabel('Receipt photo').setInputFiles({
+        name: 'broken.png', mimeType: 'image/png', buffer: Buffer.from('not a picture'),
+    });
+    await expect(page.getByText('upload failed')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Retry' })).toBeVisible();
+});
