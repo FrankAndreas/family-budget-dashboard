@@ -52,7 +52,8 @@ Bookings come in by hand, or in bulk from bank and Migros exports through small 
 
 ## Tests
 
-- **Backend:** `pip install -r tests/requirements.txt`, then `pytest` from the repository root (about 30 s).
+- **Backend:** `pip install -r tests/requirements.txt`, then `pytest -n auto` from the repository root (about 25 s on 8 cores; plain `pytest` runs them one
+  after another, about 60 s).
 - **Browser:** Playwright end-to-end tests in [e2e/](e2e/README.md).
 - **Frontend:** `npm run lint`, `npm run type-check`, `npm run build` in `frontend/`.
 - CI runs all of them on every pull request (`.github/workflows/`).

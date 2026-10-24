@@ -56,7 +56,7 @@ jobs:
       - name: Run pytest
         run: |
           pip install -r tests/requirements.txt
-          pytest -v --cov=backend/app --cov-report=xml --cov-report=term
+          pytest -n auto --cov=backend/app --cov-report=xml --cov-report=term
       
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v7
