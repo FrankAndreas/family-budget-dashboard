@@ -37,10 +37,23 @@ On a failure, `test-results/` has a screenshot and a trace (`npx playwright show
 
 | File | Covers |
 |---|---|
+| `accounts.spec.ts` | accounts and bookings through the forms |
+| `backup.spec.ts` | the backup leaves out view-only shared accounts |
+| `bank-import.spec.ts` | bank statement upload: account by IBAN, rules, AI categories, balance check |
+| `categories.spec.ts` | managing categories in Settings |
+| `common-budget.spec.ts` | common budget with more than two parents |
+| `german.spec.ts` | switching the app to German and back |
+| `import-rules.spec.ts` | category changed in the preview, remembered as a rule, used by the next import, the schema's `x-rules` |
+| `login-limit.spec.ts` | the login page shows the lock after too many wrong PINs |
+| `logout-everywhere.spec.ts` | log out everywhere, changing one's own PIN |
 | `month-check.spec.ts` | Accounts tab, clearing account, month check books the gap |
+| `receipt-mails.spec.ts` | a forwarded receipt mail is released, read and booked |
+| `receipt-onto-payment.spec.ts` | a receipt read after the statement goes onto the bank booking that paid it |
+| `receipts.spec.ts` | receipt read by the AI, an item with two tags, analytics and a tag budget |
+| `reconciliation.spec.ts` | a statement confirms a receipt typed in before it; badges and open points |
+| `reports.spec.ts` | budget spending and analytics totals |
 | `transfers.spec.ts` | bank converter output imported, transfer direction, deleting a transfer |
 | `wishes.spec.ts` | wish lists, order, family plan with running total, search links, bought, best price |
-| `import-rules.spec.ts` | category changed in the preview, remembered as a rule, used by the next import, the schema's `x-rules` |
 
 New tests: one file per feature, start with `newParent()` and `login()` from `tests/helpers.ts`, and use invented
 data only (the repository is public).
