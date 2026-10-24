@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import type { Tag } from '../receipts';
+import Section from './Section';
 
 type Usage = Record<string, { items: number; budgets: number }>;
 
@@ -67,8 +68,7 @@ export default function TagManager() {
     };
 
     return (
-        <section className="glass-card p-6">
-            <h2 className="text-xl font-bold mb-1">{t('tags.title')}</h2>
+        <Section id="tags" title={t('tags.title')}>
             <p className="text-sm text-slate-400 mb-4">{t('tags.intro')}</p>
             {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
@@ -107,6 +107,6 @@ export default function TagManager() {
                     </li>
                 ))}
             </ul>
-        </section>
+        </Section>
     );
 }

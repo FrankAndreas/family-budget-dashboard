@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import i18n, { type Language } from '../i18n';
+import Section from './Section';
 
 // Settings → Logins: the person's language, and ending every login of theirs on every device (e.g. a lost phone)
 export default function Logins() {
@@ -31,8 +32,7 @@ export default function Logins() {
     };
 
     return (
-        <div className="glass-card p-6">
-            <h2 className="text-xl font-bold mb-2">{t('logins.title')}</h2>
+        <Section id="logins" title={t('logins.title')}>
             <label className="flex items-center gap-2 text-sm mb-4">
                 {t('logins.language')}
                 <select aria-label={t('logins.language')} value={user?.language ?? i18n.language}
@@ -45,6 +45,6 @@ export default function Logins() {
             <p className="text-sm text-slate-400 mb-4">{t('logins.intro')}</p>
             {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
             <button onClick={logoutEverywhere} className="btn-primary text-sm">{t('logins.logoutEverywhere')}</button>
-        </div>
+        </Section>
     );
 }

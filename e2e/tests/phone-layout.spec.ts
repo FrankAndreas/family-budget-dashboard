@@ -46,3 +46,37 @@ test('the overview fits a phone', async ({ page, request }) => {
     }
     expect(errors).toEqual([]);
 });
+
+// Settings on a phone (issue #89): the sections start folded, and the long list of import rules shows only its
+// count until it is opened or searched
+test('settings fit a phone', async ({ page, request }) => {
+    const parent = await newParent(request);
+    // Rules are family-wide and other tests share the database: a text of this test's own
+    const shop = `Velo ${parent.name}`;
+    const categories = await call(request, parent, 'GET', '/categories');
+    const groceries = categories.find((c: { name: string }) => c.name === 'Groceries').id;
+    await call(request, parent, 'POST', '/import/rules', { text: shop, category_id: groceries });
+    const errors = await login(page, parent);
+    await page.getByRole('button', { name: 'More tabs' }).click();
+    await page.getByRole('button', { name: '⚙️ Settings' }).click();
+
+    // Folded: only the headings, so the whole page is short
+    await expect(page.getByRole('heading', { name: 'Data Management' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Add a family member' })).toBeHidden();
+    expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(2000);
+
+    // A tap opens a section; the rules show their count, and a search finds one
+    await page.getByRole('heading', { name: 'Data Management' }).click();
+    await expect(page.getByText(`${shop} → Groceries`)).toBeHidden();
+    await expect(page.getByRole('button', { name: /^Show all \d+ rules$/ })).toBeVisible();
+    const rules = page.getByRole('list', { name: 'Import rules' }).getByRole('listitem');
+    await page.getByLabel('Search rules').fill(shop.toLowerCase());
+    await expect(rules).toHaveCount(1);
+    await expect(page.getByText(`${shop} → Groceries`)).toBeVisible();
+    await page.getByLabel('Search rules').fill('');
+    await page.getByRole('button', { name: /^Show all \d+ rules$/ }).click();
+    expect(await rules.count()).toBeGreaterThan(1);
+    await page.getByRole('button', { name: 'Hide the rules' }).click();
+    await expect(rules).toHaveCount(0);
+    expect(errors).toEqual([]);
+});

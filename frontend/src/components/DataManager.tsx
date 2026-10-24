@@ -6,6 +6,7 @@ import type { FamilyUser } from '../family';
 import { downloadBlob } from '../download';
 import ImportTransactions from './ImportTransactions';
 import ImportRules from './ImportRules';
+import Section from './Section';
 
 interface ExportAccount {
     id: string;
@@ -246,8 +247,7 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
     };
 
     return (
-        <div className="glass-card p-6">
-            <h2 className="text-2xl font-bold mb-6">{t('data.title')}</h2>
+        <Section id="data" title={t('data.title')}>
 
             {status && (
                 <div className={`mb-6 p-3 rounded-lg flex justify-between items-center border ${status.kind === 'success'
@@ -346,6 +346,6 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
                     </div>
                 </div>
             </div>
-        </div>
+        </Section>
     );
 }

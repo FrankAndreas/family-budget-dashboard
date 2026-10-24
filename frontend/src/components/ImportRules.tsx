@@ -20,6 +20,9 @@ export default function ImportRules({ version }: { version: number }) {
     const [rules, setRules] = useState<Rule[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [shown, setShown] = useState<string | null>(null);
+    // The suggested rules alone are about 60 (issue #89): the list shows its count until opened or searched
+    const [listOpen, setListOpen] = useState(false);
+    const [query, setQuery] = useState('');
     const [message, setMessage] = useState('');
     const [reload, setReload] = useState(0);
     const [form, setForm] = useState<Form>(empty);
@@ -53,6 +56,8 @@ export default function ImportRules({ version }: { version: number }) {
         e.preventDefault();
         try {
             await api.post('/api/v1/import/rules', form);
+            // The folded list shows the new rule by searching for it
+            setQuery(form.text);
             setForm(empty);
             setMessage('');
             setReload(r => r + 1);
@@ -110,6 +115,11 @@ export default function ImportRules({ version }: { version: number }) {
         </label>
     </>);
 
+    const needle = query.trim().toLocaleLowerCase();
+    const listed = needle
+        ? rules.filter(rule => `${rule.text} ${rule.category}`.toLocaleLowerCase().includes(needle))
+        : listOpen ? rules : [];
+
     return (
         <div className="mb-8">
             <h3 className="text-lg font-semibold mb-2">{t('importRules.title')}</h3>
@@ -122,9 +132,21 @@ export default function ImportRules({ version }: { version: number }) {
             {message && <p className="text-sm text-slate-300 mb-2">{message}</p>}
             {rules.length === 0 ? (
                 <p className="text-sm text-slate-400">{t('importRules.none')}</p>
-            ) : (
-                <ul className="space-y-2">
-                    {rules.map(rule => (
+            ) : (<>
+                <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <input type="search" value={query} onChange={e => setQuery(e.target.value)}
+                        aria-label={t('importRules.search')} placeholder={t('importRules.search')}
+                        className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white text-sm flex-1 min-w-40" />
+                    {!query && (
+                        <button type="button" onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}
+                            className="text-sm text-blue-400 hover:underline">
+                            {listOpen ? t('importRules.hideList') : t('importRules.showList', { count: rules.length })}
+                        </button>
+                    )}
+                </div>
+                {query && listed.length === 0 && <p className="text-sm text-slate-400">{t('importRules.noMatch')}</p>}
+                <ul className="space-y-2" aria-label={t('importRules.title')}>
+                    {listed.map(rule => (
                         <li key={rule.id} className="p-2 rounded bg-slate-800/30 text-sm">
                             {editing?.id === rule.id ? (
                                 <form onSubmit={save} className="flex flex-wrap items-center gap-2">
@@ -158,7 +180,7 @@ export default function ImportRules({ version }: { version: number }) {
                         </li>
                     ))}
                 </ul>
-            )}
+            </>)}
         </div>
     );
 }

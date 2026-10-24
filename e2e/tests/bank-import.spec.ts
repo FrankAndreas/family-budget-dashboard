@@ -21,6 +21,7 @@ test('bank statement upload', async ({ page, request }, testInfo) => {
 
     await page.getByRole('button', { name: 'Settings' }).click();
     // A new database starts with the suggested rules; the button adds only what is missing
+    await page.getByLabel('Search rules').fill('DOSENBACH');
     await expect(page.getByText('DOSENBACH SPORT → Sport')).toBeVisible();
     await page.getByRole('button', { name: 'Add suggested rules (Swiss shops)' }).click();
     await expect(page.getByText('0 rules and 0 new categories added.')).toBeVisible();

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import type { Category } from '../accounts';
+import Section from './Section';
 
 type Usage = Record<string, { transactions: number; budgets: number; planned_costs: number; import_rules: number; items: number }>;
 
@@ -80,8 +81,7 @@ export default function CategoryManager() {
         .sort((a, b) => a.name.localeCompare(b.name));
 
     return (
-        <section className="glass-card p-6">
-            <h2 className="text-xl font-bold mb-1">{t('categories.title')}</h2>
+        <Section id="categories" title={t('categories.title')}>
             <p className="text-sm text-slate-400 mb-4">{t('categories.intro')}</p>
             {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
@@ -139,6 +139,6 @@ export default function CategoryManager() {
                     </ul>
                 </div>
             ))}
-        </section>
+        </Section>
     );
 }

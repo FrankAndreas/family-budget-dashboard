@@ -526,6 +526,11 @@ const en: Messages = {
         newBooking: 'none: a new booking',
     },
     importRules: {
+        search: 'Search rules',
+        showList_one: 'Show the rule',
+        showList_other: 'Show all {{count}} rules',
+        hideList: 'Hide the rules',
+        noMatch: 'No rule matches.',
         title: 'Import rules',
         intro: 'Imported bookings (bank statements and files) whose description contains the text as whole words get the category, when they arrive as "Unsorted" or "Other Income"; the longest matching text wins. The bank converter uses them too (download the JSON Schema again); rules in converter.toml come first.',
         none: 'No rules yet. Add one here, add the suggested rules, or change a category in the import preview and tick “remember”.',

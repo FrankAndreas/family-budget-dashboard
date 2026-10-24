@@ -524,6 +524,11 @@ const de = {
         newBooking: 'keine: neue Buchung',
     },
     importRules: {
+        search: 'Regeln durchsuchen',
+        showList_one: 'Regel zeigen',
+        showList_other: 'Alle {{count}} Regeln zeigen',
+        hideList: 'Regeln ausblenden',
+        noMatch: 'Keine Regel passt.',
         title: 'Importregeln',
         intro: 'Importierte Buchungen (Kontoauszüge und Dateien), deren Beschreibung den Text als ganze Wörter enthält, bekommen die Kategorie, wenn sie als «Unsortiert» oder «Übrige Einnahmen» ankommen; der längste passende Text gewinnt. Der Bank-Konverter nutzt sie auch (lade das JSON Schema neu herunter); Regeln in converter.toml haben Vorrang.',
         none: 'Noch keine Regeln. Füge hier eine hinzu, übernimm die vorgeschlagenen Regeln, oder ändere in der Import-Vorschau eine Kategorie und setze das Häkchen bei «merken».',
