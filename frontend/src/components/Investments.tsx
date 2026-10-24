@@ -8,6 +8,7 @@ import { money, useAssets, useSplits, type Asset } from '../finance';
 import { formatDate } from '../format';
 import { ownerFields, ownerValue } from '../ownership';
 import OwnerSelect from './OwnerSelect';
+import { useScrollIntoView } from '../useScrollIntoView';
 
 interface Expense { id: string; amount: number; date: string; description: string | null }
 type Filter = 'all' | 'mine' | 'common' | 'others';
@@ -35,6 +36,7 @@ export default function Investments() {
     const [openId, setOpenId] = useState<string | null>(null);
     const [expenses, setExpenses] = useState<Expense[]>([]);
     const [error, setError] = useState('');
+    const formRef = useScrollIntoView<HTMLFormElement>(form?.id);
 
     const ownerLabel = (asset: Asset) => {
         if (asset.split_id) {
@@ -133,7 +135,7 @@ export default function Investments() {
             {error && <p className="mb-3 text-red-300">{error}</p>}
 
             {form && (
-                <form onSubmit={save} className="mb-6 p-4 bg-slate-800/30 rounded-lg grid gap-2 md:grid-cols-2">
+                <form ref={formRef} onSubmit={save} className="scroll-mt-4 mb-6 p-4 bg-slate-800/30 rounded-lg grid gap-2 md:grid-cols-2">
                     <input className={input} placeholder={t('investments.namePlaceholder')} value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label={t('investments.name')} required />
                     <input className={input} type="number" step="0.01" min="0.01" placeholder={t('investments.pricePlaceholder')} value={form.price}

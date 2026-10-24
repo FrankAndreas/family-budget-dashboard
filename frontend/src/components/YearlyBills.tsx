@@ -8,6 +8,7 @@ import { money, useSplits, type PlannedCost } from '../finance';
 import { formatMonth, monthNames } from '../format';
 import { ownerFields, ownerValue } from '../ownership';
 import OwnerSelect from './OwnerSelect';
+import { useScrollIntoView } from '../useScrollIntoView';
 
 interface Category { id: string; name: string; type: string }
 
@@ -30,6 +31,7 @@ export default function YearlyBills() {
     const [bills, setBills] = useState<PlannedCost[]>([]);
     const [categories, setCategories] = useState<Category[]>([]);
     const [form, setForm] = useState<ReturnType<typeof emptyForm> | null>(null);
+    const formRef = useScrollIntoView<HTMLFormElement>(form?.id);
     const [error, setError] = useState('');
     const [version, setVersion] = useState(0);
 
@@ -124,7 +126,7 @@ export default function YearlyBills() {
                 {error && <p className="mb-3 text-red-300">{error}</p>}
 
                 {form && (
-                    <form onSubmit={save} className="mb-6 p-4 bg-slate-800/30 rounded-lg grid gap-2 md:grid-cols-2">
+                    <form ref={formRef} onSubmit={save} className="scroll-mt-4 mb-6 p-4 bg-slate-800/30 rounded-lg grid gap-2 md:grid-cols-2">
                         <input className={input} placeholder={t('bills.namePlaceholder')} value={form.name}
                             onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label={t('bills.name')} required />
                         <input className={input} type="number" step="0.01" min="0.01" placeholder={t('bills.amountPlaceholder')} value={form.amount}

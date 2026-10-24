@@ -81,6 +81,7 @@ const en: Messages = {
         mine: 'Mine',
         someones: "{{name}}'s",
         common: 'Common: {{name}}',
+        othersHint: 'Others appear here once they let you manage their money (Settings → Sharing).',
     },
     accounts: {
         myBalance: 'My Balance',
