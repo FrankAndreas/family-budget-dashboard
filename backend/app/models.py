@@ -264,7 +264,7 @@ class InboxPhoto(Base):
     size: Mapped[int] = mapped_column(Integer)
     # Booking an attachment with the same content marks the photo booked
     sha256: Mapped[str] = mapped_column(String, index=True)
-    # waiting, reading, read or failed
+    # waiting / reading / read / failed; manual: scanned with "Read with AI" off, never sent to the AI
     read_state: Mapped[str] = mapped_column(String, default="waiting")
     draft: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
     booked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

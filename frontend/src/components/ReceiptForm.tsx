@@ -25,6 +25,8 @@ interface Props {
     // Checking scanned receipts one after another (receipt scan): "Book & next" and "Skip"
     submitLabel?: string;
     onSkip?: () => void;
+    // A scanned photo being checked: the photo is shown above, so no file to choose here
+    scanned?: boolean;
 }
 
 interface Row extends Omit<Item, 'amount'> {
@@ -38,7 +40,7 @@ const toRow = (item: Item): Row => ({ ...item, amount: item.amount.toFixed(2), p
 
 // A receipt as one booking with its items (issue #56): read by the AI or typed in, checked here, then booked
 export default function ReceiptForm({
-    account, categories, people, aiEnabled, transaction, draft, attachment, onSaved, onCancel, submitLabel, onSkip,
+    account, categories, people, aiEnabled, transaction, draft, attachment, onSaved, onCancel, submitLabel, onSkip, scanned,
 }: Props) {
     const { t } = useTranslation();
     const { tags } = useTags();
@@ -141,14 +143,16 @@ export default function ReceiptForm({
 
     return (
         <form onSubmit={save} className="mb-4 p-4 bg-slate-800/30 rounded-lg space-y-3">
-            <h3 className="font-semibold">{transaction ? t('receipt.editTitle') : t('receipt.title')}</h3>
+            <h3 className="font-semibold">{transaction ? t('receipt.editTitle') : scanned ? t('scan.checkTitle') : t('receipt.title')}</h3>
 
-            <label className="block text-sm text-slate-400">
-                {aiEnabled ? t('receipt.fileWithAi') : t('receipt.fileWithoutAi')}
-                <input type="file" aria-label={t('receipt.file')} accept="image/*,application/pdf,.eml,message/rfc822"
-                    onChange={upload} disabled={reading}
-                    className="block mt-1 text-sm text-slate-400" />
-            </label>
+            {!scanned && (
+                <label className="block text-sm text-slate-400">
+                    {aiEnabled ? t('receipt.fileWithAi') : t('receipt.fileWithoutAi')}
+                    <input type="file" aria-label={t('receipt.file')} accept="image/*,application/pdf,.eml,message/rfc822"
+                        onChange={upload} disabled={reading}
+                        className="block mt-1 text-sm text-slate-400" />
+                </label>
+            )}
             {reading && <p className="text-blue-400">{t('receipt.reading')}</p>}
             {attachments.length > 0 && (
                 <p className="text-sm flex flex-wrap gap-3">

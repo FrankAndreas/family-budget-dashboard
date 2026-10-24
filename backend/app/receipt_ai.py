@@ -37,6 +37,12 @@ MAX_TEXTS = 200
 # Where the bank texts start in the prompt (the browser tests' fake client finds them by it)
 TEXT_MARKER = "TEXTS:"
 ENDPOINT = "/chat/completions"
+# Money sent to or received from a person: the text carries their name, so it isn't sent (2026-10-24 review)
+PERSON_TO_PERSON = re.compile(
+    r"\bTWINT\b.*\b(an|von|to|from|gesendet|erhalten|sent|received)\b"
+    r"|\b(Überweisung|Zahlung|Dauerauftrag|Gutschrift|Auftrag|Transfer|Payment)[ \t]+(an|von|to|from)\b",
+    re.I,
+)
 
 
 @dataclass(frozen=True)
@@ -211,10 +217,13 @@ def suggest(
     db: Session, user: models.User, texts_out: list[str], texts_in: list[str]
 ) -> tuple[dict[str, str], str, Optional[str]]:
     """Categories for bank texts no rule knows: (suggestions, status, message). One call, counted as one read;
-    status off / ok / capped / limit / failed. Only the texts and the category names are sent."""
+    status off / ok / capped / limit / failed. Only the texts and the category names are sent, and not the texts of
+    money between people."""
     settings = Settings.from_env()
     if not settings.enabled:
         return {}, "off", None
+    texts_out = [t for t in texts_out if not PERSON_TO_PERSON.search(t)]
+    texts_in = [t for t in texts_in if not PERSON_TO_PERSON.search(t)]
     status, message = "ok", None
     if len(texts_out) + len(texts_in) > MAX_TEXTS:
         texts_out = texts_out[:MAX_TEXTS]

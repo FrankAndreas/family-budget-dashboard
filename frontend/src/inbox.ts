@@ -22,7 +22,8 @@ export interface InboxPhoto {
     person_id: string | null;
     person_name: string | null;
     taken_at: string;
-    read_state: 'waiting' | 'reading' | 'read' | 'failed';
+    // manual: scanned with "Read with AI" off, never sent to the AI
+    read_state: 'waiting' | 'reading' | 'read' | 'failed' | 'manual';
     shop: string | null;
     total: number | null;
     suggested_account_id: string | null;

@@ -77,7 +77,7 @@ export default function Inbox({ accounts, categories, people, aiEnabled, version
             {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
 
             {scanning ? (
-                <ScanReceipts onDone={() => { onScanDone(); photos.reload(); }} />
+                <ScanReceipts aiEnabled={aiEnabled} onDone={() => { onScanDone(); photos.reload(); }} />
             ) : open ? (
                 <ReceiptForm
                     account={open.account}

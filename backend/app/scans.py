@@ -3,6 +3,8 @@
 Each photo is uploaded as soon as it is taken and waits in the inbox, next to the forwarded mails, until a parent books
 it or deletes it: the paper has been thrown away, so nothing here removes a photo on its own. Opening one makes it the
 parent's pending attachment, like releasing a mail; booking that attachment marks the photo booked.
+
+A pile scanned with "Read with AI" off (ai=0) is "manual": never sent to the AI, typed in when checked.
 """
 
 import hashlib
@@ -11,7 +13,7 @@ import threading
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -128,6 +130,7 @@ def read_waiting() -> int:
 async def upload_photo(
     background: BackgroundTasks,
     file: UploadFile = File(...),
+    ai: str = Form(""),
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ) -> dict:
@@ -136,7 +139,11 @@ async def upload_photo(
     if attachments.check(data, file.filename or "") not in IMAGE_TYPES:
         raise messages.api_error(400, "file_type_unsupported")
     photo = models.InboxPhoto(
-        person_id=current_user.id, taken_at=datetime.utcnow(), size=len(data), sha256=hashlib.sha256(data).hexdigest()
+        person_id=current_user.id,
+        taken_at=datetime.utcnow(),
+        size=len(data),
+        sha256=hashlib.sha256(data).hexdigest(),
+        read_state="manual" if ai == "0" else "waiting",
     )
     db.add(photo)
     db.flush()
@@ -187,7 +194,7 @@ async def open_photo(
     """A parent checks the photo: its draft (if the AI read it) and the photo as their pending attachment."""
     inbox.require_parent(current_user)
     photo = get_photo(db, photo_id)
-    if photo.read_state != "read" and receipt_ai.Settings.from_env().enabled:
+    if photo.read_state not in ("read", "manual") and receipt_ai.Settings.from_env().enabled:
         # Not read yet (waiting, failed, or over the limit): one more try, on the opener's reads
         try:
             await run_in_threadpool(read_into, db, photo, current_user)

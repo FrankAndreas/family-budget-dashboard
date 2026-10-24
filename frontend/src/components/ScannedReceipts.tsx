@@ -1,10 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { errorMessage } from '../api';
+import api, { errorMessage } from '../api';
 import type { Account, Category } from '../accounts';
 import type { FamilyUser } from '../family';
 import { money } from '../finance';
 import { type InboxPhoto, type Release, deletePhoto, openPhoto } from '../inbox';
+import type { AttachmentInfo } from '../receipts';
 import ReceiptForm from './ReceiptForm';
 
 interface Props {
@@ -23,6 +24,29 @@ interface Props {
 const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
 // The server's times are UTC without an offset
 const utc = (value: string) => new Date(/[zZ]|[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`);
+
+// The photo next to the form: the paper is gone, so this is what the AI's reading is checked against. A tap shows it
+// at full size (scrolling), another tap fits it again.
+function ReceiptPhoto({ attachment }: { attachment: AttachmentInfo }) {
+    const { t } = useTranslation();
+    const [url, setUrl] = useState('');
+    const [zoomed, setZoomed] = useState(false);
+    useEffect(() => {
+        let shown = '';
+        api.get(`/api/v1/attachments/${attachment.id}`, { responseType: 'blob' })
+            .then(response => { shown = URL.createObjectURL(response.data); setUrl(shown); })
+            .catch(() => setUrl(''));
+        return () => { if (shown) URL.revokeObjectURL(shown); };
+    }, [attachment.id]);
+    if (!url) return null;
+    return (
+        <button type="button" onClick={() => setZoomed(!zoomed)} aria-label={zoomed ? t('scan.fit') : t('scan.zoom')}
+            className={`block w-full rounded-lg bg-slate-900/60 ${zoomed ? 'max-h-[80vh] overflow-auto' : ''}`}>
+            <img src={url} alt={t('scan.receiptPhoto')}
+                className={zoomed ? 'max-w-none' : 'mx-auto max-h-[60vh] w-auto max-w-full object-contain'} />
+        </button>
+    );
+}
 
 // Receipts photographed on the phone (receipt scan), checked one after another in the order they were taken
 export default function ScannedReceipts({ photos, reload, accounts, categories, people, aiEnabled, onBooked, onChecking }: Props) {
@@ -92,9 +116,10 @@ export default function ScannedReceipts({ photos, reload, accounts, categories, 
         return (
             <div className="space-y-3">
                 <p className="text-sm text-slate-400">{t('scan.checking', { n: index + 1, count: photos.length })}</p>
-                <label className="block text-sm">
+                <ReceiptPhoto attachment={current.result.attachment} />
+                <label className="block font-semibold">
                     {t('scan.accountForCheck')}
-                    <select className={`${field} block mt-1`} value={current.account.id} aria-label={t('scan.accountForCheck')}
+                    <select className={`${field} block mt-1 w-full sm:w-auto`} value={current.account.id} aria-label={t('scan.accountForCheck')}
                         onChange={e => {
                             const account = accounts.find(a => a.id === e.target.value);
                             if (account) setCurrent({ ...current, account });
@@ -111,6 +136,7 @@ export default function ScannedReceipts({ photos, reload, accounts, categories, 
                     draft={current.result.draft}
                     attachment={current.result.attachment}
                     submitLabel={t('scan.bookNext')}
+                    scanned
                     onSkip={() => check(after(current.photo)[0])}
                     onSaved={booked}
                     onCancel={() => { setCurrent(null); onChecking(false); }}

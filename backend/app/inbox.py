@@ -157,8 +157,8 @@ def writable(db: Session, user: models.User, account: models.Account) -> bool:
 
 
 def suggested_account(db: Session, releaser: models.User, forwarder: Optional[models.User]) -> Optional[str]:
-    """The forwarder's account of their latest receipt (a booking with items), else their first account; only if the
-    releasing parent may book on it."""
+    """The forwarder's account of their latest receipt (a booking with items), else their first bank account (then
+    any first account) by name; only if the releasing parent may book on it."""
     if forwarder is None:
         return None
     latest = (
@@ -174,7 +174,7 @@ def suggested_account(db: Session, releaser: models.User, forwarder: Optional[mo
         account = (
             db.query(models.Account)
             .filter(models.Account.user_id == forwarder.id)
-            .order_by(models.Account.name)
+            .order_by(models.Account.type != models.AccountType.BANK, models.Account.name)
             .first()
         )
     return account.id if account is not None and writable(db, releaser, account) else None

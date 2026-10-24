@@ -295,3 +295,26 @@ def test_photo_not_found_message(client):
     mum = register(client, "mum")
     response = client.post(f"{PHOTOS}/nope/open", headers=mum)
     assert (response.status_code, response.json()["detail"]) == (404, "Photo not found in the inbox")
+
+
+def test_scanned_without_ai_is_never_read(client, ai):
+    """A pile scanned with "Read with AI" off (2026-10-24 review): the photos never go to the AI, not even on opening."""
+    mum = register(client, "mum")
+    response = client.post(
+        PHOTOS, files={"file": ("scan.jpg", image_png(), "image/jpeg")}, data={"ai": "0"}, headers=mum
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["read_state"] == "manual"
+    assert scans.read_waiting() == 0
+    result = opened(client, mum, response.json()["id"])
+    assert result["draft"] is None and result["attachment_id"]
+    assert ai.calls == 0
+    assert states(client, mum) == ["manual"]
+
+
+def test_suggested_account_prefers_a_bank_account(client):
+    """Nothing booked from a receipt yet: a bank account, not the cash one that comes first by name."""
+    mum = register(client, "mum")
+    client.post(f"{BASE_URL}/accounts", json={"name": "Bargeld", "type": "CASH"}, headers=mum)
+    bank = create_account(client, mum, "Zürcher Bank")
+    assert scanned(client, mum)["suggested_account_id"] == bank

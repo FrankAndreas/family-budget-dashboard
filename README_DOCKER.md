@@ -84,6 +84,15 @@ If you lose the PIN before anyone uses the app, stop it, delete `data/budget.db`
 A receipt (photo, PDF, or an e-mail saved as `.eml`) becomes one booking with its items; the AI reads it and you
 check everything before it is booked. Only the file and the names of your expense categories and tags are sent.
 
+What the AI service sees (Infomaniak processes it in Switzerland and says it doesn't use it for training):
+
+- **Photos:** the whole picture (without the phone's location data), so everything printed on the receipt, including
+  what was bought. Pharmacy or doctor bills reveal health information: scan those with **Read with AI** off.
+- **PDFs and mails:** their text without e-mail addresses, phone numbers and the From/To lines of a forwarded mail;
+  names and street addresses in the text still go.
+- **Bank statements** (category suggestions): only the booking texts no rule knows, without IBANs, card numbers or
+  amounts. TWINT and transfer texts between people (they carry the person's name) are never sent.
+
 1. In the Infomaniak Manager, create an API token with **only the `ai-tools` scope** and a lifetime (e.g. one year),
    and note the AI product's ID (*Cloud Computing → AI Tools*). Set a **spending limit** on the AI product.
 2. Put both in `.env` on the NAS (never in the repository):
@@ -102,9 +111,10 @@ for example one written by a receipt-reading tool. The import format is describe
 
 Parents open the app on the phone (home Wi-Fi) and tap **📷 Scan receipts** in the inbox or above the bookings. The
 phone's camera opens; after each photo, **📷 Next receipt** opens it again. Each photo is uploaded right away and
-waits in the inbox; the AI reads it in the background (it counts toward the hourly reads of whoever took it). Later,
-**Check next** opens the photos one after another in the order they were taken, and **Book & next** books one and
-opens the next. Photos stay in the inbox until they are booked or deleted: nothing removes them automatically.
+waits in the inbox; the AI reads it in the background (it counts toward the hourly reads of whoever took it). With
+**Read with AI** off (e.g. for doctor bills), the photos are never sent to the AI and are typed in when checked.
+Later, **Check next** opens the photos one after another in the order they were taken, next to the photo to check
+against, and **Book & next** books one and opens the next. Photos stay in the inbox until they are booked or deleted: nothing removes them automatically.
 
 The photos are meant to stay in the app only. After the first deploy, check once on each phone that photos taken
 this way don't show up in the phone's gallery (some camera apps keep a copy).
