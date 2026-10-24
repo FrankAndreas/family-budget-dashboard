@@ -47,6 +47,9 @@ const de = {
         hide: 'PIN verbergen',
     },
     dashboard: {
+        wrongPins_one: 'Seit deinem letzten Login wurde {{count}} falsche PIN für deinen Namen eingegeben. Warst das nicht du, wähle eine neue PIN (oder frag einen Elternteil).',
+        wrongPins_other: 'Seit deinem letzten Login wurden {{count}} falsche PINs für deinen Namen eingegeben. Warst das nicht du, wähle eine neue PIN (oder frag einen Elternteil).',
+        wrongPinsOk: 'Verstanden',
         moreTabs: 'Weitere Tabs',
         welcome: 'Willkommen zurück, {{name}} ({{role}})',
         logout: 'Abmelden',
