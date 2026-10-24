@@ -251,6 +251,25 @@ class InboxMail(Base):
     booked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 
+class InboxPhoto(Base):
+    """A receipt photographed on a parent's phone (receipt scan), waiting in the inbox until it is booked. The file is
+    in the inbox folder under the id; the AI's reading is kept here. Never removed automatically: the paper is gone."""
+
+    __tablename__ = "inbox_photos"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    # Who took it; its readings count toward their hourly limit
+    person_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    taken_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    size: Mapped[int] = mapped_column(Integer)
+    # Booking an attachment with the same content marks the photo booked
+    sha256: Mapped[str] = mapped_column(String, index=True)
+    # waiting, reading, read or failed
+    read_state: Mapped[str] = mapped_column(String, default="waiting")
+    draft: Mapped[Optional[Any]] = mapped_column(JSON, nullable=True)
+    booked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
 class ReceiptRead(Base):
     """One reading of a receipt by the AI, for the hourly limit; rows older than an hour are removed."""
 

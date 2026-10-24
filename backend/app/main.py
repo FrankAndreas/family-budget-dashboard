@@ -26,6 +26,7 @@ from . import (
     receipt_ai,
     emails_api,
     inbox,
+    scans,
     i18n,
 )
 from .seed import seed_admin
@@ -98,6 +99,7 @@ app.include_router(attachments.router, prefix="/api/v1")
 app.include_router(receipt_ai.router, prefix="/api/v1")
 app.include_router(emails_api.router, prefix="/api/v1")
 app.include_router(inbox.router, prefix="/api/v1")
+app.include_router(scans.router, prefix="/api/v1")
 
 # Configure CORS
 app.add_middleware(
