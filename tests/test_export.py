@@ -15,7 +15,7 @@ HEADERS = {
     "categories.csv": "category_id,name,type",
     "accounts.csv": "account_id,name,type,iban,owner_id,owner,balance",
     "transactions.csv": "transaction_id,date,account_id,account,owner_id,owner,category_id,category,category_type,"
-    "amount,description,for_member_id,for_member,split_id,split,investment_id,investment,reference",
+    "amount,description,for_member_id,for_member,split_id,split,investment_id,investment,reference,investment_purchase",
     "shared_expense_shares.csv": "transaction_id,date,payer_id,payer,amount,member_id,member,percent,share",
     "settlements.csv": "settlement_id,date,from_id,from,to_id,to,amount",
     "budgets.csv": "budget_id,owner_id,owner,category_id,category,tag_id,tag,limit,period",
@@ -180,7 +180,7 @@ def test_investments_and_planned_costs(client, family):
     assert (investment["age_years"], investment["replacement_due"]) == ("4.0", "2030-10-14")
     assert (investment["follow_up_costs"], investment["total_cost"]) == ("600.0", "24600.0")
     [transaction] = [t for t in rows(archive, "transactions.csv") if t["investment"]]
-    assert transaction["investment"] == "Car"
+    assert (transaction["investment"], transaction["investment_purchase"]) == ("Car", "False")
     [bill] = rows(archive, "planned_costs.csv")
     assert (bill["name"], bill["owner"], bill["next_due"], bill["monthly"]) == (
         "Insurance",

@@ -14,7 +14,8 @@ interface Summary extends Amounts {
     by_category: { category_id: string; name: string; amount: number }[];
     by_child: { member_id: string; name: string; amount: number }[];
     // Receipt items (issue #56): per tag (overlapping: an item counts in each of its tags) and per person
-    by_tag: { tag_id: string; name: string; icon?: string | null; amount: number }[];
+    // set_aside: per month, for the investments with the tag
+    by_tag: { tag_id: string; name: string; icon?: string | null; amount: number; set_aside: number }[];
     by_person: { person_id: string; name: string; amount: number }[];
     // The last 6 months ("2026-10") and every day of the current month ("2026-10-15")
     months: (Amounts & { month: string })[];
@@ -160,16 +161,21 @@ export default function Analytics() {
                 </div>
             )}
 
-            {/* Receipt items by tag: a list without a sum, since an item with several tags counts in each */}
+            {/* Spending by tag (receipt items, bookings for an investment with the tag) and what its investments set aside; a list without a sum, since an item with several tags counts in each */}
             {(summary?.by_tag.length ?? 0) > 0 && (
                 <div className="glass-card p-6">
                     <h2 className="text-xl font-bold mb-1">{t('analytics.byTag', { range: rangeLabel })}</h2>
                     <p className="text-sm text-slate-400 mb-4">{t('analytics.tagsOverlap')}</p>
                     <div className="space-y-2">
                         {summary!.by_tag.map(tag => (
-                            <div key={tag.tag_id} className="flex items-center justify-between p-2 bg-slate-800/30 rounded">
+                            <div key={tag.tag_id} data-tag-row className="flex items-center justify-between gap-3 p-2 bg-slate-800/30 rounded">
                                 <span>{tag.icon ? `${tag.icon} ` : ''}{tag.name}</span>
-                                <span className="font-bold">{money(tag.amount)}</span>
+                                <span className="text-right">
+                                    <span className="font-bold">{money(tag.amount)}</span>
+                                    {tag.set_aside > 0 && (
+                                        <span className="block text-xs text-slate-400">{t('analytics.setAside', { amount: money(tag.set_aside) })}</span>
+                                    )}
+                                </span>
                             </div>
                         ))}
                     </div>

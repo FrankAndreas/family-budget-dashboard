@@ -105,11 +105,12 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
                 t.asset_id,
                 asset_names.get(t.asset_id) if t.asset_id else None,
                 t.reference,
+                t.asset_purchase,
             ]
         )
     files["transactions.csv"] = to_csv(
-        "transaction_id,date,account_id,account,owner_id,owner,category_id,category,category_type,amount,"
-        "description,for_member_id,for_member,split_id,split,investment_id,investment,reference".split(","),
+        "transaction_id,date,account_id,account,owner_id,owner,category_id,category,category_type,amount,description,"
+        "for_member_id,for_member,split_id,split,investment_id,investment,reference,investment_purchase".split(","),
         transaction_rows,
     )
 

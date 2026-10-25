@@ -342,7 +342,8 @@ def create_transaction(
     # Check if user has access to this account (with privacy enforcement)
     privacy.check_account_access(db, current_user, transaction.account_id, write=True)
     if transaction.items is not None:
-        return create_receipt(db, current_user, transaction)
+        receipt = create_receipt(db, current_user, transaction)
+        return mark_purchase(db, current_user, receipt, transaction.asset_purchase or None)
     # Without items the schema requires both (TransactionCreate.plain_needs_amount_and_category)
     assert transaction.category_id is not None and transaction.amount is not None
     category = crud.get_category(db, transaction.category_id)
@@ -354,7 +355,37 @@ def create_transaction(
     split_shares = check_shared(db, transaction.split_id, transaction.account_id, category)
     check_asset(db, current_user, transaction.asset_id)
     created = crud.create_transaction(db, transaction=transaction, category=category, split_shares=split_shares)
-    return with_attachments(db, current_user, created, transaction.attachment_ids)
+    created = with_attachments(db, current_user, created, transaction.attachment_ids)
+    return mark_purchase(db, current_user, created, transaction.asset_purchase or None)
+
+
+def mark_purchase(
+    db: Session,
+    user: models.User,
+    transaction: models.Transaction,
+    wanted: Optional[bool],
+    before: Optional[str] = None,
+) -> models.Transaction:
+    """Mark (wanted True) or unmark the booking as the one that bought its investment; marking fills the investment's
+    price and date. A booking linked to another investment, or to none, is no purchase any more (unless marked)."""
+    if wanted:
+        if not transaction.asset_id:
+            raise messages.api_error(400, "purchase_needs_investment")
+        asset = db.query(models.Asset).filter(models.Asset.id == transaction.asset_id).one()
+        if not visible_owner(db, user, asset.owner_id, asset.split_id, write=True):
+            raise messages.api_error(403, "cant_manage_items")
+        if not transaction.asset_purchase:
+            db.query(models.Transaction).filter(
+                models.Transaction.asset_id == asset.id, models.Transaction.id != transaction.id
+            ).update({models.Transaction.asset_purchase: False}, synchronize_session=False)
+            asset.price = abs(transaction.amount)
+            asset.purchase_date = reports.swiss_day(transaction.date)
+            transaction.asset_purchase = True
+    elif wanted is False or transaction.asset_id != before or not transaction.asset_id:
+        transaction.asset_purchase = False
+    db.commit()
+    db.refresh(transaction)
+    return transaction
 
 
 def with_attachments(db: Session, user: models.User, transaction: models.Transaction, ids: list[str]):
@@ -433,10 +464,13 @@ def update_transaction(
         if not rest:
             return reconcile.annotate(db, [db_transaction])[0]
         transaction_update = schemas.TransactionUpdate(**rest)
+    before = crud.get_transaction(db, transaction_id)
+    asset_before = before.asset_id if before else None
     updated = change_transaction(db, current_user, transaction_id, transaction_update)
     # update_receipt links them itself, inside its own commit
     if not transaction_update.items:
         updated = with_attachments(db, current_user, updated, transaction_update.attachment_ids)
+    updated = mark_purchase(db, current_user, updated, transaction_update.asset_purchase, asset_before)
     return reconcile.annotate(db, [updated])[0]
 
 
@@ -459,7 +493,7 @@ def change_transaction(
     if db_transaction.items:
         if "items" not in fields:
             # Amount and category follow the items; only text and date can change on their own
-            if fields - {"description", "date"}:
+            if fields - {"description", "date", "asset_purchase"}:
                 raise messages.api_error(400, "edit_items_instead")
             return crud.update_transaction(
                 db, db_transaction, transaction_update, current, split_shares=db_transaction.split_shares

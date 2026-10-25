@@ -120,6 +120,8 @@ class Transaction(Base):
     split_shares: Mapped[Any] = mapped_column(JSON, nullable=True)
     # The investment this follow-up cost belongs to (repair, service, ...)
     asset_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("assets.id"), nullable=True)
+    # This booking bought the investment (not a follow-up cost); one per investment
+    asset_purchase: Mapped[bool] = mapped_column(Boolean, default=False, server_default=false())
     # The importing tool's own ID for the source (receipt file, hash, ...); recognises repeated imports
     reference: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     # Reconciliation (bank import, part 2): a receipt is expected (from the import rule that booked it); the bank

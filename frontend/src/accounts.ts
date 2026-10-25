@@ -45,6 +45,8 @@ export interface Transaction {
     // The percentages a shared expense was booked with (kept when its split is deleted)
     split_shares?: Record<string, number> | null;
     asset_id?: string | null;
+    // This booking bought the investment
+    asset_purchase?: boolean;
     // A receipt's items and the stored receipt files (issue #56)
     items?: Item[];
     attachments?: AttachmentInfo[];

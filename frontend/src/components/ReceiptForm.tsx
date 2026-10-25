@@ -3,9 +3,10 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import type { Account, Category, Transaction } from '../accounts';
 import type { FamilyUser } from '../family';
-import { money } from '../finance';
+import { money, type Asset } from '../finance';
 import { type AttachmentInfo, type Draft, type Item, openAttachment, useTags } from '../receipts';
 import { shrink } from '../scan';
+import AssetLink from './AssetLink';
 
 interface Props {
     account: Account;
@@ -27,6 +28,8 @@ interface Props {
     onSkip?: () => void;
     // A scanned photo being checked: the photo is shown above, so no file to choose here
     scanned?: boolean;
+    // Investments the receipt can be for (a parent's); without them the link is left as it is
+    assets?: Asset[];
 }
 
 interface Row extends Omit<Item, 'amount'> {
@@ -40,7 +43,7 @@ const toRow = (item: Item): Row => ({ ...item, amount: item.amount.toFixed(2), p
 
 // A receipt as one booking with its items (issue #56): read by the AI or typed in, checked here, then booked
 export default function ReceiptForm({
-    account, categories, people, aiEnabled, transaction, draft, attachment, onSaved, onCancel, submitLabel, onSkip, scanned,
+    account, categories, people, aiEnabled, transaction, draft, attachment, onSaved, onCancel, submitLabel, onSkip, scanned, assets,
 }: Props) {
     const { t } = useTranslation();
     const { tags } = useTags();
@@ -58,6 +61,7 @@ export default function ReceiptForm({
     const [attachments, setAttachments] = useState<AttachmentInfo[]>(
         transaction?.attachments ?? (attachment ? [attachment] : []));
     const [pendingIds, setPendingIds] = useState<string[]>(attachment ? [attachment.id] : []);
+    const [link, setLink] = useState({ assetId: transaction?.asset_id ?? '', purchase: !!transaction?.asset_purchase });
     const [reading, setReading] = useState(false);
     const [error, setError] = useState('');
 
@@ -129,7 +133,10 @@ export default function ReceiptForm({
             person_id: row.person_id || null,
             tag_ids: row.tag_ids,
         }));
-        const body = { description, date: `${date}T12:00:00`, items, attachment_ids: pendingIds };
+        const body = {
+            description, date: `${date}T12:00:00`, items, attachment_ids: pendingIds,
+            ...(assets ? { asset_id: link.assetId || null, asset_purchase: !!link.assetId && link.purchase } : {}),
+        };
         try {
             if (transaction) await api.put(`/api/v1/transactions/${transaction.id}`, body);
             // Onto the bank booking: it keeps the bank's amount, the receipt gives its items
@@ -176,6 +183,11 @@ export default function ReceiptForm({
                     {people.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
                 </select>
             </div>
+
+            {assets && assets.length > 0 && (
+                <AssetLink assets={assets} assetId={link.assetId} purchase={link.purchase} className={field}
+                    onChange={(assetId, purchase) => setLink({ assetId, purchase })} />
+            )}
 
             <ul className="space-y-2">
                 {rows.map((row, i) => (

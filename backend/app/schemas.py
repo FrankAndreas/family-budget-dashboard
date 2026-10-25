@@ -180,6 +180,8 @@ class TransactionBase(BaseModel):
     member_id: Optional[str] = None
     split_id: Optional[str] = None
     asset_id: Optional[str] = None
+    # The booking that bought the investment (asset_id)
+    asset_purchase: bool = False
     reference: Optional[str] = Field(default=None, max_length=200)
 
 
@@ -263,6 +265,7 @@ class TransactionUpdate(BaseModel):
     # Send null to stop sharing / unlink
     split_id: Optional[str] = None
     asset_id: Optional[str] = None
+    asset_purchase: Optional[bool] = None
     # Replaces the items; [] turns a receipt back into a plain booking (then amount and category_id are needed)
     items: Optional[list[ItemIn]] = Field(default=None, max_length=MAX_ITEMS)
     # More of the person's pending uploads to keep with the booking
@@ -461,9 +464,18 @@ class AssetArchive(BaseModel):
     archived_on: date
 
 
+class AssetPurchase(BaseModel):
+    transaction_id: str
+    amount: float
+    date: date
+    attachments: list[AttachmentOut] = []
+
+
 class Asset(AssetIn):
     id: str
     archived_on: Optional[date] = None
+    # The booking that bought it; none: price and date are estimates
+    purchase: Optional[AssetPurchase] = None
     age_years: float
     # Purchase date in the future: not bought yet
     planned: bool = False
