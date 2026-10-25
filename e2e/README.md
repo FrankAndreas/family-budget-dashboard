@@ -55,7 +55,7 @@ On a failure, `test-results/` has a screenshot and a trace (`npx playwright show
 | `edit-far-down.spec.ts` | editing a booking, investment or yearly bill far down a long list brings the filled-in form into view; the owner list says why other people are missing |
 | `investments.spec.ts` | investments grouped by tag with totals per group and overall, a due-soon marker, a new tag from the form, archived out of the totals and restored |
 | `asset-purchase.spec.ts` | a booking marked as the purchase gives an investment its price and date (no longer an estimate); Analytics shows the tag's spending and its monthly set-aside |
-| `leasing.spec.ts` | a leased car entered in the form: monthly load = rate + the buy-out saved up over the term, kept when editing |
+| `leasing.spec.ts` | a leased car entered in the form: monthly load = rate + the buy-out saved up over the term, kept when editing; a lease ending within a year flagged on its card and group, with the month |
 | `receipts.spec.ts` | receipt read by the AI, an item with two tags, analytics and a tag budget |
 | `reconciliation.spec.ts` | a statement confirms a receipt typed in before it; badges and open points |
 | `reports.spec.ts` | budget spending and analytics totals |

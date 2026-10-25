@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { money, type Asset } from '../finance';
+import { leaseEndsSoon, money, type Asset } from '../finance';
 import { formatDate } from '../format';
 import { openAttachment } from '../receipts';
 
@@ -36,6 +36,9 @@ export default function AssetCard({ asset, owner, canChange, expenses, onToggleC
                 )}
                 {asset.is_due && (
                     <span className="text-xs px-2 py-0.5 h-fit rounded-full bg-amber-500/20 text-amber-300">{t('investments.due')}</span>
+                )}
+                {leaseEndsSoon(asset) && (
+                    <span className="text-xs px-2 py-0.5 h-fit rounded-full bg-amber-500/20 text-amber-300">{t('investments.leaseEndsSoon')}</span>
                 )}
             </div>
             <p className="text-xs text-slate-500">{owner}</p>
