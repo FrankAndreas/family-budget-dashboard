@@ -195,12 +195,15 @@ export default function Investments() {
                         <option value="PURCHASE">{t('investments.kinds.PURCHASE')}</option>
                         <option value="LEASE">{t('investments.kinds.LEASE')}</option>
                     </select>
-                    <input className={input} placeholder={t('investments.namePlaceholder')} value={form.name}
-                        onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label={t('investments.name')} required />
-                    <input className={input} type="number" step="0.01" min="0.01" value={form.price}
-                        placeholder={lease ? t('investments.downPayment') : t('investments.pricePlaceholder')}
-                        onChange={(e) => setForm({ ...form, price: e.target.value })}
-                        aria-label={lease ? t('investments.downPayment') : t('investments.price')} required />
+                    {/* Labels above the fields, so a filled-in field still says what it is */}
+                    <label className="text-sm text-slate-400">{t('investments.name')}
+                        <input className={input} placeholder={t('investments.namePlaceholder')} value={form.name}
+                            onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+                    </label>
+                    <label className="text-sm text-slate-400">{lease ? t('investments.downPayment') : t('investments.price')}
+                        <input className={input} type="number" step="0.01" min="0.01" value={form.price}
+                            onChange={(e) => setForm({ ...form, price: e.target.value })} required />
+                    </label>
                     <label className="text-sm text-slate-400">{lease ? t('investments.leaseStart') : t('investments.boughtOn')}
                         <input className={input} type="date" value={form.purchase_date}
                             onChange={(e) => setForm({ ...form, purchase_date: e.target.value })} required />
