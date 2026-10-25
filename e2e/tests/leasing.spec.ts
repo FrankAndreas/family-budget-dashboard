@@ -23,9 +23,14 @@ test('a leased car', async ({ page, request }) => {
     await expect(card).toContainText(new RegExp(`Leased until .*${new Date().getFullYear() + 4}`));
     await expect(card).toContainText('Rate CHF 390.00 + CHF 250.00 for the buy-out = CHF 640.00/month');
     await expect(page.getByTestId('investments-total')).toContainText('CHF 640.00 / month');
+    // A group with a lease doesn't call the down payment a purchase price
+    await expect(page.locator('details', { has: card }).first()).toContainText("Purchase prices and down payments CHF 5'000.00");
 
     // Editing keeps it a lease
     await card.getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.getByLabel('Monthly rate')).toHaveValue('390');
+    // Filled in, the fields still say what they are
+    await expect(page.locator('form label', { hasText: 'Down payment' })).toBeVisible();
+    await expect(page.locator('form label', { hasText: 'Name' }).first()).toBeVisible();
     expect(errors).toEqual([]);
 });
