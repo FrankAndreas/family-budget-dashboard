@@ -216,3 +216,44 @@ def test_archive_checks(client, parents):
     }
     edited = client.put(f"{BASE_URL}/assets/{bike['id']}", json=body, headers=parents["mum"]).json()
     assert edited["archived_on"] == "2026-10-01"
+
+
+LEASE = {
+    "name": "Leasingauto",
+    "kind": "LEASE",
+    "price": 5000,
+    "purchase_date": "2025-03-01",
+    "lifespan_years": 10,
+    "lease_rate": 390,
+    "lease_months": 48,
+    "lease_final": 12000,
+}
+
+
+def test_lease_during_the_term(client, parents):
+    car = add_asset(client, parents["mum"], split_id=parents["split"], **LEASE).json()
+    # The buy-out is saved up over the term, on top of the rate
+    assert (car["monthly_set_aside"], car["monthly_rate"], car["monthly_load"]) == (250, 390, 640)
+    assert (car["lease_end"], car["replacement_due"]) == ("2029-03-01", "2035-03-01")
+    # The Common tab divides the whole monthly load
+    overview = client.get(f"{BASE_URL}/common/overview", headers=parents["dad"]).json()
+    assert overview["items"][0]["monthly"] == 640
+    assert overview["totals"] == {parents["mum_id"]: 320.0, parents["dad_id"]: 320.0}
+
+
+def test_lease_after_the_buy_out(client, parents, monkeypatch):
+    car = add_asset(client, parents["mum"], owner_id=parents["mum_id"], **LEASE).json()
+    monkeypatch.setattr(common_api, "today", lambda: date(2030, 1, 1))
+    car = client.get(f"{BASE_URL}/assets/{car['id']}", headers=parents["mum"]).json()
+    # Down payment + 48 rates + buy-out = 35'720, set aside over the remaining 72 months for the next car
+    assert (car["monthly_set_aside"], car["monthly_rate"], car["monthly_load"]) == (496.11, 0, 496.11)
+
+
+def test_lease_checks(client, parents):
+    mum = parents["mum"]
+    assert add_asset(client, mum, owner_id=parents["mum_id"], **(LEASE | {"lease_rate": None})).status_code == 400
+    # The car must be kept longer than the lease runs
+    assert add_asset(client, mum, owner_id=parents["mum_id"], **(LEASE | {"lifespan_years": 4})).status_code == 400
+    # A purchase has no lease fields in its output values
+    bike = add_asset(client, mum, name="Bike", owner_id=parents["mum_id"]).json()
+    assert (bike["kind"], bike["lease_end"], bike["monthly_rate"], bike["monthly_load"]) == ("PURCHASE", None, 0, 250)

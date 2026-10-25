@@ -1,6 +1,8 @@
 """Calculations for the common budget, yearly bills and investments. Pure functions, no database."""
 
+import calendar
 from datetime import date
+from typing import Optional
 
 
 def cents(value: float) -> float:
@@ -57,7 +59,47 @@ def add_years(day: date, years: int) -> date:
         return day.replace(year=day.year + years, day=28)
 
 
-def asset_stats(price: float, purchase_date: date, lifespan_years: int, follow_up_costs: float, today: date) -> dict:
+def add_months(day: date, months: int) -> date:
+    years, month = divmod(day.month - 1 + months, 12)
+    year, month = day.year + years, month + 1
+    return date(year, month, min(day.day, calendar.monthrange(year, month)[1]))
+
+
+def asset_plan(
+    price: float,
+    purchase_date: date,
+    lifespan_years: int,
+    today: date,
+    lease: Optional[tuple[float, int, float]] = None,
+) -> dict:
+    """What an investment needs each month. Bought: the price spread over the lifespan. Leased (rate, months, final
+    payment): during the term the rate plus the buy-out saved up over the term; afterwards, like a bought car, what it
+    cost in all (down payment, rates, buy-out) spread over the rest of its lifespan, for the next one."""
+    if not lease:
+        set_aside = cents(price / (lifespan_years * 12))
+        return {"monthly_set_aside": set_aside, "monthly_rate": 0.0, "monthly_load": set_aside, "lease_end": None}
+    rate, months, final = lease
+    lease_end = add_months(purchase_date, months)
+    if today < lease_end:
+        set_aside, monthly_rate = cents(final / months), rate
+    else:
+        set_aside, monthly_rate = cents((price + rate * months + final) / (lifespan_years * 12 - months)), 0.0
+    return {
+        "monthly_set_aside": set_aside,
+        "monthly_rate": monthly_rate,
+        "monthly_load": cents(set_aside + monthly_rate),
+        "lease_end": lease_end,
+    }
+
+
+def asset_stats(
+    price: float,
+    purchase_date: date,
+    lifespan_years: int,
+    follow_up_costs: float,
+    today: date,
+    lease: Optional[tuple[float, int, float]] = None,
+) -> dict:
     # A purchase date in the future means the investment is planned, not bought yet: age 0
     planned = purchase_date > today
     age_years = 0.0 if planned else round((today - purchase_date).days / 365.25, 1)
@@ -68,7 +110,7 @@ def asset_stats(price: float, purchase_date: date, lifespan_years: int, follow_u
         "planned": planned,
         "replacement_due": replacement_due,
         "is_due": today >= replacement_due,
-        "monthly_set_aside": cents(price / (lifespan_years * 12)),
+        **asset_plan(price, purchase_date, lifespan_years, today, lease),
         "total_cost": total_cost,
         "cost_per_year": cents(total_cost / max(age_years, 1)),
     }

@@ -232,13 +232,18 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
                 asset.tag_id,
                 tags[asset.tag_id].name if asset.tag_id in tags else None,
                 asset.archived_on,
+                asset.kind,
+                asset.lease_rate,
+                asset.lease_months,
+                asset.lease_final,
+                out["lease_end"],
+                out["monthly_load"],
             ]
         )
     files["investments.csv"] = to_csv(
-        "investment_id,name,owner_id,owner,split_id,split,price,purchase_date,lifespan_years,age_years,"
-        "replacement_due,monthly_set_aside,follow_up_costs,total_cost,cost_per_year,notes,tag_id,tag,archived_on".split(
-            ","
-        ),
+        "investment_id,name,owner_id,owner,split_id,split,price,purchase_date,lifespan_years,age_years,replacement_due,"
+        "monthly_set_aside,follow_up_costs,total_cost,cost_per_year,notes,tag_id,tag,archived_on,kind,lease_rate,"
+        "lease_months,lease_final,lease_end,monthly_load".split(","),
         investment_rows,
     )
 

@@ -236,6 +236,15 @@ def check_tag(db: Session, tag_id: Optional[str]) -> None:
         raise messages.api_error(400, "tag_not_found")
 
 
+def check_lease(asset: schemas.AssetIn) -> None:
+    """A lease has a rate and a term, shorter than the time the car is kept; a purchase keeps no lease values."""
+    if asset.kind == "PURCHASE":
+        asset.lease_rate = asset.lease_months = asset.lease_final = None
+        return
+    if asset.lease_rate is None or not asset.lease_months or asset.lease_months >= asset.lifespan_years * 12:
+        raise messages.api_error(400, "lease_incomplete")
+
+
 def monthly_shares(db: Session, monthly: float, owner_id: Optional[str], split_id: Optional[str]) -> dict[str, float]:
     if split_id:
         split = db.query(models.Split).filter(models.Split.id == split_id).first()
@@ -356,6 +365,10 @@ ASSET_FIELDS = (
     "notes",
     "tag_id",
     "archived_on",
+    "kind",
+    "lease_rate",
+    "lease_months",
+    "lease_final",
 )
 
 
@@ -371,14 +384,15 @@ def asset_out(db: Session, asset: models.Asset) -> dict:
         asset.lifespan_years,
         sum(abs(t.amount) for t in follow_ups),
         asset.archived_on or today(),
+        asset.lease,
     )
     if asset.archived_on:
-        stats |= {"monthly_set_aside": 0.0, "is_due": False}
+        stats |= {"monthly_set_aside": 0.0, "monthly_rate": 0.0, "monthly_load": 0.0, "is_due": False}
     return {
         **{field: getattr(asset, field) for field in ASSET_FIELDS},
         **stats,
         "shares": (
-            {} if asset.archived_on else monthly_shares(db, stats["monthly_set_aside"], asset.owner_id, asset.split_id)
+            {} if asset.archived_on else monthly_shares(db, stats["monthly_load"], asset.owner_id, asset.split_id)
         ),
         "purchase": purchase
         and {
@@ -400,7 +414,9 @@ def get_asset(db: Session, current_user: models.User, asset_id: str, write: bool
 def common_asset_items(db: Session) -> list[dict]:
     items: list[dict[str, Any]] = []
     for asset in db.query(models.Asset).filter(models.Asset.split_id.isnot(None), models.Asset.archived_on.is_(None)):
-        monthly = finance.cents(asset.price / (asset.lifespan_years * 12))
+        monthly = finance.asset_plan(asset.price, asset.purchase_date, asset.lifespan_years, today(), asset.lease)[
+            "monthly_load"
+        ]
         shares = monthly_shares(db, monthly, None, asset.split_id)
         items.append({"kind": "asset", "id": asset.id, "name": asset.name, "monthly": monthly, "shares": shares})
     return items
@@ -432,6 +448,7 @@ def create_asset(
 ):
     check_owner(db, current_user, asset.owner_id, asset.split_id)
     check_tag(db, asset.tag_id)
+    check_lease(asset)
     data = asset.model_dump()
     data["price"] = finance.cents(data["price"])
     db_asset = models.Asset(**data)
@@ -451,6 +468,7 @@ def update_asset(
     db_asset = get_asset(db, current_user, asset_id, write=True)
     check_owner(db, current_user, asset.owner_id, asset.split_id)
     check_tag(db, asset.tag_id)
+    check_lease(asset)
     for key, value in asset.model_dump().items():
         setattr(db_asset, key, finance.cents(value) if key == "price" else value)
     db.commit()

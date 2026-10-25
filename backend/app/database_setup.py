@@ -14,7 +14,7 @@ from sqlalchemy.engine import Engine
 
 logger = logging.getLogger(__name__)
 
-HEAD = "0017"
+HEAD = "0018"
 
 # Columns added before migrations existed; an old database may lack them (only used to catch it up)
 NEW_COLUMNS = {
