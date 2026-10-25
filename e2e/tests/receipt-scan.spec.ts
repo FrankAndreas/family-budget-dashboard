@@ -114,3 +114,36 @@ test("the other parent's photo explains the missing account", async ({ page, req
     await call(request, other, 'DELETE', `/inbox/photos/${photo.id}`);
     expect(errors).toEqual([]);
 });
+
+// A photo taken by mistake is removed while scanning: it leaves the inbox at once, after a confirmation
+test('a photo is removed on the scan screen', async ({ page, request }) => {
+    const parent = await newParent(request);
+    await call(request, parent, 'POST', '/accounts', { name: 'Konto', type: 'BANK' });
+    const errors = await login(page, parent);
+    await page.getByRole('button', { name: '📷 Scan receipts' }).first().click();
+    await page.getByLabel('Read with AI').uncheck();
+    const camera = page.getByLabel('Receipt photo');
+    await camera.setInputFiles(PHOTOS[0]);
+    await camera.setInputFiles(PHOTOS[1]);
+    await expect(page.getByText('✓ in the inbox')).toHaveCount(2);
+    type Photo = { id: string; person_name: string };
+    const mine = async () =>
+        ((await call(request, parent, 'GET', '/inbox/photos')) as Photo[]).filter(p => p.person_name === parent.name);
+    const [, second] = await mine();
+
+    // Cancelled: the photo stays (login accepts every dialog; here each one is answered on its own)
+    page.removeAllListeners('dialog');
+    page.once('dialog', dialog => dialog.dismiss());
+    await page.getByRole('button', { name: 'Remove photo 1' }).click();
+    await expect(page.getByRole('img', { name: 'Photo 2' })).toBeVisible();
+    page.once('dialog', dialog => dialog.accept());
+    await page.getByRole('button', { name: 'Remove photo 1' }).click();
+    await expect(page.getByText('✓ in the inbox')).toHaveCount(1);
+    await expect(page.getByRole('img', { name: 'Photo 2' })).toHaveCount(0);
+    await expect.poll(async () => (await mine()).map(p => p.id)).toEqual([second.id]);
+    await page.getByRole('button', { name: 'Done (1)' }).click();
+
+    // Left clean: the other tests count the inbox rows
+    await call(request, parent, 'DELETE', `/inbox/photos/${second.id}`);
+    expect(errors).toEqual([]);
+});

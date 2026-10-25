@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { deletePhoto, type InboxPhoto } from '../inbox';
 import { shrink, uploadPhoto } from '../scan';
 
 interface Props {
@@ -15,6 +16,8 @@ interface Shot {
     blob: Blob;
     withAi: boolean;
     state: 'uploading' | 'done' | 'failed';
+    // In the inbox once uploaded
+    photo?: InboxPhoto;
 }
 
 // A pile of receipts photographed one after another (receipt scan): each photo goes to the inbox as soon as it is
@@ -28,14 +31,13 @@ export default function ScanReceipts({ aiEnabled, onDone }: Props) {
     const urls = useRef<string[]>([]);
     useEffect(() => () => urls.current.forEach(url => URL.revokeObjectURL(url)), []);
 
-    const setState = (key: number, state: Shot['state']) =>
-        setShots(list => list.map(shot => (shot.key === key ? { ...shot, state } : shot)));
+    const setState = (key: number, state: Shot['state'], photo?: InboxPhoto) =>
+        setShots(list => list.map(shot => (shot.key === key ? { ...shot, state, photo } : shot)));
 
     const send = async (key: number, blob: Blob, ai: boolean) => {
         setState(key, 'uploading');
         try {
-            await uploadPhoto(blob, ai);
-            setState(key, 'done');
+            setState(key, 'done', await uploadPhoto(blob, ai));
         } catch {
             setState(key, 'failed');
         }
@@ -53,6 +55,20 @@ export default function ScanReceipts({ aiEnabled, onDone }: Props) {
         const ai = aiEnabled && withAi;
         setShots(list => [...list, { key, url, blob, withAi: ai, state: 'uploading' }]);
         await send(key, blob, ai);
+    };
+
+    // Taken by mistake: out of the inbox again; a failed one never got there
+    const remove = async (shot: Shot) => {
+        if (shot.photo) {
+            if (!window.confirm(t('scan.confirmRemove'))) return;
+            try {
+                await deletePhoto(shot.photo);
+            } catch {
+                window.alert(t('scan.removeFailed'));
+                return;
+            }
+        }
+        setShots(list => list.filter(other => other.key !== shot.key));
     };
 
     const uploading = shots.some(shot => shot.state === 'uploading');
@@ -95,6 +111,9 @@ export default function ScanReceipts({ aiEnabled, onDone }: Props) {
                                         onClick={() => send(shot.key, shot.blob, shot.withAi)}>{t('scan.retry')}</button>
                                 </>
                             )}
+                            <button type="button" className="mt-1 text-slate-400 underline disabled:opacity-50"
+                                disabled={shot.state === 'uploading'} aria-label={t('scan.remove', { n: index + 1 })}
+                                onClick={() => remove(shot)}>✕ {t('scan.removeShort')}</button>
                         </li>
                     ))}
                 </ul>

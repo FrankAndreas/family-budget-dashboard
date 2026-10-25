@@ -18,6 +18,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPExcepti
 from fastapi.concurrency import run_in_threadpool
 from PIL import Image
 from sqlalchemy.orm import Session
+from sqlalchemy.orm.exc import StaleDataError
 
 from . import attachments, auth, database, i18n, inbox, messages, models, receipt_ai
 
@@ -147,6 +148,9 @@ def read_waiting() -> int:
                     photo.read_state = "waiting"
                     db.commit()
                     used_up.add(taker.id)
+                except StaleDataError:
+                    # Deleted while it was read (removed on the scan screen): on with the next one
+                    db.rollback()
     except Exception:
         logger.exception("Reading scanned receipts failed")
         return done
