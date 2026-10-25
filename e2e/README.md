@@ -50,7 +50,7 @@ On a failure, `test-results/` has a screenshot and a trace (`npx playwright show
 | `receipt-mails.spec.ts` | a forwarded receipt mail is released, read and booked |
 | `receipt-onto-payment.spec.ts` | a receipt read after the statement goes onto the bank booking that paid it |
 | `wrong-pins.spec.ts` | wrong PINs entered for a name are shown at its next login |
-| `receipt-scan.spec.ts` | a pile of receipts scanned (one failed upload retried), with thumbnails and a duplicate flag, then checked against the photo and booked one after another; a pile scanned without the AI; a photo that can't be read; the other parent's photo explains the missing account |
+| `receipt-scan.spec.ts` | a pile of receipts scanned (one failed upload retried), with thumbnails and a duplicate flag, then checked against the photo and booked one after another; a pile scanned without the AI; a photo that can't be read; the other parent's photo explains the missing account; a photo removed on the scan screen (after a confirmation) |
 | `phone-layout.spec.ts` | the overview at phone width: no sideways scrolling, compact summary cards, the tab row's "more tabs" arrow, one Scan button, amounts on one line, tap-sized edit and delete; Settings sections folded, the import rules folded with a search |
 | `edit-far-down.spec.ts` | editing a booking, investment or yearly bill far down a long list brings the filled-in form into view; the owner list says why other people are missing |
 | `investments.spec.ts` | investments grouped by tag with totals per group and overall, a due-soon marker, a new tag from the form, archived out of the totals and restored |

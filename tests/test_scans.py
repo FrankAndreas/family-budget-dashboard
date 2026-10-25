@@ -378,3 +378,26 @@ def test_different_receipts_are_not_duplicates(client):
     scanned(client, mum, "ONE")
     scanned(client, mum, "TWO")
     assert [p["duplicate"] for p in photos(client, mum)] == [False, False]
+
+
+def test_photo_deleted_while_read_doesnt_stop_the_others(client, ai, monkeypatch):
+    # Removed on the scan screen while the AI reads it: the reader goes on with the next photo
+    mum = register(client, "mum")
+    ai.down = True
+    first, second = scanned(client, mum, "ONE"), scanned(client, mum, "TWO")
+    ai.down = False
+    with database.SessionLocal() as db:
+        db.query(models.InboxPhoto).update({"read_state": "waiting"})
+        db.commit()
+    real = receipt_ai.ai_draft
+
+    def removed_meanwhile(*args):
+        if not removed:
+            removed.append(client.delete(f"{PHOTOS}/{first['id']}", headers=mum).status_code)
+        return real(*args)
+
+    removed: list = []
+    monkeypatch.setattr(receipt_ai, "ai_draft", removed_meanwhile)
+    assert scans.read_waiting() == 1
+    assert removed == [200]
+    assert [(p["id"], p["read_state"]) for p in photos(client, mum)] == [(second["id"], "read")]
