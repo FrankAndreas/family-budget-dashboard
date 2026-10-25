@@ -361,6 +361,18 @@ class Asset(Base):
     tag_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("tags.id", ondelete="SET NULL"), nullable=True)
     # Sold or scrapped on this day: out of every total, costs frozen at this day
     archived_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
+    # PURCHASE, or LEASE: then price = down payment, purchase_date = lease start, lifespan = how long it is kept in all
+    kind: Mapped[str] = mapped_column(String, default="PURCHASE", server_default="PURCHASE")
+    lease_rate: Mapped[Optional[float]] = mapped_column(Money, nullable=True)
+    lease_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    # The buy-out at the end
+    lease_final: Mapped[Optional[float]] = mapped_column(Money, nullable=True)
+
+    @property
+    def lease(self) -> Optional[tuple[float, int, float]]:
+        if self.kind != "LEASE" or self.lease_rate is None or not self.lease_months:
+            return None
+        return (self.lease_rate, self.lease_months, self.lease_final or 0.0)
 
 
 class Settlement(Base):

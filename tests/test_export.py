@@ -23,7 +23,7 @@ HEADERS = {
     "tags.csv": "tag_id,name,icon",
     "splits.csv": "split_id,name,member_id,member,percent",
     "investments.csv": "investment_id,name,owner_id,owner,split_id,split,price,purchase_date,lifespan_years,"
-    "age_years,replacement_due,monthly_set_aside,follow_up_costs,total_cost,cost_per_year,notes,tag_id,tag,archived_on",
+    "age_years,replacement_due,monthly_set_aside,follow_up_costs,total_cost,cost_per_year,notes,tag_id,tag,archived_on,kind,lease_rate,lease_months,lease_final,lease_end,monthly_load",
     "planned_costs.csv": "planned_cost_id,name,category_id,category,amount,frequency,due_month,next_due,monthly,"
     "owner_id,owner,split_id,split,notes",
     "bank_rows.csv": "bank_row_id,account_id,account,booked_on,valuta_on,text,amount,balance,transaction_id,reference",
@@ -177,6 +177,7 @@ def test_investments_and_planned_costs(client, family):
     [investment] = rows(archive, "investments.csv")
     assert investment["split"] == "Equal"
     assert (investment["tag"], investment["archived_on"]) == ("Mobility", "2026-10-14")
+    assert (investment["kind"], investment["lease_end"]) == ("PURCHASE", "")
     assert (investment["age_years"], investment["replacement_due"]) == ("4.0", "2030-10-14")
     assert (investment["follow_up_costs"], investment["total_cost"]) == ("600.0", "24600.0")
     [transaction] = [t for t in rows(archive, "transactions.csv") if t["investment"]]

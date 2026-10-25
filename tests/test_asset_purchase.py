@@ -172,3 +172,25 @@ def test_analytics_spent_and_set_aside_per_tag(client, family):
         f"{BASE_URL}/assets/{family['car']['id']}/archive", json={"archived_on": "2026-10-15"}, headers=family["mum"]
     )
     assert by_tag(client, family["dad"]) == {}
+
+
+def test_lease_sets_aside_the_buy_out_only(client, family):
+    before = by_tag(client, family["mum"])["Mobilität"][1]
+    client.post(
+        f"{BASE_URL}/assets",
+        json={
+            "name": "Leasing",
+            "kind": "LEASE",
+            "price": 5000,
+            "purchase_date": "2026-03-01",
+            "lifespan_years": 10,
+            "lease_rate": 390,
+            "lease_months": 48,
+            "lease_final": 12000,
+            "owner_id": family["mum_id"],
+            "tag_id": family["mobility"],
+        },
+        headers=family["mum"],
+    )
+    # The rates are booked (spent); set aside on top of the common car's half: the buy-out over the term
+    assert by_tag(client, family["mum"]) == {"Mobilität": (0, round(before + 250, 2))}

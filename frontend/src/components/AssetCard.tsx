@@ -40,9 +40,8 @@ export default function AssetCard({ asset, owner, canChange, expenses, onToggleC
             </div>
             <p className="text-xs text-slate-500">{owner}</p>
             <p className="text-sm mt-1">
-                {asset.purchase
-                    ? t('investments.boughtFor', { amount: money(asset.price), date: formatDate(asset.purchase_date) })
-                    : t('investments.estimated', { amount: money(asset.price), date: formatDate(asset.purchase_date) })}
+                {t(`investments.${asset.kind === 'LEASE' ? 'downPaid' : 'boughtFor'}`, { amount: money(asset.price), date: formatDate(asset.purchase_date) })}
+                {!asset.purchase && <span className="text-slate-400"> {t('investments.estimated')}</span>}
                 {asset.purchase?.attachments.map(a => (
                     <button type="button" key={a.id} onClick={() => openAttachment(a)} title={a.filename}
                         aria-label={t('investments.openReceipt', { name: a.filename })} className="ml-2 text-sky-400 hover:underline">📎</button>
@@ -62,11 +61,20 @@ export default function AssetCard({ asset, owner, canChange, expenses, onToggleC
                     ? t('investments.archivedOn', { date: formatDate(asset.archived_on) })
                     : t('investments.replace', { year: new Date(asset.replacement_due).getFullYear() })}
             </p>
-            {!asset.archived_on && (
+            {asset.lease_end && (
+                <p className="text-sm text-slate-400">
+                    {t(asset.monthly_rate > 0 ? 'investments.leaseUntil' : 'investments.leaseEnded', { date: formatDate(asset.lease_end) })}
+                </p>
+            )}
+            {!asset.archived_on && (asset.monthly_rate > 0 ? (
+                <p className="mt-2">
+                    {t('investments.leaseLoad', { rate: money(asset.monthly_rate), saving: money(asset.monthly_set_aside), load: money(asset.monthly_load) })}
+                </p>
+            ) : (
                 <p className="mt-2">
                     {t('investments.setAsideBefore')}<strong>{money(asset.monthly_set_aside)}</strong>{t('investments.setAsideAfter')}
                 </p>
-            )}
+            ))}
             <div className="flex flex-wrap gap-3 mt-3 text-sm">
                 <button onClick={onToggleCosts} className="text-slate-400 hover:text-white">
                     {expenses ? t('investments.hideCosts') : t('investments.costs')}

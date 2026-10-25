@@ -143,7 +143,10 @@ def set_aside_by_tag(db: Session, owner_id: str) -> dict[str, float]:
     for asset in db.query(models.Asset).filter(models.Asset.tag_id.isnot(None), models.Asset.archived_on.is_(None)):
         if not asset.tag_id:
             continue
-        monthly = finance.cents(asset.price / (asset.lifespan_years * 12))
+        # What is saved up; a lease's rate is booked, so it counts as spent
+        monthly = finance.asset_plan(asset.price, asset.purchase_date, asset.lifespan_years, today(), asset.lease)[
+            "monthly_set_aside"
+        ]
         if asset.split_id:
             result[asset.tag_id] += finance.split_amount(monthly, splits.get(asset.split_id, {})).get(owner_id, 0.0)
         elif asset.owner_id == owner_id:

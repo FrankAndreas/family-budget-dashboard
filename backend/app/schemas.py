@@ -458,6 +458,11 @@ class AssetIn(BaseModel):
     split_id: Optional[str] = None
     notes: Optional[str] = None
     tag_id: Optional[str] = None
+    # A lease: price is the down payment, purchase_date the lease start
+    kind: Literal["PURCHASE", "LEASE"] = "PURCHASE"
+    lease_rate: Optional[float] = Field(default=None, ge=0)
+    lease_months: Optional[int] = Field(default=None, ge=1, le=240)
+    lease_final: Optional[float] = Field(default=None, ge=0)
 
 
 class AssetArchive(BaseModel):
@@ -482,6 +487,10 @@ class Asset(AssetIn):
     replacement_due: date
     is_due: bool
     monthly_set_aside: float
+    # A lease's rate while it runs; the load is both together (what the Common tab divides)
+    monthly_rate: float = 0
+    monthly_load: float = 0
+    lease_end: Optional[date] = None
     total_cost: float
     cost_per_year: float
     # Monthly set-aside per person

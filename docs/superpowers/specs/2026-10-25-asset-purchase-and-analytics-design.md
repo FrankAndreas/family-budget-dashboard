@@ -44,3 +44,9 @@ amount, date, attachments) or null. Marking needs write access to the investment
   sets aside what this one cost in total (down payment + all rates + buy-out).
 - The lease end shows "due soon" on the group. A common lease's monthly load is divided by the split in the Common
   tab.
+
+**Step 2 data** (built 2026-10-25): `assets.kind` (PURCHASE/LEASE), `lease_rate`, `lease_months`, `lease_final`
+(migration 0018). For a lease, `price` is the down payment and `purchase_date` the lease start. Output adds
+`lease_end`, `monthly_rate` (the rate while the lease runs) and `monthly_load` (set-aside + rate): the group headers,
+the overall total and the Common tab use the load; Analytics' set-aside only the saving part (the rates are booked,
+so they count as spent). A lease needs a rate and a term shorter than the lifespan (400 `lease_incomplete`).

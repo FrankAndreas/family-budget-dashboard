@@ -27,7 +27,11 @@ const emptyForm = (userId: string) => ({
     owner: `owner:${userId}`,
     tag: '',
     newTag: '',
-    notes: ''
+    notes: '',
+    kind: 'PURCHASE' as Asset['kind'],
+    lease_rate: '',
+    lease_months: '',
+    lease_final: ''
 });
 
 // Big purchases (TV, fridge, car, bike): age, when to replace them, what to set aside, and what they cost so far;
@@ -111,6 +115,12 @@ export default function Investments() {
                 lifespan_years: parseInt(form.lifespan_years, 10),
                 notes: form.notes || null,
                 tag_id: tagId,
+                kind: form.kind,
+                ...(form.kind === 'LEASE' ? {
+                    lease_rate: parseFloat(form.lease_rate),
+                    lease_months: parseInt(form.lease_months, 10),
+                    lease_final: form.lease_final ? parseFloat(form.lease_final) : 0,
+                } : {}),
                 ...ownerFields(form.owner)
             };
             if (form.id) await api.put(`/api/v1/assets/${form.id}`, body);
@@ -137,7 +147,11 @@ export default function Investments() {
         owner: ownerValue(asset),
         tag: asset.tag_id ?? '',
         newTag: '',
-        notes: asset.notes ?? ''
+        notes: asset.notes ?? '',
+        kind: asset.kind,
+        lease_rate: asset.lease_rate != null ? String(asset.lease_rate) : '',
+        lease_months: asset.lease_months != null ? String(asset.lease_months) : '',
+        lease_final: asset.lease_final != null ? String(asset.lease_final) : ''
     });
 
     const card = (asset: Asset) => (
@@ -151,6 +165,7 @@ export default function Investments() {
     );
 
     const input = 'w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+    const lease = form?.kind === 'LEASE';
 
     return (
         <div className="glass-card p-6">
@@ -175,18 +190,39 @@ export default function Investments() {
 
             {form && (
                 <form ref={formRef} onSubmit={save} className="scroll-mt-4 mb-6 p-4 bg-slate-800/30 rounded-lg grid gap-2 md:grid-cols-2">
+                    <select className={`${input} md:col-span-2`} value={form.kind} aria-label={t('investments.kind')}
+                        onChange={(e) => setForm({ ...form, kind: e.target.value as Asset['kind'] })}>
+                        <option value="PURCHASE">{t('investments.kinds.PURCHASE')}</option>
+                        <option value="LEASE">{t('investments.kinds.LEASE')}</option>
+                    </select>
                     <input className={input} placeholder={t('investments.namePlaceholder')} value={form.name}
                         onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label={t('investments.name')} required />
-                    <input className={input} type="number" step="0.01" min="0.01" placeholder={t('investments.pricePlaceholder')} value={form.price}
-                        onChange={(e) => setForm({ ...form, price: e.target.value })} aria-label={t('investments.price')} required />
-                    <label className="text-sm text-slate-400">{t('investments.boughtOn')}
+                    <input className={input} type="number" step="0.01" min="0.01" value={form.price}
+                        placeholder={lease ? t('investments.downPayment') : t('investments.pricePlaceholder')}
+                        onChange={(e) => setForm({ ...form, price: e.target.value })}
+                        aria-label={lease ? t('investments.downPayment') : t('investments.price')} required />
+                    <label className="text-sm text-slate-400">{lease ? t('investments.leaseStart') : t('investments.boughtOn')}
                         <input className={input} type="date" value={form.purchase_date}
                             onChange={(e) => setForm({ ...form, purchase_date: e.target.value })} required />
                     </label>
-                    <label className="text-sm text-slate-400">{t('investments.lifespan')}
+                    <label className="text-sm text-slate-400">{lease ? t('investments.lifespanLease') : t('investments.lifespan')}
                         <input className={input} type="number" min="1" max="100" step="1" value={form.lifespan_years}
                             onChange={(e) => setForm({ ...form, lifespan_years: e.target.value })} required />
                     </label>
+                    {lease && (<>
+                        <label className="text-sm text-slate-400">{t('investments.leaseRate')}
+                            <input className={input} type="number" step="0.01" min="0" value={form.lease_rate} required
+                                onChange={(e) => setForm({ ...form, lease_rate: e.target.value })} />
+                        </label>
+                        <label className="text-sm text-slate-400">{t('investments.leaseMonths')}
+                            <input className={input} type="number" step="1" min="1" max="240" value={form.lease_months} required
+                                onChange={(e) => setForm({ ...form, lease_months: e.target.value })} />
+                        </label>
+                        <label className="text-sm text-slate-400">{t('investments.leaseFinal')}
+                            <input className={input} type="number" step="0.01" min="0" value={form.lease_final}
+                                onChange={(e) => setForm({ ...form, lease_final: e.target.value })} />
+                        </label>
+                    </>)}
                     <OwnerSelect value={form.owner} onChange={(owner) => setForm({ ...form, owner })} />
                     <div className="flex gap-2">
                         <select className={input} value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })}
