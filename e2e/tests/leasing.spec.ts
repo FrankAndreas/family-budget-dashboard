@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { login, newParent, tab } from './helpers';
+import { call, login, newParent, tab } from './helpers';
 
 // A leased car entered in the form: the monthly load is the rate plus the buy-out saved up over the term
 test('a leased car', async ({ page, request }) => {
@@ -25,6 +25,8 @@ test('a leased car', async ({ page, request }) => {
     await expect(page.getByTestId('investments-total')).toContainText('CHF 640.00 / month');
     // A group with a lease doesn't call the down payment a purchase price
     await expect(page.locator('details', { has: card }).first()).toContainText("Purchase prices and down payments CHF 5'000.00");
+    // Four years to go: not ending soon
+    await expect(card).not.toContainText('lease ends soon');
 
     // Editing keeps it a lease
     await card.getByRole('button', { name: 'Edit', exact: true }).click();
@@ -32,5 +34,33 @@ test('a leased car', async ({ page, request }) => {
     // Filled in, the fields still say what they are
     await expect(page.locator('form label', { hasText: 'Down payment' })).toBeVisible();
     await expect(page.locator('form label', { hasText: 'Name' }).first()).toBeVisible();
+    expect(errors).toEqual([]);
+});
+
+// A lease ending within a year: the card and its group say so, naming the month
+test('a lease that ends soon', async ({ page, request }) => {
+    const parent = await newParent(request);
+    const me = (await call(request, parent, 'GET', '/me')).id;
+    // 48 months from 42 months ago: ends in 6 months
+    const start = new Date();
+    start.setDate(1);
+    start.setMonth(start.getMonth() - 42);
+    const day = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-01`;
+    await call(request, parent, 'POST', '/assets', {
+        name: 'Leasingauto', kind: 'LEASE', price: 5000, purchase_date: day(start), lifespan_years: 10,
+        lease_rate: 390, lease_months: 48, lease_final: 12000, owner_id: me,
+    });
+    const end = new Date(start);
+    end.setMonth(end.getMonth() + 48);
+    const month = end.toLocaleDateString('en-GB', { month: 'long', year: 'numeric' });
+    const errors = await login(page, parent);
+    await tab(page, '📦 Investments');
+
+    const card = page.locator('div.rounded-lg', { has: page.getByRole('heading', { name: 'Leasingauto' }) }).last();
+    await expect(card).toContainText('lease ends soon');
+    const group = page.locator('details', { has: card }).first();
+    await expect(group).toContainText('due soon');
+    await expect(group).toContainText(`lease ends ${month} (Leasingauto)`);
+    await expect(group).not.toContainText('next replacement');
     expect(errors).toEqual([]);
 });

@@ -76,10 +76,18 @@ export interface Asset {
 
 const YEAR_MS = 365 * 24 * 60 * 60 * 1000;
 
+// A running lease that ends within a year: time to decide on the buy-out
+export function leaseEndsSoon(asset: Asset): boolean {
+    if (!asset.lease_end || asset.archived_on) return false;
+    const left = new Date(asset.lease_end).getTime() - Date.now();
+    return left > 0 && left < YEAR_MS;
+}
+
 // What a set of investments costs together
 export function assetTotals(assets: Asset[]) {
     const sum = (pick: (a: Asset) => number) => Math.round(assets.reduce((s, a) => s + pick(a), 0) * 100) / 100;
     const next = [...assets].sort((a, b) => a.replacement_due.localeCompare(b.replacement_due))[0];
+    const leaseEnding = assets.filter(leaseEndsSoon).sort((a, b) => a.lease_end!.localeCompare(b.lease_end!))[0];
     return {
         monthly: sum(a => a.monthly_load),
         price: sum(a => a.price),
@@ -87,9 +95,11 @@ export function assetTotals(assets: Asset[]) {
         total: sum(a => a.total_cost),
         perYear: sum(a => a.cost_per_year),
         next,
-        // Due, or due within a year
-        dueSoon: assets.some(a => a.is_due || [a.replacement_due, a.lease_end].some(day =>
-            day && new Date(day).getTime() > Date.now() - YEAR_MS && new Date(day).getTime() - Date.now() < YEAR_MS)),
+        // The earliest lease ending within a year
+        leaseEnding,
+        // Due, due within a year, or a lease ending within a year
+        dueSoon: !!leaseEnding || assets.some(a => a.is_due || (new Date(a.replacement_due).getTime() > Date.now() - YEAR_MS
+            && new Date(a.replacement_due).getTime() - Date.now() < YEAR_MS)),
     };
 }
 

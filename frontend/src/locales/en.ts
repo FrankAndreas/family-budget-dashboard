@@ -392,6 +392,8 @@ const en: Messages = {
         groupSummary: 'Bought for {{price}} · follow-up costs {{followUps}} · {{perYear}}/year',
         groupSummaryLease: 'Purchase prices and down payments {{price}} · follow-up costs and rates {{followUps}} · {{perYear}}/year',
         nextReplacement: 'next replacement {{year}} ({{name}})',
+        leaseEnds: 'lease ends {{month}} ({{name}})',
+        leaseEndsSoon: 'lease ends soon',
         allTotal: 'All investments',
         archive: 'Archive',
         archiveItem: 'Archive {{name}}',

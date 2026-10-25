@@ -390,6 +390,8 @@ const de = {
         groupSummary: 'Kaufpreis {{price}} · Folgekosten {{followUps}} · {{perYear}}/Jahr',
         groupSummaryLease: 'Kaufpreise und Anzahlungen {{price}} · Folgekosten und Raten {{followUps}} · {{perYear}}/Jahr',
         nextReplacement: 'nächster Ersatz {{year}} ({{name}})',
+        leaseEnds: 'Leasing endet {{month}} ({{name}})',
+        leaseEndsSoon: 'Leasing endet bald',
         allTotal: 'Alle Anschaffungen',
         archive: 'Archivieren',
         archiveItem: '{{name}} archivieren',

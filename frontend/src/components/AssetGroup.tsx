@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { assetTotals, money, type Asset } from '../finance';
+import { formatMonth } from '../format';
 import { useRememberedOpen } from '../useRememberedOpen';
 
 interface Props {
@@ -31,7 +32,9 @@ export default function AssetGroup({ id, title, assets, children }: Props) {
                 <p className="text-sm text-slate-400 mb-3">
                     {t(assets.some(a => a.kind === 'LEASE') ? 'investments.groupSummaryLease' : 'investments.groupSummary',
                         { price: money(sums.price), followUps: money(sums.followUps), perYear: money(sums.perYear) })}
-                    {sums.next && <>{' · '}{t('investments.nextReplacement', { year: new Date(sums.next.replacement_due).getFullYear(), name: sums.next.name })}</>}
+                    {sums.leaseEnding
+                        ? <>{' · '}{t('investments.leaseEnds', { month: formatMonth(sums.leaseEnding.lease_end!), name: sums.leaseEnding.name })}</>
+                        : sums.next && <>{' · '}{t('investments.nextReplacement', { year: new Date(sums.next.replacement_due).getFullYear(), name: sums.next.name })}</>}
                 </p>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">{children}</div>
             </div>
