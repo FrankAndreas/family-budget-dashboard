@@ -1,3 +1,4 @@
+import type { AttachmentInfo } from './receipts';
 import { useCallback, useEffect, useState } from 'react';
 import api from './api';
 
@@ -51,6 +52,8 @@ export interface Asset {
     tag_id: string | null;
     // Sold or scrapped on this day: out of every total
     archived_on: string | null;
+    // The booking that bought it, with its receipt; none: price and date are estimates
+    purchase: { transaction_id: string; amount: number; date: string; attachments: AttachmentInfo[] } | null;
     age_years: number;
     // Purchase date in the future: not bought yet
     planned: boolean;

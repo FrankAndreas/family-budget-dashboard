@@ -39,7 +39,8 @@ other family members share with them, and (for parents) the common budget, inves
 - A shared expense (`split` set) appears **in full** in the payer's transactions, because that is what left
   their account. Each parent's part is in `shared_expense_shares.csv` (join on `transaction_id`).
 - `for_member` is the child an expense was for; `investment` the investment it belongs to (purchase, repair,
-  service); `reference` is the ID an import tool gave the source receipt.
+  service), `investment_purchase` `True` for the booking that bought it (its price in `investments.csv` already holds
+  it, so it is not in `follow_up_costs`); `reference` is the ID an import tool gave the source receipt.
 
 ### bank_rows.csv
 

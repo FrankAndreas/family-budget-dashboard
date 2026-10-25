@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import auth, crud, database, finance, models, privacy, schemas, messages
+from . import auth, crud, database, finance, models, privacy, reports, schemas, messages
 from .seed import SETTLE_UP, system_category
 
 router = APIRouter()
@@ -360,7 +360,10 @@ ASSET_FIELDS = (
 
 
 def asset_out(db: Session, asset: models.Asset) -> dict:
-    follow_ups = db.query(models.Transaction).filter(models.Transaction.asset_id == asset.id).all()
+    linked = db.query(models.Transaction).filter(models.Transaction.asset_id == asset.id).all()
+    # The purchase is in the price already
+    follow_ups = [t for t in linked if not t.asset_purchase]
+    purchase = next((t for t in linked if t.asset_purchase), None)
     # An archived investment is seen as on the day it left: age and cost per year stop there
     stats = finance.asset_stats(
         asset.price,
@@ -377,6 +380,13 @@ def asset_out(db: Session, asset: models.Asset) -> dict:
         "shares": (
             {} if asset.archived_on else monthly_shares(db, stats["monthly_set_aside"], asset.owner_id, asset.split_id)
         ),
+        "purchase": purchase
+        and {
+            "transaction_id": purchase.id,
+            "amount": abs(purchase.amount),
+            "date": reports.swiss_day(purchase.date),
+            "attachments": purchase.attachments,
+        },
     }
 
 
@@ -409,7 +419,7 @@ def read_asset(
     asset = get_asset(db, current_user, asset_id)
     expenses = (
         db.query(models.Transaction)
-        .filter(models.Transaction.asset_id == asset.id)
+        .filter(models.Transaction.asset_id == asset.id, models.Transaction.asset_purchase.is_(False))
         .order_by(models.Transaction.date.desc())
         .all()
     )

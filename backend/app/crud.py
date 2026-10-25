@@ -258,7 +258,7 @@ def update_transaction(
 ):
     old_amount = db_transaction.amount
     # Items are set by items.apply, never as a plain attribute
-    update_data = update.model_dump(exclude_unset=True, exclude={"items"})
+    update_data = update.model_dump(exclude_unset=True, exclude={"items", "asset_purchase"})
 
     if update_data.get("date"):
         update_data["date"] = to_naive_utc(update_data["date"])

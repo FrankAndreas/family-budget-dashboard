@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { money, type Asset } from '../finance';
 import { formatDate } from '../format';
+import { openAttachment } from '../receipts';
 
 interface Expense { id: string; amount: number; date: string; description: string | null }
 
@@ -38,6 +39,15 @@ export default function AssetCard({ asset, owner, canChange, expenses, onToggleC
                 )}
             </div>
             <p className="text-xs text-slate-500">{owner}</p>
+            <p className="text-sm mt-1">
+                {asset.purchase
+                    ? t('investments.boughtFor', { amount: money(asset.price), date: formatDate(asset.purchase_date) })
+                    : t('investments.estimated', { amount: money(asset.price), date: formatDate(asset.purchase_date) })}
+                {asset.purchase?.attachments.map(a => (
+                    <button type="button" key={a.id} onClick={() => openAttachment(a)} title={a.filename}
+                        aria-label={t('investments.openReceipt', { name: a.filename })} className="ml-2 text-sky-400 hover:underline">📎</button>
+                ))}
+            </p>
             <div className="mt-3 h-2 rounded bg-slate-700" role="img"
                 aria-label={t('investments.age', { age: asset.age_years, lifespan: asset.lifespan_years })}>
                 <div className={`h-2 rounded ${asset.is_due ? 'bg-amber-400' : 'bg-cyan-400'}`}
@@ -87,7 +97,6 @@ export default function AssetCard({ asset, owner, canChange, expenses, onToggleC
             )}
             {expenses && (
                 <div className="mt-3 pt-3 border-t border-slate-700 text-sm space-y-1">
-                    <p>{t('investments.boughtFor', { amount: money(asset.price), date: formatDate(asset.purchase_date) })}</p>
                     {expenses.map(e => (
                         <p key={e.id} className="text-slate-400">
                             {formatDate(e.date)} · {e.description || t('common.noDescription')} · {money(Math.abs(e.amount))}

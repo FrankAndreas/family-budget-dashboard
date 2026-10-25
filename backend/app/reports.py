@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, selectinload
 
-from . import auth, database, i18n, models, privacy
+from . import auth, database, finance, i18n, models, privacy
 
 router = APIRouter()
 
@@ -76,12 +76,24 @@ def lines(db: Session, owner_id: str, since: Optional[date]) -> list[Line]:
     )
     if since:
         query = query.filter(models.Transaction.date >= utc_start(since))
+    # A booking linked to an investment with a tag counts under that tag (the purchase and its follow-up costs)
+    asset_tags: dict[str, str] = {
+        asset_id: tag_id
+        for asset_id, tag_id in db.query(models.Asset.id, models.Asset.tag_id).filter(models.Asset.tag_id.isnot(None))
+        if tag_id
+    }
     result = []
     for transaction, category in query.all():
+        via_asset = frozenset([asset_tags[transaction.asset_id]] if transaction.asset_id in asset_tags else [])
         if not transaction.items:
             result.append(
                 Line(
-                    transaction.date, abs(transaction.amount), category.type, category, member_id=transaction.member_id
+                    transaction.date,
+                    abs(transaction.amount),
+                    category.type,
+                    category,
+                    member_id=transaction.member_id,
+                    tag_ids=via_asset,
                 )
             )
             continue
@@ -93,7 +105,7 @@ def lines(db: Session, owner_id: str, since: Optional[date]) -> list[Line]:
                     item.category.type,
                     item.category,
                     person_id=item.person_id,
-                    tag_ids=frozenset(t.id for t in item.tags),
+                    tag_ids=frozenset(t.id for t in item.tags) | via_asset,
                 )
             )
     return result
@@ -122,6 +134,21 @@ def budget_out(db: Session, budget: models.Budget) -> dict:
         "spent": spent,
         "percentage": percentage,
     }
+
+
+def set_aside_by_tag(db: Session, owner_id: str) -> dict[str, float]:
+    """Per tag: what the owner sets aside each month for the active investments with it (their share of common ones)."""
+    result: dict[str, float] = defaultdict(float)
+    splits = {s.id: s.shares or {} for s in db.query(models.Split)}
+    for asset in db.query(models.Asset).filter(models.Asset.tag_id.isnot(None), models.Asset.archived_on.is_(None)):
+        if not asset.tag_id:
+            continue
+        monthly = finance.cents(asset.price / (asset.lifespan_years * 12))
+        if asset.split_id:
+            result[asset.tag_id] += finance.split_amount(monthly, splits.get(asset.split_id, {})).get(owner_id, 0.0)
+        elif asset.owner_id == owner_id:
+            result[asset.tag_id] += monthly
+    return {tag_id: amount for tag_id, amount in result.items() if amount}
 
 
 def summary(db: Session, owner: models.User, period: str, day: date) -> dict:
@@ -161,6 +188,9 @@ def summary(db: Session, owner: models.User, period: str, day: date) -> dict:
             months[local.strftime("%Y-%m")][line.type] += line.amount
         if local.isoformat() in days:
             days[local.isoformat()][line.type] += line.amount
+    set_aside = set_aside_by_tag(db, owner.id)
+    for tag_id in set_aside:
+        by_tag.setdefault(tag_id, 0.0)
     people = set(by_child) | set(by_person)
     names = {u.id: u.username for u in db.query(models.User).filter(models.User.id.in_(list(people)))}
     tags = {t.id: t for t in db.query(models.Tag).filter(models.Tag.id.in_(list(by_tag)))}
@@ -186,7 +216,13 @@ def summary(db: Session, owner: models.User, period: str, day: date) -> dict:
         ),
         "by_tag": sorted(
             (
-                {"tag_id": tid, "name": tags[tid].name, "icon": tags[tid].icon, "amount": cents(a)}
+                {
+                    "tag_id": tid,
+                    "name": tags[tid].name,
+                    "icon": tags[tid].icon,
+                    "amount": cents(a),
+                    "set_aside": cents(set_aside.get(tid, 0.0)),
+                }
                 for tid, a in by_tag.items()
                 if tid in tags
             ),

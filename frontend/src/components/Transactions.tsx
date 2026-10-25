@@ -7,6 +7,7 @@ import type { Account, BankRow, Category, Transaction } from '../accounts';
 import type { FamilyUser } from '../family';
 import { openAttachment, useReceiptReading, useTags } from '../receipts';
 import ReceiptForm from './ReceiptForm';
+import AssetLink from './AssetLink';
 import { useScrollIntoView } from '../useScrollIntoView';
 
 interface Props {
@@ -30,7 +31,7 @@ interface Props {
     onError: (message: string) => void;
 }
 
-const emptyForm = { amount: '', description: '', category_id: '', member_id: '', split_id: '', asset_id: '' };
+const emptyForm = { amount: '', description: '', category_id: '', member_id: '', split_id: '', asset_id: '', asset_purchase: false };
 const field = 'w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
 
 // The selected account's transactions, with the form to add or edit one
@@ -137,7 +138,8 @@ export default function Transactions({
             category_id: transaction.category_id,
             member_id: transaction.member_id || '',
             split_id: transaction.split_id || '',
-            asset_id: transaction.asset_id || ''
+            asset_id: transaction.asset_id || '',
+            asset_purchase: !!transaction.asset_purchase
         });
         setEditingId(transaction.id);
         setShowForm(true);
@@ -152,7 +154,8 @@ export default function Transactions({
             // null removes a tag when editing
             member_id: form.member_id || null,
             split_id: form.split_id || null,
-            asset_id: form.asset_id || null
+            asset_id: form.asset_id || null,
+            asset_purchase: !!form.asset_id && form.asset_purchase
         };
         try {
             if (editingId) {
@@ -213,6 +216,7 @@ export default function Transactions({
                     categories={expenseCategories}
                     people={people}
                     aiEnabled={aiEnabled}
+                    assets={isParent ? assets : undefined}
                     transaction={receiptFor === 'new' ? undefined : receiptFor}
                     onSaved={() => { setReceiptFor(null); onChanged(); }}
                     onCancel={() => setReceiptFor(null)}
@@ -251,7 +255,8 @@ export default function Transactions({
                             category_id: e.target.value,
                             // Only expenses can be shared
                             split_id: isExpense(e.target.value) ? form.split_id : '',
-                            asset_id: isExpense(e.target.value) ? form.asset_id : ''
+                            asset_id: isExpense(e.target.value) ? form.asset_id : '',
+                            asset_purchase: isExpense(e.target.value) && form.asset_purchase
                         })}
                         className={field}
                         required
@@ -287,15 +292,8 @@ export default function Transactions({
                         </select>
                     )}
                     {canLinkItem && (
-                        <select
-                            value={form.asset_id}
-                            onChange={(e) => setForm({ ...form, asset_id: e.target.value })}
-                            className={field}
-                            aria-label={t('transactions.forItem')}
-                        >
-                            <option value="">{t('transactions.forNoItem')}</option>
-                            {assets.filter(asset => !asset.archived_on || asset.id === form.asset_id).map(asset => <option key={asset.id} value={asset.id}>{t('transactions.forItemName', { name: asset.name })}</option>)}
-                        </select>
+                        <AssetLink assets={assets} assetId={form.asset_id} purchase={form.asset_purchase} className={field}
+                            onChange={(asset_id, asset_purchase) => setForm({ ...form, asset_id, asset_purchase })} />
                     )}
                     <div className="flex gap-2">
                         <button type="submit" className="btn-primary flex-1">
