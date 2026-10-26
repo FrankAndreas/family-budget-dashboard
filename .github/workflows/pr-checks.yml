@@ -32,7 +32,7 @@ jobs:
           echo "✅ No large files detected"
       
       - name: Check for secrets
-        uses: trufflesecurity/trufflehog@v3.99.3
+        uses: trufflesecurity/trufflehog@v3.99.7
         with:
           path: ./
           base: ${{ github.event.pull_request.base.sha }}
