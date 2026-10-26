@@ -7,6 +7,6 @@ bcrypt==5.0.0
 PyJWT==2.15.1
 tzdata==2026.5
 alembic==1.20.1
-pypdf==6.21.1
+pypdf==6.21.2
 pypdfium2==5.14.0
 Pillow==13.0.0
