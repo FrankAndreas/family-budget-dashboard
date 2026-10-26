@@ -28,7 +28,7 @@ def family(client, monkeypatch):
             "purchase_date": "2026-09-01",
             "lifespan_years": 8,
             "split_id": split,
-            "tag_id": mobility,
+            "tag_ids": [mobility],
         },
         headers=mum,
     ).json()
@@ -78,7 +78,7 @@ def test_purchase_fills_price_and_date_and_is_no_follow_up(client, family):
         "purchase_date": "2026-10-10",
         "lifespan_years": 8,
         "split_id": car["split_id"],
-        "tag_id": family["mobility"],
+        "tag_ids": [family["mobility"]],
     }
     client.put(f"{BASE_URL}/assets/{car['id']}", json=body, headers=family["mum"])
     client.put(
@@ -188,7 +188,7 @@ def test_lease_sets_aside_the_buy_out_only(client, family):
             "lease_months": 48,
             "lease_final": 12000,
             "owner_id": family["mum_id"],
-            "tag_id": family["mobility"],
+            "tag_ids": [family["mobility"]],
         },
         headers=family["mum"],
     )

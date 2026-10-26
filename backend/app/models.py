@@ -343,6 +343,13 @@ class Split(Base):
     shares: Mapped[Any] = mapped_column(JSON, default={}, nullable=True)
 
 
+class AssetTag(Base):
+    __tablename__ = "asset_tags"
+
+    asset_id: Mapped[str] = mapped_column(String, ForeignKey("assets.id", ondelete="CASCADE"), primary_key=True)
+    tag_id: Mapped[str] = mapped_column(String, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
+
+
 class Asset(Base):
     """A long-lived purchase (TV, fridge, car, bike): planned for replacement, with its follow-up costs."""
 
@@ -357,8 +364,6 @@ class Asset(Base):
     owner_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("users.id"), nullable=True)
     split_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("splits.id"), nullable=True)
     notes: Mapped[Optional[str]] = mapped_column(String, nullable=True)
-    # Groups it on the Investments tab
-    tag_id: Mapped[Optional[str]] = mapped_column(String, ForeignKey("tags.id", ondelete="SET NULL"), nullable=True)
     # Sold or scrapped on this day: out of every total, costs frozen at this day
     archived_on: Mapped[Optional[date]] = mapped_column(Date, nullable=True)
     # PURCHASE, or LEASE: then price = down payment, purchase_date = lease start, lifespan = how long it is kept in all
@@ -367,6 +372,13 @@ class Asset(Base):
     lease_months: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     # The buy-out at the end
     lease_final: Mapped[Optional[float]] = mapped_column(Money, nullable=True)
+
+    # Groups it on the Investments tab, in each tag's group
+    tags: Mapped[list["Tag"]] = relationship("Tag", secondary="asset_tags", order_by="Tag.name")
+
+    @property
+    def tag_ids(self) -> list[str]:
+        return [tag.id for tag in self.tags]
 
     @property
     def lease(self) -> Optional[tuple[float, int, float]]:

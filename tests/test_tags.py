@@ -96,6 +96,6 @@ def test_usage_counts_investments(client):
     mum = register(client, "mum")
     velo = add(client, mum, "Velo").json()
     body = {"name": "Velo", "price": 1200, "purchase_date": "2025-04-01", "lifespan_years": 8}
-    body |= {"owner_id": user_id(client, mum, "mum"), "tag_id": velo["id"]}
+    body |= {"owner_id": user_id(client, mum, "mum"), "tag_ids": [velo["id"]]}
     assert client.post(f"{BASE_URL}/assets", json=body, headers=mum).status_code == 200
     assert client.get(f"{TAGS}/usage", headers=mum).json()[velo["id"]] == {"items": 0, "budgets": 0, "assets": 1}

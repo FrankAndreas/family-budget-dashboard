@@ -10,7 +10,8 @@ test('investments by tag, archived and restored', async ({ page, request }) => {
     const mobility = await call(request, parent, 'POST', '/tags', { name: `Mobilität ${parent.name}`, icon: '🚗' });
     const nextYear = new Date().getFullYear() + 1;
     const add = (name: string, price: number, purchase_date: string, lifespan_years: number, tag_id?: string) =>
-        call(request, parent, 'POST', '/assets', { name, price, purchase_date, lifespan_years, owner_id: me, tag_id });
+        call(request, parent, 'POST', '/assets',
+            { name, price, purchase_date, lifespan_years, owner_id: me, tag_ids: tag_id ? [tag_id] : [] });
     await add('Auto', 30000, `${nextYear - 5}-06-01`, 10, mobility.id);
     // Replaced in less than a year: the group shows it even when folded
     await add('Velo', 1500, `${nextYear - 5}-01-01`, 5, mobility.id);
@@ -40,7 +41,7 @@ test('investments by tag, archived and restored', async ({ page, request }) => {
     await page.getByRole('button', { name: '+ Add Item' }).click();
     await page.getByLabel('Name', { exact: true }).fill('Rasenmäher');
     await page.getByLabel('Price', { exact: true }).fill('600');
-    await page.getByLabel('Tag', { exact: true }).selectOption({ label: '+ New tag…' });
+    await page.getByRole('button', { name: '+ New tag…' }).click();
     await page.getByLabel('New tag name').fill(`Garten ${parent.name}`);
     await page.getByRole('button', { name: 'Add Item' }).click();
     await expect(page.locator('details', { has: page.getByText(`Garten ${parent.name}`) }).locator('summary'))
@@ -61,5 +62,36 @@ test('investments by tag, archived and restored', async ({ page, request }) => {
     await page.getByRole('button', { name: 'Settings' }).click();
     const tags = page.locator('details', { has: page.getByRole('heading', { name: 'Tags' }) });
     await expect(tags.locator('li', { hasText: `Mobilität ${parent.name}` })).toContainText('on 2 investments');
+    expect(errors).toEqual([]);
+});
+
+// A bike for getting around and for the hobby: in both groups, counted once in the overall total
+test('an investment with two tags', async ({ page, request }) => {
+    const parent = await newParent(request);
+    const me = (await call(request, parent, 'GET', '/me')).id;
+    const mobility = await call(request, parent, 'POST', '/tags', { name: `Mobility ${parent.name}` });
+    const bike = await call(request, parent, 'POST', '/tags', { name: `Bike ${parent.name}` });
+    // 2400 over 10 years: 20 a month
+    await call(request, parent, 'POST', '/assets',
+        { name: 'Velo', price: 2400, purchase_date: '2024-10-01', lifespan_years: 10, owner_id: me, tag_ids: [mobility.id] });
+    const errors = await login(page, parent);
+    await tab(page, '📦 Investments');
+
+    // The second tag from the form
+    const card = page.locator('div.rounded-lg', { has: page.getByRole('heading', { name: 'Velo' }) });
+    await card.first().getByRole('button', { name: 'Edit', exact: true }).click();
+    await expect(page.getByLabel(`Tag Mobility ${parent.name}`)).toBeChecked();
+    await page.getByLabel(`Tag Bike ${parent.name}`).check({ force: true });
+    await page.getByRole('button', { name: 'Save', exact: true }).click();
+
+    for (const name of [`Mobility ${parent.name}`, `Bike ${parent.name}`]) {
+        const group = page.locator('details', { has: page.getByText(name, { exact: true }) });
+        await expect(group.locator('summary')).toContainText('CHF 20.00 / month');
+        await expect(group.getByRole('heading', { name: 'Velo' })).toBeVisible();
+    }
+    await expect(card).toHaveCount(2);
+    await expect(card.first()).toContainText('also in:');
+    await expect(page.getByTestId('investments-total')).toContainText('CHF 20.00 / month');
+    await expect(page.getByTestId('investments-total')).toContainText('counted once');
     expect(errors).toEqual([]);
 });

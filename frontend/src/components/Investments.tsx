@@ -15,8 +15,6 @@ import { useScrollIntoView } from '../useScrollIntoView';
 interface Expense { id: string; amount: number; date: string; description: string | null }
 type Filter = 'all' | 'mine' | 'common' | 'others';
 const FILTERS: Filter[] = ['all', 'mine', 'common', 'others'];
-// The tag select's choice for making a new tag
-const NEW_TAG = 'new';
 
 const emptyForm = (userId: string) => ({
     id: null as string | null,
@@ -25,8 +23,9 @@ const emptyForm = (userId: string) => ({
     purchase_date: new Date().toISOString().slice(0, 10),
     lifespan_years: '5',
     owner: `owner:${userId}`,
-    tag: '',
-    newTag: '',
+    tag_ids: [] as string[],
+    // A new tag typed in the form, made on saving; null while it isn't asked for
+    newTag: null as string | null,
     notes: '',
     kind: 'PURCHASE' as Asset['kind'],
     lease_rate: '',
@@ -68,12 +67,15 @@ export default function Investments() {
     );
     const active = shown.filter(a => !a.archived_on);
     const archived = shown.filter(a => a.archived_on);
-    // Per tag (an unknown or no tag: "No tag" last among equals), the costliest group first
-    const groups = [...tags.map(tag => ({ id: tag.id, title: `${tag.icon ? `${tag.icon} ` : ''}${tag.name}`, assets: active.filter(a => a.tag_id === tag.id) })),
-        { id: 'none', title: t('investments.noTag'), assets: active.filter(a => !a.tag_id || !tags.some(tag => tag.id === a.tag_id)) }]
+    const tagsOf = (asset: Asset) => tags.filter(tag => asset.tag_ids.includes(tag.id));
+    // In each of its tags' groups (no known tag: "No tag", last among equals), the costliest group first
+    const groups = [...tags.map(tag => ({ id: tag.id, title: `${tag.icon ? `${tag.icon} ` : ''}${tag.name}`, assets: active.filter(a => a.tag_ids.includes(tag.id)) })),
+        { id: 'none', title: t('investments.noTag'), assets: active.filter(a => tagsOf(a).length === 0) }]
         .filter(g => g.assets.length > 0)
         .sort((a, b) => assetTotals(b.assets).monthly - assetTotals(a.assets).monthly);
+    // Each investment once, even when it is in several groups
     const all = assetTotals(active);
+    const inSeveral = active.some(a => tagsOf(a).length > 1);
 
     const call = async (request: () => Promise<unknown>, failed: string) => {
         try {
@@ -103,9 +105,9 @@ export default function Investments() {
         e.preventDefault();
         if (!form) return;
         try {
-            let tagId: string | null = form.tag || null;
-            if (form.tag === NEW_TAG) {
-                tagId = (await api.post('/api/v1/tags', { name: form.newTag })).data.id;
+            const tagIds = [...form.tag_ids];
+            if (form.newTag) {
+                tagIds.push((await api.post('/api/v1/tags', { name: form.newTag })).data.id);
                 reloadTags();
             }
             const body = {
@@ -114,7 +116,7 @@ export default function Investments() {
                 purchase_date: form.purchase_date,
                 lifespan_years: parseInt(form.lifespan_years, 10),
                 notes: form.notes || null,
-                tag_id: tagId,
+                tag_ids: tagIds,
                 kind: form.kind,
                 ...(form.kind === 'LEASE' ? {
                     lease_rate: parseFloat(form.lease_rate),
@@ -145,8 +147,8 @@ export default function Investments() {
         purchase_date: asset.purchase_date,
         lifespan_years: String(asset.lifespan_years),
         owner: ownerValue(asset),
-        tag: asset.tag_id ?? '',
-        newTag: '',
+        tag_ids: asset.tag_ids,
+        newTag: null,
         notes: asset.notes ?? '',
         kind: asset.kind,
         lease_rate: asset.lease_rate != null ? String(asset.lease_rate) : '',
@@ -154,8 +156,10 @@ export default function Investments() {
         lease_final: asset.lease_final != null ? String(asset.lease_final) : ''
     });
 
-    const card = (asset: Asset) => (
+    // In a tag's group: the card names its other tags
+    const card = (asset: Asset, groupId?: string) => (
         <AssetCard key={asset.id} asset={asset} owner={ownerLabel(asset)} canChange={canChange(asset)}
+            alsoIn={groupId ? tagsOf(asset).filter(tag => tag.id !== groupId).map(tag => tag.name) : []}
             expenses={openId === asset.id ? expenses : null}
             onToggleCosts={() => toggle(asset)}
             onEdit={() => edit(asset)}
@@ -227,18 +231,29 @@ export default function Investments() {
                         </label>
                     </>)}
                     <OwnerSelect value={form.owner} onChange={(owner) => setForm({ ...form, owner })} />
-                    <div className="flex gap-2">
-                        <select className={input} value={form.tag} onChange={(e) => setForm({ ...form, tag: e.target.value })}
-                            aria-label={t('investments.tag')}>
-                            <option value="">{t('investments.noTag')}</option>
-                            {tags.map(tag => <option key={tag.id} value={tag.id}>{tag.icon ? `${tag.icon} ` : ''}{tag.name}</option>)}
-                            <option value={NEW_TAG}>{t('investments.newTag')}</option>
-                        </select>
-                        {form.tag === NEW_TAG && (
-                            <input className={input} value={form.newTag} onChange={(e) => setForm({ ...form, newTag: e.target.value })}
+                    {/* Any number of tags: the investment shows in each one's group */}
+                    <fieldset className="md:col-span-2 flex flex-wrap items-center gap-2 text-xs">
+                        <legend className="text-sm text-slate-400 mb-1">{t('investments.tags')}</legend>
+                        {tags.map(tag => {
+                            const on = form.tag_ids.includes(tag.id);
+                            return (
+                                <label key={tag.id} className={`px-2 py-0.5 rounded-full cursor-pointer border ${on
+                                    ? 'bg-amber-500/20 border-amber-400 text-amber-200' : 'border-slate-600 text-slate-400'}`}>
+                                    <input type="checkbox" className="sr-only" checked={on}
+                                        aria-label={t('investments.tagOf', { tag: tag.name })}
+                                        onChange={() => setForm({ ...form, tag_ids: on ? form.tag_ids.filter(id => id !== tag.id) : [...form.tag_ids, tag.id] })} />
+                                    {tag.icon ? `${tag.icon} ` : ''}{tag.name}
+                                </label>
+                            );
+                        })}
+                        {form.newTag === null ? (
+                            <button type="button" className="px-2 py-0.5 rounded-full border border-dashed border-slate-600 text-slate-400 hover:text-white"
+                                onClick={() => setForm({ ...form, newTag: '' })}>{t('investments.newTag')}</button>
+                        ) : (
+                            <input className={`${input} text-sm w-auto`} value={form.newTag} onChange={(e) => setForm({ ...form, newTag: e.target.value })}
                                 aria-label={t('investments.newTagName')} placeholder={t('investments.newTagName')} required maxLength={50} />
                         )}
-                    </div>
+                    </fieldset>
                     <input className={`${input} md:col-span-2`} placeholder={t('investments.notesPlaceholder')} value={form.notes}
                         onChange={(e) => setForm({ ...form, notes: e.target.value })} aria-label={t('investments.notes')} />
                     <div className="flex gap-2 md:col-span-2">
@@ -257,14 +272,15 @@ export default function Investments() {
                             {t('investments.allTotal')}{' · '}<strong>{t('investments.perMonth', { amount: money(all.monthly) })}</strong>
                             {' · '}{t('investments.soFar', { amount: money(all.total) })}
                             {' · '}{t('investments.perYearTotal', { amount: money(all.perYear) })}
+                            {inSeveral && <span className="block text-slate-400">{t('investments.countedOnce')}</span>}
                         </p>
                     )}
                     {groups.map(group => (
                         <AssetGroup key={group.id} id={group.id} title={group.title} assets={group.assets}>
-                            {[...group.assets].sort((a, b) => a.replacement_due.localeCompare(b.replacement_due)).map(card)}
+                            {[...group.assets].sort((a, b) => a.replacement_due.localeCompare(b.replacement_due)).map(asset => card(asset, group.id))}
                         </AssetGroup>
                     ))}
-                    {archived.length > 0 && <ArchivedGroup count={archived.length}>{archived.map(card)}</ArchivedGroup>}
+                    {archived.length > 0 && <ArchivedGroup count={archived.length}>{archived.map(asset => card(asset))}</ArchivedGroup>}
                 </div>
             )}
         </div>

@@ -49,7 +49,8 @@ export interface Asset {
     owner_id: string | null;
     split_id: string | null;
     notes: string | null;
-    tag_id: string | null;
+    // Shown in each tag's group
+    tag_ids: string[];
     // Sold or scrapped on this day: out of every total
     archived_on: string | null;
     // The booking that bought it, with its receipt; none: price and date are estimates

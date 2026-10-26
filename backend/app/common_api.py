@@ -231,9 +231,12 @@ def check_owner(db: Session, current_user: models.User, owner_id: Optional[str],
         raise messages.api_error(403, "cant_manage_items")
 
 
-def check_tag(db: Session, tag_id: Optional[str]) -> None:
-    if tag_id and not db.query(models.Tag).filter(models.Tag.id == tag_id).first():
+def check_tags(db: Session, tag_ids: list[str]) -> list[models.Tag]:
+    wanted = set(tag_ids)
+    tags = db.query(models.Tag).filter(models.Tag.id.in_(wanted)).all()
+    if len(tags) != len(wanted):
         raise messages.api_error(400, "tag_not_found")
+    return tags
 
 
 def check_lease(asset: schemas.AssetIn) -> None:
@@ -363,7 +366,7 @@ ASSET_FIELDS = (
     "owner_id",
     "split_id",
     "notes",
-    "tag_id",
+    "tag_ids",
     "archived_on",
     "kind",
     "lease_rate",
@@ -447,11 +450,11 @@ def create_asset(
     asset: schemas.AssetIn, current_user: models.User = Depends(require_parent), db: Session = Depends(database.get_db)
 ):
     check_owner(db, current_user, asset.owner_id, asset.split_id)
-    check_tag(db, asset.tag_id)
+    tags = check_tags(db, asset.tag_ids)
     check_lease(asset)
-    data = asset.model_dump()
+    data = asset.model_dump(exclude={"tag_ids"})
     data["price"] = finance.cents(data["price"])
-    db_asset = models.Asset(**data)
+    db_asset = models.Asset(**data, tags=tags)
     db.add(db_asset)
     db.commit()
     db.refresh(db_asset)
@@ -467,10 +470,11 @@ def update_asset(
 ):
     db_asset = get_asset(db, current_user, asset_id, write=True)
     check_owner(db, current_user, asset.owner_id, asset.split_id)
-    check_tag(db, asset.tag_id)
+    tags = check_tags(db, asset.tag_ids)
     check_lease(asset)
-    for key, value in asset.model_dump().items():
+    for key, value in asset.model_dump(exclude={"tag_ids"}).items():
         setattr(db_asset, key, finance.cents(value) if key == "price" else value)
+    db_asset.tags = tags
     db.commit()
     db.refresh(db_asset)
     return asset_out(db, db_asset)
