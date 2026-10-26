@@ -56,5 +56,10 @@ test('investments by tag, archived and restored', async ({ page, request }) => {
     await archived.getByRole('button', { name: 'Restore Auto' }).click();
     await expect(summary).toContainText('CHF 275.00 / month');
     await expect(page.getByText(/Archived \(/)).toHaveCount(0);
+
+    // Settings says which investments a tag is on before it is deleted
+    await page.getByRole('button', { name: 'Settings' }).click();
+    const tags = page.locator('details', { has: page.getByRole('heading', { name: 'Tags' }) });
+    await expect(tags.locator('li', { hasText: `Mobilität ${parent.name}` })).toContainText('on 2 investments');
     expect(errors).toEqual([]);
 });
