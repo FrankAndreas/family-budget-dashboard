@@ -4,7 +4,7 @@ import api, { errorMessage } from '../api';
 import type { Tag } from '../receipts';
 import Section from './Section';
 
-type Usage = Record<string, { items: number; budgets: number }>;
+type Usage = Record<string, { items: number; budgets: number; assets: number }>;
 
 const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
 
@@ -60,10 +60,11 @@ export default function TagManager() {
 
     const describe = (tag: Tag) => {
         const counts = usage[tag.id];
-        if (!counts || (!counts.items && !counts.budgets)) return '';
+        if (!counts || (!counts.items && !counts.budgets && !counts.assets)) return '';
         return [
             counts.items ? t('tags.usedByItems', { count: counts.items }) : '',
             counts.budgets ? t('tags.usedByBudgets', { count: counts.budgets }) : '',
+            counts.assets ? t('tags.usedByAssets', { count: counts.assets }) : '',
         ].filter(Boolean).join(', ');
     };
 

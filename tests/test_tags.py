@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from helpers import BASE_URL, admin_headers, create_account, register
+from helpers import BASE_URL, admin_headers, create_account, register, user_id
 
 from app import database, models
 
@@ -71,7 +71,7 @@ def test_delete_removes_the_tag_from_items(client):
     admin = admin_headers(client)
     velo, sport = add(client, admin, "Velo").json(), add(client, admin, "Sport").json()
     item_with_tags(client, admin, [velo["id"], sport["id"]])
-    assert client.get(f"{TAGS}/usage", headers=admin).json()[velo["id"]] == {"items": 1, "budgets": 0}
+    assert client.get(f"{TAGS}/usage", headers=admin).json()[velo["id"]] == {"items": 1, "budgets": 0, "assets": 0}
     assert client.delete(f"{TAGS}/{velo['id']}", headers=admin).status_code == 200
     with database.SessionLocal() as db:
         item = db.query(models.TransactionItem).one()
@@ -89,3 +89,13 @@ def test_tag_used_by_a_budget_cannot_be_deleted(client):
     assert (
         response.status_code == 409 and response.json()["detail"] == "A budget uses this tag; delete the budget first"
     )
+
+
+def test_usage_counts_investments(client):
+    # Settings warns before deleting a tag an investment uses
+    mum = register(client, "mum")
+    velo = add(client, mum, "Velo").json()
+    body = {"name": "Velo", "price": 1200, "purchase_date": "2025-04-01", "lifespan_years": 8}
+    body |= {"owner_id": user_id(client, mum, "mum"), "tag_id": velo["id"]}
+    assert client.post(f"{BASE_URL}/assets", json=body, headers=mum).status_code == 200
+    assert client.get(f"{TAGS}/usage", headers=mum).json()[velo["id"]] == {"items": 0, "budgets": 0, "assets": 1}

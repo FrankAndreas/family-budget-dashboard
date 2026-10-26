@@ -31,8 +31,8 @@ def get_tag(db: Session, tag_id: str) -> models.Tag:
 
 
 def usage_counts(db: Session) -> dict[str, dict[str, int]]:
-    """Per tag: how many items and budgets use it."""
-    usage = {t.id: {"items": 0, "budgets": 0} for t in db.query(models.Tag)}
+    """Per tag: how many items, budgets and investments use it."""
+    usage = {t.id: {"items": 0, "budgets": 0, "assets": 0} for t in db.query(models.Tag)}
     for tag_id, count in db.query(models.TransactionItemTag.tag_id, func.count()).group_by(
         models.TransactionItemTag.tag_id
     ):
@@ -43,6 +43,12 @@ def usage_counts(db: Session) -> dict[str, dict[str, int]]:
         .group_by(models.Budget.tag_id)
     ):
         usage[str(budget_tag_id)]["budgets"] = count
+    for asset_tag_id, count in (
+        db.query(models.Asset.tag_id, func.count())
+        .filter(models.Asset.tag_id.isnot(None))
+        .group_by(models.Asset.tag_id)
+    ):
+        usage[str(asset_tag_id)]["assets"] = count
     return usage
 
 
