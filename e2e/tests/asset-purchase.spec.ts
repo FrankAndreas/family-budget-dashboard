@@ -9,7 +9,7 @@ test('the booking that bought an investment, and its tag in analytics', async ({
     await call(request, parent, 'POST', '/accounts', { name: 'Haushalt', type: 'BANK' });
     const mobility = await call(request, parent, 'POST', '/tags', { name: `Mobilität ${parent.name}` });
     await call(request, parent, 'POST', '/assets',
-        { name: 'Auto', price: 25000, purchase_date: '2020-01-01', lifespan_years: 10, owner_id: me, tag_id: mobility.id });
+        { name: 'Auto', price: 25000, purchase_date: '2020-01-01', lifespan_years: 10, owner_id: me, tag_ids: [mobility.id] });
     const errors = await login(page, parent);
 
     await page.getByRole('button', { name: '+ Add Transaction' }).click();

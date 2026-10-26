@@ -9,6 +9,8 @@ interface Expense { id: string; amount: number; date: string; description: strin
 interface Props {
     asset: Asset;
     owner: string;
+    // Its other tags, in whose groups it shows too
+    alsoIn: string[];
     canChange: boolean;
     // The linked expenses, when its costs are open
     expenses: Expense[] | null;
@@ -20,7 +22,7 @@ interface Props {
 }
 
 // One investment: its age, when to replace it, what to set aside and what it cost so far
-export default function AssetCard({ asset, owner, canChange, expenses, onToggleCosts, onEdit, onDelete, onArchive, onRestore }: Props) {
+export default function AssetCard({ asset, owner, alsoIn, canChange, expenses, onToggleCosts, onEdit, onDelete, onArchive, onRestore }: Props) {
     const { t } = useTranslation();
     // The day it left, while asking for it
     const [leftOn, setLeftOn] = useState<string | null>(null);
@@ -41,7 +43,10 @@ export default function AssetCard({ asset, owner, canChange, expenses, onToggleC
                     <span className="text-xs px-2 py-0.5 h-fit rounded-full bg-amber-500/20 text-amber-300">{t('investments.leaseEndsSoon')}</span>
                 )}
             </div>
-            <p className="text-xs text-slate-500">{owner}</p>
+            <p className="text-xs text-slate-500">
+                {owner}
+                {alsoIn.length > 0 && <>{' · '}{t('investments.alsoIn', { tags: alsoIn.join(', ') })}</>}
+            </p>
             <p className="text-sm mt-1">
                 {t(`investments.${asset.kind === 'LEASE' ? 'downPaid' : 'boughtFor'}`, { amount: money(asset.price), date: formatDate(asset.purchase_date) })}
                 {!asset.purchase && <span className="text-slate-400"> {t('investments.estimated')}</span>}

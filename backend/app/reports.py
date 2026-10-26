@@ -76,15 +76,13 @@ def lines(db: Session, owner_id: str, since: Optional[date]) -> list[Line]:
     )
     if since:
         query = query.filter(models.Transaction.date >= utc_start(since))
-    # A booking linked to an investment with a tag counts under that tag (the purchase and its follow-up costs)
-    asset_tags: dict[str, str] = {
-        asset_id: tag_id
-        for asset_id, tag_id in db.query(models.Asset.id, models.Asset.tag_id).filter(models.Asset.tag_id.isnot(None))
-        if tag_id
-    }
+    # A booking linked to an investment counts under each of its tags (the purchase and its follow-up costs)
+    asset_tags: dict[str, set[str]] = defaultdict(set)
+    for asset_id, tag_id in db.query(models.AssetTag.asset_id, models.AssetTag.tag_id):
+        asset_tags[asset_id].add(tag_id)
     result = []
     for transaction, category in query.all():
-        via_asset = frozenset([asset_tags[transaction.asset_id]] if transaction.asset_id in asset_tags else [])
+        via_asset = frozenset(asset_tags[transaction.asset_id] if transaction.asset_id in asset_tags else ())
         if not transaction.items:
             result.append(
                 Line(
@@ -140,17 +138,18 @@ def set_aside_by_tag(db: Session, owner_id: str) -> dict[str, float]:
     """Per tag: what the owner sets aside each month for the active investments with it (their share of common ones)."""
     result: dict[str, float] = defaultdict(float)
     splits = {s.id: s.shares or {} for s in db.query(models.Split)}
-    for asset in db.query(models.Asset).filter(models.Asset.tag_id.isnot(None), models.Asset.archived_on.is_(None)):
-        if not asset.tag_id:
-            continue
+    for asset in db.query(models.Asset).filter(models.Asset.tags.any(), models.Asset.archived_on.is_(None)):
         # What is saved up; a lease's rate is booked, so it counts as spent
         monthly = finance.asset_plan(asset.price, asset.purchase_date, asset.lifespan_years, today(), asset.lease)[
             "monthly_set_aside"
         ]
         if asset.split_id:
-            result[asset.tag_id] += finance.split_amount(monthly, splits.get(asset.split_id, {})).get(owner_id, 0.0)
-        elif asset.owner_id == owner_id:
-            result[asset.tag_id] += monthly
+            share = finance.split_amount(monthly, splits.get(asset.split_id, {})).get(owner_id, 0.0)
+        else:
+            share = monthly if asset.owner_id == owner_id else 0.0
+        # In full under each of its tags
+        for tag in asset.tags:
+            result[tag.id] += share
     return {tag_id: amount for tag_id, amount in result.items() if amount}
 
 

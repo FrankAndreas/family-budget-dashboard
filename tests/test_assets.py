@@ -158,12 +158,12 @@ def test_removing_member_without_items(client, parents):
 
 def test_asset_tag(client, parents):
     mobility = client.post(f"{BASE_URL}/tags", json={"name": "Mobilität"}, headers=parents["mum"]).json()
-    car = add_asset(client, parents["mum"], split_id=parents["split"], tag_id=mobility["id"]).json()
-    assert car["tag_id"] == mobility["id"]
-    assert add_asset(client, parents["mum"], split_id=parents["split"], tag_id="nope").status_code == 400
+    car = add_asset(client, parents["mum"], split_id=parents["split"], tag_ids=[mobility["id"]]).json()
+    assert car["tag_ids"] == [mobility["id"]]
+    assert add_asset(client, parents["mum"], split_id=parents["split"], tag_ids=["nope"]).status_code == 400
     # Deleting the tag moves the investment to "no tag"
     assert client.delete(f"{BASE_URL}/tags/{mobility['id']}", headers=parents["mum"]).status_code == 200
-    assert client.get(f"{BASE_URL}/assets/{car['id']}", headers=parents["mum"]).json()["tag_id"] is None
+    assert client.get(f"{BASE_URL}/assets/{car['id']}", headers=parents["mum"]).json()["tag_ids"] == []
 
 
 def archive(client, headers, asset_id, on="2026-10-01"):

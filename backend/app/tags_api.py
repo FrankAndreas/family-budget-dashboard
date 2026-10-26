@@ -43,11 +43,7 @@ def usage_counts(db: Session) -> dict[str, dict[str, int]]:
         .group_by(models.Budget.tag_id)
     ):
         usage[str(budget_tag_id)]["budgets"] = count
-    for asset_tag_id, count in (
-        db.query(models.Asset.tag_id, func.count())
-        .filter(models.Asset.tag_id.isnot(None))
-        .group_by(models.Asset.tag_id)
-    ):
+    for asset_tag_id, count in db.query(models.AssetTag.tag_id, func.count()).group_by(models.AssetTag.tag_id):
         usage[str(asset_tag_id)]["assets"] = count
     return usage
 
@@ -112,10 +108,8 @@ def delete_tag(
         raise messages.api_error(409, "tag_in_budget")
     # Items keep their other tags; the link rows go with the tag (ON DELETE CASCADE)
     db.query(models.TransactionItemTag).filter(models.TransactionItemTag.tag_id == tag.id).delete()
-    # Investments with it move to "no tag"
-    db.query(models.Asset).filter(models.Asset.tag_id == tag.id).update(
-        {models.Asset.tag_id: None}, synchronize_session=False
-    )
+    # Investments keep their other tags; with none left they are in "no tag"
+    db.query(models.AssetTag).filter(models.AssetTag.tag_id == tag.id).delete()
     db.delete(tag)
     db.commit()
     return {"deleted": True}

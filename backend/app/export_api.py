@@ -229,8 +229,8 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
                 out["total_cost"],
                 out["cost_per_year"],
                 asset.notes,
-                asset.tag_id,
-                tags[asset.tag_id].name if asset.tag_id in tags else None,
+                ";".join(asset.tag_ids),
+                ";".join(t.name for t in asset.tags),
                 asset.archived_on,
                 asset.kind,
                 asset.lease_rate,
@@ -242,7 +242,7 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
         )
     files["investments.csv"] = to_csv(
         "investment_id,name,owner_id,owner,split_id,split,price,purchase_date,lifespan_years,age_years,replacement_due,"
-        "monthly_set_aside,follow_up_costs,total_cost,cost_per_year,notes,tag_id,tag,archived_on,kind,lease_rate,"
+        "monthly_set_aside,follow_up_costs,total_cost,cost_per_year,notes,tag_ids,tags,archived_on,kind,lease_rate,"
         "lease_months,lease_final,lease_end,monthly_load".split(","),
         investment_rows,
     )

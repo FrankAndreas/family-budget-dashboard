@@ -457,7 +457,7 @@ class AssetIn(BaseModel):
     owner_id: Optional[str] = None
     split_id: Optional[str] = None
     notes: Optional[str] = None
-    tag_id: Optional[str] = None
+    tag_ids: list[str] = []
     # A lease: price is the down payment, purchase_date the lease start
     kind: Literal["PURCHASE", "LEASE"] = "PURCHASE"
     lease_rate: Optional[float] = Field(default=None, ge=0)
