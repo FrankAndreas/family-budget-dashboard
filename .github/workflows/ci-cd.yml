@@ -407,3 +407,20 @@ jobs:
       #       cd /opt/family-budget-dashboard
       #       docker compose pull
       #       docker compose up -d
+
+  # Merge Dependabot patch and minor updates once all jobs above pass; majors stay manual
+  dependabot-automerge:
+    needs: [backend-test, worker-test, frontend-test, e2e-test, security-scan]
+    if: github.event_name == 'pull_request' && github.event.pull_request.user.login == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - id: metadata
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+      - if: steps.metadata.outputs.update-type == 'version-update:semver-patch' || steps.metadata.outputs.update-type == 'version-update:semver-minor'
+        run: gh pr merge --merge "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
