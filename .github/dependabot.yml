@@ -37,7 +37,27 @@ updates:
       # Ignore major version updates for stability
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
-  
+
+  # Cloudflare email worker npm dependencies
+  - package-ecosystem: "npm"
+    directory: "/cloudflare/email-worker"
+    schedule:
+      interval: "weekly"
+      day: "monday"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+      - "cloudflare"
+    commit-message:
+      prefix: "chore(email-worker)"
+      include: "scope"
+    assignees:
+      - "FrankAndreas"
+    ignore:
+      # Ignore major version updates for stability
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+
   # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
