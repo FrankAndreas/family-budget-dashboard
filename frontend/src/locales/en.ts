@@ -385,6 +385,8 @@ const en: Messages = {
         alsoIn: 'also in: {{tags}}',
         countedOnce: 'An investment with several tags is in each of their groups, but counted once here.',
         newTag: '+ New tag…',
+        addTag: 'Add tag',
+        removeNewTag: 'Remove new tag {{name}}',
         newTagName: 'New tag name',
         count_one: '{{count}} item',
         count_other: '{{count}} items',

@@ -383,6 +383,8 @@ const de = {
         alsoIn: 'auch in: {{tags}}',
         countedOnce: 'Eine Anschaffung mit mehreren Tags steht in jeder ihrer Gruppen, zählt hier aber nur einmal.',
         newTag: '+ Neuer Tag …',
+        addTag: 'Tag hinzufügen',
+        removeNewTag: 'Neuen Tag {{name}} entfernen',
         newTagName: 'Name des neuen Tags',
         count_one: '{{count}} Anschaffung',
         count_other: '{{count}} Anschaffungen',
