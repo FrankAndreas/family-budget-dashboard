@@ -401,3 +401,33 @@ def test_photo_deleted_while_read_doesnt_stop_the_others(client, ai, monkeypatch
     assert scans.read_waiting() == 1
     assert removed == [200]
     assert [(p["id"], p["read_state"]) for p in photos(client, mum)] == [(second["id"], "read")]
+
+
+def test_photo_uploaded_while_the_reader_finishes_is_read(client, ai, monkeypatch):
+    # A photo that arrives just as the running reader lets go: its own run found the reader busy, so the running one
+    # looks again after letting go, instead of the photo waiting for the next sweep
+    mum = register(client, "mum")
+    ai.down = True
+    late = scanned(client, mum, "LATE")
+    ai.down = False
+    lock = scans.reading
+
+    class Busy:
+        def acquire(self, blocking=True):
+            return lock.acquire(blocking)
+
+        def release(self):
+            if not arrived:
+                arrived.append(late["id"])
+                with database.SessionLocal() as db:
+                    db.get(models.InboxPhoto, late["id"]).read_state = "waiting"
+                    db.commit()
+                # Its own run: the reader is still busy
+                assert scans.read_waiting() == 0
+            lock.release()
+
+    arrived: list = []
+    monkeypatch.setattr(scans, "reading", Busy())
+    scanned(client, mum, "FIRST")
+    assert arrived == [late["id"]]
+    assert states(client, mum) == ["read", "read"]

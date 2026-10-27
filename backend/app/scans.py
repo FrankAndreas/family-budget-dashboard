@@ -116,23 +116,54 @@ def read_into(db: Session, photo: models.InboxPhoto, reader: models.User) -> boo
     return True
 
 
+def waiting_photos(db: Session, used_up: set[str]):
+    """Photos to read next, oldest first, of people whose hourly reads aren't used up."""
+    return (
+        db.query(models.InboxPhoto)
+        .filter(
+            models.InboxPhoto.read_state == "waiting",
+            models.InboxPhoto.booked_at.is_(None),
+            models.InboxPhoto.person_id.is_not(None),
+            models.InboxPhoto.person_id.not_in(used_up),
+        )
+        .order_by(models.InboxPhoto.taken_at, models.InboxPhoto.id)
+    )
+
+
 def read_waiting() -> int:
     """Read the waiting photos, oldest first, in the background; how many were read. A person whose hourly reads are
     used up is skipped until the next run (every 15 minutes, or a new upload)."""
-    if not receipt_ai.Settings.from_env().enabled or not reading.acquire(blocking=False):
+    if not receipt_ai.Settings.from_env().enabled:
         return 0
     done = 0
     used_up: set[str] = set()
+    while reading.acquire(blocking=False):
+        try:
+            read = read_all(used_up)
+        finally:
+            reading.release()
+        # Not again after a run that failed (the database, say): the next sweep tries
+        if read is None:
+            break
+        done += read
+        # A photo uploaded while this run was ending found the reader busy and left it to this one: look once more
+        try:
+            with database.SessionLocal() as db:
+                if waiting_photos(db, used_up).first() is None:
+                    break
+        except Exception:
+            logger.exception("Reading scanned receipts failed")
+            break
+    return done
+
+
+def read_all(used_up: set[str]) -> Optional[int]:
+    """Read until none is waiting: how many were read; None when the run failed."""
+    done = 0
     try:
         with database.SessionLocal() as db:
             while True:
-                waiting = db.query(models.InboxPhoto).filter(
-                    models.InboxPhoto.read_state == "waiting",
-                    models.InboxPhoto.booked_at.is_(None),
-                    models.InboxPhoto.person_id.is_not(None),
-                    models.InboxPhoto.person_id.not_in(used_up),
-                )
-                photo = waiting.order_by(models.InboxPhoto.taken_at, models.InboxPhoto.id).first()
+                photo = waiting_photos(db, used_up).first()
                 if photo is None or photo.person_id is None:
                     return done
                 taker = db.get(models.User, photo.person_id)
@@ -153,9 +184,7 @@ def read_waiting() -> int:
                     db.rollback()
     except Exception:
         logger.exception("Reading scanned receipts failed")
-        return done
-    finally:
-        reading.release()
+        return None
 
 
 @router.post(PHOTOS)
