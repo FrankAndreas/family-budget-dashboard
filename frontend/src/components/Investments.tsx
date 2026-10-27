@@ -24,7 +24,9 @@ const emptyForm = (userId: string) => ({
     lifespan_years: '5',
     owner: `owner:${userId}`,
     tag_ids: [] as string[],
-    // A new tag typed in the form, made on saving; null while it isn't asked for
+    // New tags added in the form, made on saving (so a cancelled form leaves none behind)
+    newTags: [] as string[],
+    // The new tag being typed; null while it isn't asked for
     newTag: null as string | null,
     notes: '',
     kind: 'PURCHASE' as Asset['kind'],
@@ -106,10 +108,18 @@ export default function Investments() {
         if (!form) return;
         try {
             const tagIds = [...form.tag_ids];
-            if (form.newTag) {
-                tagIds.push((await api.post('/api/v1/tags', { name: form.newTag })).data.id);
-                reloadTags();
+            // A name typed but not added yet counts too
+            const typed = form.newTag?.trim();
+            const names = typed && !form.newTags.includes(typed) ? [...form.newTags, typed] : form.newTags;
+            for (const name of names) {
+                const known = tags.find(tag => tag.name.toLowerCase() === name.toLowerCase());
+                if (known) {
+                    if (!tagIds.includes(known.id)) tagIds.push(known.id);
+                } else {
+                    tagIds.push((await api.post('/api/v1/tags', { name })).data.id);
+                }
             }
+            if (names.length) reloadTags();
             const body = {
                 name: form.name,
                 price: parseFloat(form.price),
@@ -148,6 +158,7 @@ export default function Investments() {
         lifespan_years: String(asset.lifespan_years),
         owner: ownerValue(asset),
         tag_ids: asset.tag_ids,
+        newTags: [],
         newTag: null,
         notes: asset.notes ?? '',
         kind: asset.kind,
@@ -169,6 +180,19 @@ export default function Investments() {
     );
 
     const input = 'w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+
+    // The typed new tag becomes a chip, and the field is free for the next one; an existing tag's name ticks it
+    const addNewTag = () => {
+        if (!form) return;
+        const name = form.newTag?.trim();
+        if (!name) return;
+        const known = tags.find(tag => tag.name.toLowerCase() === name.toLowerCase());
+        if (known) {
+            setForm({ ...form, newTag: '', tag_ids: form.tag_ids.includes(known.id) ? form.tag_ids : [...form.tag_ids, known.id] });
+        } else {
+            setForm({ ...form, newTag: '', newTags: form.newTags.includes(name) ? form.newTags : [...form.newTags, name] });
+        }
+    };
     const lease = form?.kind === 'LEASE';
 
     return (
@@ -246,12 +270,27 @@ export default function Investments() {
                                 </label>
                             );
                         })}
+                        {form.newTags.map(name => (
+                            <span key={name} className="px-2 py-0.5 rounded-full border bg-amber-500/20 border-amber-400 text-amber-200">
+                                {name}
+                                <button type="button" className="ml-1 hover:text-white" aria-label={t('investments.removeNewTag', { name })}
+                                    onClick={() => setForm({ ...form, newTags: form.newTags.filter(other => other !== name) })}>✕</button>
+                            </span>
+                        ))}
                         {form.newTag === null ? (
                             <button type="button" className="px-2 py-0.5 rounded-full border border-dashed border-slate-600 text-slate-400 hover:text-white"
                                 onClick={() => setForm({ ...form, newTag: '' })}>{t('investments.newTag')}</button>
                         ) : (
-                            <input className={`${input} text-sm w-auto`} value={form.newTag} onChange={(e) => setForm({ ...form, newTag: e.target.value })}
-                                aria-label={t('investments.newTagName')} placeholder={t('investments.newTagName')} required maxLength={50} />
+                            <span className="flex items-center gap-1">
+                                <input className={`${input} text-sm w-auto`} value={form.newTag} maxLength={50} autoFocus
+                                    onChange={(e) => setForm({ ...form, newTag: e.target.value })}
+                                    // Enter adds the tag instead of saving the form
+                                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); addNewTag(); } }}
+                                    aria-label={t('investments.newTagName')} placeholder={t('investments.newTagName')} />
+                                <button type="button" className="px-2 py-1 rounded bg-slate-700 text-white text-sm" onClick={addNewTag}>
+                                    {t('investments.addTag')}
+                                </button>
+                            </span>
                         )}
                     </fieldset>
                     <input className={`${input} md:col-span-2`} placeholder={t('investments.notesPlaceholder')} value={form.notes}

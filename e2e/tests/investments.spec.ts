@@ -95,3 +95,32 @@ test('an investment with two tags', async ({ page, request }) => {
     await expect(page.getByTestId('investments-total')).toContainText('counted once');
     expect(errors).toEqual([]);
 });
+
+// Several new tags at once: each one is added with Enter or Add, all made when the investment is saved
+test('several new tags at once', async ({ page, request }) => {
+    const parent = await newParent(request);
+    const errors = await login(page, parent);
+    await tab(page, '📦 Investments');
+    await page.getByRole('button', { name: '+ Add Item' }).click();
+    await page.getByLabel('Name', { exact: true }).fill('E-Bike');
+    await page.getByLabel('Price', { exact: true }).fill('3600');
+    await page.getByRole('button', { name: '+ New tag…' }).click();
+    const name = page.getByLabel('New tag name');
+    await name.fill(`Freizeit ${parent.name}`);
+    await name.press('Enter');
+    await name.fill(`Pendeln ${parent.name}`);
+    await page.getByRole('button', { name: 'Add tag' }).click();
+    // Taken back before saving
+    await name.fill(`Weg ${parent.name}`);
+    await name.press('Enter');
+    await page.getByRole('button', { name: `Remove new tag Weg ${parent.name}` }).click();
+    await page.getByRole('button', { name: 'Add Item' }).click();
+
+    for (const tag of [`Freizeit ${parent.name}`, `Pendeln ${parent.name}`]) {
+        await expect(page.locator('details', { has: page.getByText(tag, { exact: true }) }).getByRole('heading', { name: 'E-Bike' }))
+            .toBeVisible();
+    }
+    const tags: { name: string }[] = await call(request, parent, 'GET', '/tags');
+    expect(tags.some(tag => tag.name === `Weg ${parent.name}`)).toBe(false);
+    expect(errors).toEqual([]);
+});

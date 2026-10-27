@@ -30,3 +30,9 @@ show it in both views. Receipt items can already carry several tags; investments
 
 - Checkboxes for the tags, not a multi-select list: easier on a phone.
 - The card lists the other tags, not all of them: the group header already says the one it is in.
+
+## Follow-up (2026-10-27, from the user's use)
+
+- Several new tags at once: a typed name is added as a chip with Enter or **Add tag**, and the field stays open for
+  the next one. The tags are made when the investment is saved, so a cancelled form leaves none behind; a name
+  typed but not added is saved too, and a name that matches an existing tag ticks it (my call).
