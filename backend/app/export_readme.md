@@ -25,6 +25,7 @@ other family members share with them, and (for parents) the common budget, inves
 | `bank_rows.csv` | line of an imported bank statement | see below |
 | `items.csv` | receipt item | the lines of a booking entered as a receipt; see below |
 | `tags.csv` | tag | what items are for (e.g. "Velo"), across categories |
+| `article_rules.csv` | article rule | parents only: what a receipt article (whole `name`, ignoring case) is booked as by the Migros import: `category` and `tags` (separated by `;`) |
 | `budgets.csv` | budget | spending limit per `category` **or** per `tag`, and `period` (`MONTHLY` or `YEARLY`) |
 | `splits.csv` | parent and split | a named ratio for dividing common costs, e.g. "Equal" 50/50 |
 | `investments.csv` | investment | long-lived purchase; `age_years`, `replacement_due`, `monthly_set_aside` (price spread over the lifespan), `follow_up_costs` (linked expenses), `total_cost`, `cost_per_year` are calculated on the export day (for an archived one, `archived_on` = the day it left, on that day and with `monthly_set_aside` 0); `tags` (separated by `;`) group it, and an investment with several tags belongs in full to each. `kind` `LEASE`: `price` is the down payment, `purchase_date` the lease start, `lease_rate` per month for `lease_months`, then `lease_final` (the buy-out) on `lease_end`; `monthly_load` = `monthly_set_aside` plus the rate while the lease runs |

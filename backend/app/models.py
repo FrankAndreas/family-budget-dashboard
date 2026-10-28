@@ -447,6 +447,32 @@ class Wish(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
 
 
+class ArticleRuleTag(Base):
+    __tablename__ = "article_rule_tags"
+
+    rule_id: Mapped[str] = mapped_column(String, ForeignKey("article_rules.id", ondelete="CASCADE"), primary_key=True)
+    tag_id: Mapped[str] = mapped_column(String, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
+
+
+class ArticleRule(Base):
+    """A receipt article's whole name (ignoring case) → category and tags; learnt from what a Migros import booked."""
+
+    __tablename__ = "article_rules"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    # As first written; compared stripped and ignoring case (article_rules.norm)
+    name: Mapped[str] = mapped_column(String)
+    category_id: Mapped[str] = mapped_column(String, ForeignKey("categories.id"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
+
+    category: Mapped["Category"] = relationship("Category")
+    tags: Mapped[list["Tag"]] = relationship("Tag", secondary="article_rule_tags", order_by="Tag.name")
+
+    @property
+    def tag_ids(self) -> list[str]:
+        return [tag.id for tag in self.tags]
+
+
 class ImportRule(Base):
     """Text in an imported row's description → category; learnt in the import preview, also used by the converter."""
 

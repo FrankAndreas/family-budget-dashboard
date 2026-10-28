@@ -127,6 +127,7 @@ class TestApi:
             "budgets": 0,
             "planned_costs": 0,
             "import_rules": 0,
+            "article_rules": 0,
             "items": 0,
         }
         assert category_id(client, "Healthcare") not in usage

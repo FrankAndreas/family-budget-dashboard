@@ -6,6 +6,7 @@ import type { FamilyUser } from '../family';
 import { downloadBlob } from '../download';
 import ImportTransactions from './ImportTransactions';
 import ImportRules from './ImportRules';
+import ArticleRules from './ArticleRules';
 import Section from './Section';
 
 interface ExportAccount {
@@ -279,6 +280,7 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
 
             <ImportTransactions onImported={() => { onDataChanged?.(); setRulesVersion(v => v + 1); }} />
             {user?.role === 'PARENT' && <ImportRules version={rulesVersion} />}
+            {user?.role === 'PARENT' && <ArticleRules version={rulesVersion} />}
 
             {/* Restore Section */}
             <div className="mb-8">

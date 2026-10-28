@@ -19,6 +19,7 @@ USERS = (
     ("budgets", models.Budget),
     ("planned_costs", models.PlannedCost),
     ("import_rules", models.ImportRule),
+    ("article_rules", models.ArticleRule),
     ("items", models.TransactionItem),
 )
 

@@ -36,6 +36,8 @@ MAX_NAME = 120
 MAX_TEXTS = 200
 # Where the bank texts start in the prompt (the browser tests' fake client finds them by it)
 TEXT_MARKER = "TEXTS:"
+# Where the receipt articles start in the prompt (Migros import)
+ARTICLE_MARKER = "ARTICLES:"
 ENDPOINT = "/chat/completions"
 # Money sent to or received from a person: the text carries their name, so it isn't sent (2026-10-24 review)
 PERSON_TO_PERSON = re.compile(
@@ -117,6 +119,11 @@ class FakeClient:
 
     def complete(self, content: list[dict]) -> str:
         question = content[0].get("text", "") if content else ""
+        if ARTICLE_MARKER in question:
+            names = json.loads(question.split(ARTICLE_MARKER, 1)[1])
+            return json.dumps(
+                {n: {"category": "Healthcare" if "zahn" in n.casefold() else "Groceries", "tags": []} for n in names}
+            )
         if TEXT_MARKER in question:
             texts = json.loads(question.split(TEXT_MARKER, 1)[1])
             return json.dumps({**{t: "Groceries" for t in texts["out"]}, **{t: "Salary" for t in texts["in"]}})
@@ -208,6 +215,56 @@ def parse_texts(
     return out
 
 
+ARTICLE_PROMPTS = {
+    "de": """Du ordnest Artikel von Schweizer Kassenzetteln (Migros) Kategorien und Tags zu.
+Gib NUR JSON zurück: ein Objekt, das jeden Artikelnamen genau wie angegeben auf {{"category": "...", "tags": [...]}}
+abbildet.
+- category ist genau einer dieser Namen: {categories}
+- tags: keiner oder mehrere dieser Namen, nur wenn sie passen: {tags}
+- Wenn du unsicher bist, lass den Artikel weg.
+""",
+    "en": """You assign categories and tags to articles from Swiss shop receipts (Migros).
+Return ONLY JSON: an object mapping each article name exactly as given to {{"category": "...", "tags": [...]}}.
+- category is exactly one of these names: {categories}
+- tags: none or several of these names, only when they fit: {tags}
+- If you are unsure, leave the article out.
+""",
+}
+
+
+def article_prompt(categories: list[str], tags: list[str], names: list[str], lang: str) -> str:
+    question = ARTICLE_PROMPTS.get(lang, ARTICLE_PROMPTS["de"]).format(
+        categories=", ".join(categories), tags=", ".join(tags) or "-"
+    )
+    return question + ARTICLE_MARKER + json.dumps(names, ensure_ascii=False)
+
+
+def parse_articles(
+    answer: str, categories: dict[str, str], tags: dict[str, str], names: list[str]
+) -> dict[str, dict[str, Any]]:
+    """{name: {"category_id", "tag_ids"}} from the AI's answer; the dicts map names (casefolded) to ids. Unknown
+    names, categories and tags are dropped. Raises ValueError for a broken answer."""
+    match = re.search(r"\{.*\}", answer, re.S)
+    if not match:
+        raise ValueError("no JSON object")
+    data = json.loads(match.group(0))
+    if not isinstance(data, dict):
+        raise ValueError("not an object")
+    found: dict[str, dict[str, Any]] = {}
+    for name in names:
+        entry = data.get(name)
+        if not isinstance(entry, dict):
+            continue
+        category = categories.get(str(entry.get("category") or "").strip().casefold())
+        if not category:
+            continue
+        raw = entry.get("tags")
+        raw_tags: list = raw if isinstance(raw, list) else []
+        tag_ids = [tags[str(t).strip().casefold()] for t in raw_tags if str(t).strip().casefold() in tags]
+        found[name] = {"category_id": category, "tag_ids": list(dict.fromkeys(tag_ids))}
+    return found
+
+
 def plain_categories(db: Session, kind: models.CategoryType) -> list[models.Category]:
     """The family's own and default categories of a kind; not the ones the app books itself (Unsorted, ...)."""
     return [c for c in db.query(models.Category) if c.type == kind and not c.system_key]
@@ -253,6 +310,39 @@ def suggest(
         return parse_texts(answer, allowed(expense), allowed(income), texts_out, texts_in), status, message
     except AiUnavailable, ValueError, json.JSONDecodeError:
         return {}, "failed", messages.text("bank_ai_failed")
+
+
+def suggest_articles(
+    db: Session, user: models.User, names: list[str]
+) -> tuple[dict[str, dict[str, Any]], str, Optional[str]]:
+    """A category and tags for receipt articles no rule knows: (suggestions, status, message). One call, counted as one
+    read; status off / ok / capped / limit / failed. Only the article names and the category and tag names are sent."""
+    settings = Settings.from_env()
+    if not settings.enabled:
+        return {}, "off", None
+    status, message = "ok", None
+    if len(names) > MAX_TEXTS:
+        names = names[:MAX_TEXTS]
+        status, message = "capped", messages.text("article_ai_capped", count=MAX_TEXTS)
+    if not names:
+        return {}, status, message
+    expense = plain_categories(db, models.CategoryType.EXPENSE)
+    all_tags = db.query(models.Tag).all()
+    categories = {name.casefold(): c.id for c in expense for name in i18n.all_names(c)}
+    tags = {t.name.casefold(): t.id for t in all_tags}
+    try:
+        take_read(db, user.id, settings.reads_per_hour)
+    except HTTPException as error:
+        if error.status_code != 429:
+            raise
+        return {}, "limit", str(error.detail)
+    shown = sorted({i18n.category_name(c) for c in expense}, key=str.casefold)
+    question = article_prompt(shown, sorted((t.name for t in all_tags), key=str.casefold), names, i18n.current())
+    try:
+        answer = client_for(settings).complete([{"type": "text", "text": question}])
+        return parse_articles(answer, categories, tags, names), status, message
+    except AiUnavailable, ValueError, json.JSONDecodeError:
+        return {}, "failed", messages.text("article_ai_failed")
 
 
 def prompt(categories: list[str], tags: list[str], lang: str) -> str:

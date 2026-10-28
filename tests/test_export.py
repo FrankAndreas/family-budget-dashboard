@@ -21,6 +21,7 @@ HEADERS = {
     "budgets.csv": "budget_id,owner_id,owner,category_id,category,tag_id,tag,limit,period",
     "items.csv": "item_id,transaction_id,position,name,amount,category_id,category,person_id,person,tags",
     "tags.csv": "tag_id,name,icon",
+    "article_rules.csv": "rule_id,name,category_id,category,tag_ids,tags",
     "splits.csv": "split_id,name,member_id,member,percent",
     "investments.csv": "investment_id,name,owner_id,owner,split_id,split,price,purchase_date,lifespan_years,"
     "age_years,replacement_due,monthly_set_aside,follow_up_costs,total_cost,cost_per_year,notes,tag_ids,tags,archived_on,kind,lease_rate,lease_months,lease_final,lease_end,monthly_load",
