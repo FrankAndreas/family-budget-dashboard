@@ -14,6 +14,7 @@ from . import (
     common_api,
     export_api,
     import_api,
+    migros_import,
     month_check,
     wishes_api,
     article_rules,
@@ -102,6 +103,7 @@ app.include_router(month_check.router, prefix="/api/v1")
 app.include_router(wishes_api.router, prefix="/api/v1")
 app.include_router(import_rules.router, prefix="/api/v1")
 app.include_router(article_rules.router, prefix="/api/v1")
+app.include_router(migros_import.router, prefix="/api/v1")
 app.include_router(rule_presets.router, prefix="/api/v1")
 app.include_router(reconcile.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")
