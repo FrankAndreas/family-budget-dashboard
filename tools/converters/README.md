@@ -1,5 +1,9 @@
 # Converters for bank and Migros exports
 
+> **The Migros export no longer needs `migros.py`.** Upload the Cumulus receipt export ("Kassenbeleg") as it is
+> in **Settings → Data Management → Import**. The app books each receipt with its articles as lines, onto the bank
+> payment that paid it, and learns article rules (Settings → Data Management → Article rules) from what you book.
+
 > **Bank statements no longer need `bank.py`.** Enter each account's IBAN in the app (Accounts tab, edit the
 > account), then upload the bank's CSV export as it is in **Settings → Data Management → Import**. The app finds
 > the account by IBAN, applies the import rules (Settings → Data Management → Import rules, with suggested rules for

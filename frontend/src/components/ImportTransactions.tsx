@@ -6,6 +6,8 @@ import { useAuth } from '../AuthContext';
 import { downloadBlob } from '../download';
 import { money } from '../finance';
 import { formatDate } from '../format';
+import { isMigrosFile } from '../migros';
+import MigrosImport from './MigrosImport';
 
 interface PreviewRow {
     line: number;
@@ -104,6 +106,10 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
     const [status, setStatus] = useState<Status | null>(null);
     // The AI's note for this file (limit reached, failed, ...), kept while its suggestions are
     const [aiMessage, setAiMessage] = useState<string | null>(null);
+    // A Migros receipt export: shown by MigrosImport instead of the row preview
+    const [migros, setMigros] = useState<File | null>(null);
+    // Each choice of a file starts the Migros preview afresh, even for the same file
+    const [migrosRound, setMigrosRound] = useState(0);
     const isParent = user?.role === 'PARENT';
 
     useEffect(() => {
@@ -119,6 +125,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
         setChanges({});
         setMatches({});
         setAiMessage(null);
+        setMigros(null);
     };
 
     const typeOf = (name: string) => categories.find(c => c.name.toLowerCase() === name.trim().toLowerCase())?.type;
@@ -177,6 +184,11 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
         if (!chosen) return;
         reset();
         setStatus(null);
+        if (await isMigrosFile(chosen)) {
+            setMigros(chosen);
+            setMigrosRound(round => round + 1);
+            return;
+        }
         setBusy(true);
         try {
             const res = await api.post('/api/v1/import/preview', formData(chosen, [], {}, true));
@@ -277,6 +289,16 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
             file:cursor-pointer cursor-pointer"
             />
             {busy && <p className="mt-2 text-blue-400">{t('importing.checking')}</p>}
+
+            {migros && (
+                <MigrosImport key={migrosRound} file={migros}
+                    onCancel={() => setMigros(null)}
+                    onImported={text => {
+                        setMigros(null);
+                        setStatus({ kind: 'success', text });
+                        onImported?.();
+                    }} />
+            )}
 
             {preview && file && (
                 <div className="mt-4">
