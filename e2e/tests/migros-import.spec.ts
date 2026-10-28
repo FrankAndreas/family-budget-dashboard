@@ -15,6 +15,7 @@ test('the Migros export is imported onto its payment', async ({ page, request },
     // Article rules are family-wide and the browser tests share a database: names of this test's own
     const brot = `Brot ${parent.name}`;
     const zahnpasta = `Zahnpasta ${parent.name}`;
+    const karotten = `Karotten ${parent.name}`;
     const account = await call(request, parent, 'POST', '/accounts', { name: 'Haushalt', type: 'BANK', iban: IBAN });
     const statement = await request.post(`${API}/import`, {
         multipart: {
@@ -36,9 +37,9 @@ test('the Migros export is imported onto its payment', async ({ page, request },
         MIGROS_HEADER,
         `${first};${brot};1;0.00;3.50`,
         `${first};${zahnpasta};1;0.00;6.95`,
-        `${first};Karotten;2;0.00;3.90`,
-        `${first};Karotten;-2;0.00;-3.90`,
-        `${first};Karotten;1;0.00;1.95`,
+        `${first};${karotten};2;0.00;3.90`,
+        `${first};${karotten};-2;0.00;-3.90`,
+        `${first};${karotten};1;0.00;1.95`,
         `${first};CUMULUS BON 5.-;0;0;-5.00`,
         `${first};Bonus-Coupon 2x;1;0;0`,
         `${second};${brot};1;0.00;3.50`,
@@ -63,7 +64,7 @@ test('the Migros export is imported onto its payment', async ({ page, request },
     const bookings: { description: string; items: { name: string }[] }[] =
         await call(request, parent, 'GET', `/accounts/${account.id}/transactions`);
     const paid = bookings.find(b => b.description === 'Migros Filiale Muster');
-    expect(paid?.items.map(i => i.name)).toEqual([brot, zahnpasta, 'Karotten', 'CUMULUS BON 5.-']);
+    expect(paid?.items.map(i => i.name)).toEqual([brot, zahnpasta, karotten, 'CUMULUS BON 5.-']);
     expect(bookings).toHaveLength(2);
 
     await page.getByLabel('Search article rules').fill(parent.name);

@@ -12,7 +12,8 @@ export type ArticleSource = 'change' | 'rule' | 'ai' | 'fallback';
 
 export interface Article { category_id: string; tag_ids: string[]; source: ArticleSource }
 
-export interface ReceiptLine { name: string; amount: number; category_id: string; tag_ids: string[]; source: ArticleSource | 'discount' }
+// key: the article as the server compares it (its articles are keyed by it)
+export interface ReceiptLine { key: string; name: string; amount: number; category_id: string; tag_ids: string[]; source: ArticleSource | 'discount' }
 
 export interface MigrosReceipt {
     key: string;
@@ -39,14 +40,12 @@ export interface MigrosPreview {
 
 export interface ReceiptChoice { include: boolean; payment: string; account_id: string | null }
 
-// An article's key: its name without surrounding spaces and case, as the server compares it
-export const articleKey = (name: string) => name.trim().toLowerCase();
-
 // "2026-09-12" → "12.09.2026", as on the receipt (names the receipt in labels)
 export const receiptDay = (iso: string) => iso.split('-').reverse().join('.');
 
-// What the server expects back: the articles and the receipts as shown, with the person's changes
-export const migrosForm = (file: File, articles: Record<string, Article>, receipts: Record<string, ReceiptChoice>, ai = false) => {
+// What the server expects back: the articles as shown, and only what the person changed on receipts, so the
+// payments the person didn't choose can move to fit theirs
+export const migrosForm = (file: File, articles: Record<string, Article>, receipts: Record<string, Partial<ReceiptChoice>>, ai = false) => {
     const data = new FormData();
     data.append('file', file);
     data.append('choices', JSON.stringify({ articles, receipts }));

@@ -39,6 +39,8 @@ class Receipt:
     # Swiss local time, as on the receipt
     when: datetime
     store: str
+    till: str = ""
+    number: str = ""
     lines: list[Line] = field(default_factory=list)
 
     @property
@@ -66,7 +68,7 @@ def receipts(text: str) -> list[Receipt]:
             raise messages.api_error(400, "migros_line_invalid", line=reader.line_num)
         key = f"migros:{day}:{clock}:{store}:{till}:{number}"
         if key not in found:
-            found[key] = Receipt(key=key, when=when, store=store)
+            found[key] = Receipt(key=key, when=when, store=store, till=till, number=number)
             amounts[key] = {}
         name, total = amounts[key].get(norm(article), (article.strip(), Decimal(0)))
         amounts[key][norm(article)] = (name, total + amount)

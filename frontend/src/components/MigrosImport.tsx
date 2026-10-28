@@ -4,9 +4,7 @@ import api, { errorMessage } from '../api';
 import { money } from '../finance';
 import { formatDate } from '../format';
 import { useTags } from '../receipts';
-import {
-    articleKey, migrosForm, receiptDay, type Article, type MigrosPreview, type MigrosReceipt, type ReceiptChoice,
-} from '../migros';
+import { migrosForm, receiptDay, type Article, type MigrosPreview, type MigrosReceipt, type ReceiptChoice } from '../migros';
 
 interface Category { id: string; name: string; type: string; system_key?: string | null }
 
@@ -27,9 +25,8 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
     const [preview, setPreview] = useState<MigrosPreview | null>(null);
     const [busy, setBusy] = useState(true);
     const [error, setError] = useState('');
-
-    const choicesOf = (result: MigrosPreview): Record<string, ReceiptChoice> => Object.fromEntries(
-        result.receipts.map(r => [r.key, { include: r.include, payment: r.payment, account_id: r.account_id }]));
+    // What the person changed on receipts; the server fits the rest around it
+    const [changed, setChanged] = useState<Record<string, Partial<ReceiptChoice>>>({});
 
     // The first look asks the AI once; later ones send its answers back as the articles
     useEffect(() => {
@@ -42,7 +39,8 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
         return () => { gone = true; };
     }, [file, t]);
 
-    const again = async (articles: Record<string, Article>, receipts: Record<string, ReceiptChoice>) => {
+    const again = async (articles: Record<string, Article>, receipts: Record<string, Partial<ReceiptChoice>>) => {
+        setChanged(receipts);
         setBusy(true);
         try {
             const res = await api.post('/api/v1/import/migros/preview', migrosForm(file, articles, receipts));
@@ -59,18 +57,20 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
         return <p className="mt-4 text-sm">{busy ? t('importing.checking') : <span className="text-red-300">{error}</span>}</p>;
     }
 
-    const choices = choicesOf(preview);
-    const changeReceipt = (receipt: MigrosReceipt, change: Partial<ReceiptChoice>) =>
-        again(preview.articles, { ...choices, [receipt.key]: { ...choices[receipt.key], ...change } });
-    const changeArticle = (name: string, change: Partial<Article>) => {
-        const key = articleKey(name);
-        again({ ...preview.articles, [key]: { ...preview.articles[key], ...change, source: 'change' } }, choices);
+    // A payment chosen here is no longer another receipt's choice
+    const changeReceipt = (receipt: MigrosReceipt, change: Partial<ReceiptChoice>) => {
+        const next = Object.fromEntries(Object.entries(changed).map(([key, choice]) => [key,
+            change.payment && change.payment !== 'new' && choice.payment === change.payment
+                ? { ...choice, payment: undefined } : choice]));
+        again(preview.articles, { ...next, [receipt.key]: { ...next[receipt.key], ...change } });
     };
+    const changeArticle = (key: string, change: Partial<Article>) =>
+        again({ ...preview.articles, [key]: { ...preview.articles[key], ...change, source: 'change' } }, changed);
 
     const runImport = async () => {
         setBusy(true);
         try {
-            const res = await api.post('/api/v1/import/migros', migrosForm(file, preview.articles, choices));
+            const res = await api.post('/api/v1/import/migros', migrosForm(file, preview.articles, changed));
             onImported(t('migros.imported', { onto: res.data.onto_payments, booked: res.data.booked, rules: res.data.rules }));
         } catch (err) {
             setError(errorMessage(err, t('migros.importFailed')));
@@ -78,7 +78,9 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
         }
     };
 
-    const expense = categories.filter(c => c.type === 'EXPENSE' && !c.system_key);
+    // The family's expense categories, and whatever a line will be booked as (Unsorted when Groceries is gone)
+    const choicesFor = (categoryId: string) =>
+        categories.filter(c => c.type === 'EXPENSE' && (!c.system_key || c.id === categoryId));
     const count = preview.receipts.filter(r => r.include).length;
     const label = (r: MigrosReceipt) => `${receiptDay(r.date)} ${r.store}`;
 
@@ -132,7 +134,7 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
                                 </summary>
                                 <ul className="mt-2 space-y-2">
                                     {receipt.lines.map(line => (
-                                        <li key={line.name} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                        <li key={line.key} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                                             <span className="min-w-0 break-words">{line.name}</span>
                                             <span className="text-slate-400">{money(line.amount)}</span>
                                             {line.source === 'discount' ? (
@@ -140,8 +142,8 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
                                             ) : (<>
                                                 <select className={field} value={line.category_id} disabled={busy}
                                                     aria-label={t('migros.category', { name: line.name })}
-                                                    onChange={e => changeArticle(line.name, { category_id: e.target.value })}>
-                                                    {expense.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+                                                    onChange={e => changeArticle(line.key, { category_id: e.target.value })}>
+                                                    {choicesFor(line.category_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                                 </select>
                                                 <span className="text-xs text-slate-500">{t(`migros.source.${line.source}`)}</span>
                                                 {tags.map(tag => {
@@ -151,7 +153,7 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
                                                             ? 'bg-amber-500/20 border-amber-400 text-amber-200' : 'border-slate-600 text-slate-400'}`}>
                                                             <input type="checkbox" className="sr-only" checked={on} disabled={busy}
                                                                 aria-label={t('migros.tag', { name: line.name, tag: tag.name })}
-                                                                onChange={() => changeArticle(line.name, {
+                                                                onChange={() => changeArticle(line.key, {
                                                                     tag_ids: on ? line.tag_ids.filter(id => id !== tag.id) : [...line.tag_ids, tag.id],
                                                                 })} />
                                                             {tag.icon ? `${tag.icon} ` : ''}{tag.name}

@@ -124,7 +124,7 @@ def articles_of(
 
 def lines_of(receipt: Receipt, articles: dict[str, dict]) -> list[dict]:
     shown = [
-        {"name": line.name, "amount": line.amount, **articles[norm(line.name)]}
+        {"key": norm(line.name), "name": line.name, "amount": line.amount, **articles[norm(line.name)]}
         for line in receipt.lines
         if not is_discount(line.amount)
     ]
@@ -134,29 +134,32 @@ def lines_of(receipt: Receipt, articles: dict[str, dict]) -> list[dict]:
         per_category[line["category_id"]] = per_category.get(line["category_id"], 0) + line["amount"]
     main = max(per_category, key=lambda c: per_category[c]) if per_category else None
     discounts: list[dict[str, Any]] = [
-        {"name": line.name, "amount": line.amount, "category_id": main, "tag_ids": [], "source": "discount"}
+        {
+            "key": norm(line.name),
+            "name": line.name,
+            "amount": line.amount,
+            "category_id": main,
+            "tag_ids": [],
+            "source": "discount",
+        }
         for line in receipt.lines
         if is_discount(line.amount)
     ]
     return shown + discounts
 
 
-def payments(
-    db: Session, accounts: list[models.Account], receipt: Receipt, claimed: set[str]
-) -> list[models.Transaction]:
+def payments(db: Session, accounts: list[models.Account], receipt: Receipt) -> list[models.Transaction]:
     """The bank bookings that may have paid the receipt, on any account the importer may book on; the best first."""
     found = []
     for account in accounts:
         found += reconcile.payments_for_receipt(db, account, receipt.when.date(), receipt.total)
-    day = receipt.when.date()
-    found = [t for t in found if t.id not in claimed]
-    return sorted(
-        found,
-        key=lambda t: (
-            to_cents(-t.amount) != receipt.total,
-            abs((min(r.booked_on for r in t.bank_rows) - day).days),
-        ),
-    )
+    return sorted(found, key=lambda t: fit_of(receipt, t))
+
+
+def fit_of(receipt: Receipt, payment: models.Transaction) -> tuple[bool, int]:
+    """How well a payment fits a receipt: exact amount first, then the nearest day."""
+    paid = min(r.booked_on for r in payment.bank_rows)
+    return to_cents(-payment.amount) != receipt.total, abs((paid - receipt.when.date()).days)
 
 
 def maybe_booked(db: Session, accounts: list[models.Account], receipt: Receipt) -> bool:
@@ -177,19 +180,62 @@ def maybe_booked(db: Session, accounts: list[models.Account], receipt: Receipt) 
     )
 
 
+def converter_prefix(receipt: Receipt) -> str:
+    """tools/converters/migros.py booked a receipt per category as migros:<ISO day>:<store>:<till>:<number>:..."""
+    return f"migros:{receipt.when.date().isoformat()}:{receipt.store}:{receipt.till}:{receipt.number}:"
+
+
+def already_imported(db: Session, found: list[Receipt]) -> set[str]:
+    """The keys of receipts booked before: by this import, or by the converter."""
+    references: set[str] = {
+        ref
+        for (ref,) in db.query(models.Transaction.reference).filter(models.Transaction.reference.like("migros:%"))
+        if ref
+    }
+    return {
+        r.key for r in found if r.key in references or any(ref.startswith(converter_prefix(r)) for ref in references)
+    }
+
+
+def assign(
+    open_rows: list[tuple[Receipt, dict, list[models.Transaction]]], chosen: dict[str, str]
+) -> dict[str, models.Transaction]:
+    """Which payment each ticked receipt goes onto. A payment the person chose wins; the others get the free payments,
+    the best fits across the whole file first, so a near amount never takes another receipt's exact one."""
+    taken: dict[str, models.Transaction] = {}
+    claimed: set[str] = set()
+    for receipt, row, candidates in open_rows:
+        wanted = chosen.get(receipt.key)
+        if not row["include"] or not wanted or wanted == "new":
+            continue
+        payment = next((t for t in candidates if t.id == wanted), None)
+        if payment is None or wanted in claimed:
+            raise messages.api_error(400, "migros_payment_taken")
+        taken[receipt.key] = payment
+        claimed.add(wanted)
+    pairs = [
+        (fit_of(receipt, t), position, receipt.key, t)
+        for position, (receipt, row, candidates) in enumerate(open_rows)
+        if row["include"] and receipt.key not in chosen
+        for t in candidates
+    ]
+    for _, _, key, payment in sorted(pairs, key=lambda pair: pair[:2]):
+        if key not in taken and payment.id not in claimed:
+            taken[key] = payment
+            claimed.add(payment.id)
+    return taken
+
+
 def checked(
     db: Session, user: models.User, found: list[Receipt], choices: dict[str, dict], ask_ai: bool = False
 ) -> dict[str, Any]:
-    """The preview: the receipts with their lines, payment, account and state; the articles; what the AI did."""
+    """The preview: the receipts with their lines, payment, account and state; the articles; what the AI did. The
+    receipt choices are only what the person changed (include, payment, account), so the rest can follow them."""
     articles, names, ai = articles_of(db, user, found, choices["articles"], ask_ai)
     accounts = writable_accounts(db, user)
-    by_id = {a.id: a for a in accounts}
-    own_bank = [a for a in accounts if a.user_id == user.id and a.type == models.AccountType.BANK]
-    default_account: Optional[models.Account] = (own_bank or accounts)[0] if accounts else None
-    keys = [r.key for r in found]
-    imported = {ref for (ref,) in db.query(models.Transaction.reference).filter(models.Transaction.reference.in_(keys))}
-    claimed: set[str] = set()
+    imported = already_imported(db, found)
     rows = []
+    open_rows = []
     for receipt in found:
         choice = choices["receipts"].get(receipt.key) or {}
         row: dict[str, Any] = {
@@ -204,38 +250,35 @@ def checked(
             "account_id": None,
             "error": None,
         }
+        rows.append(row)
         if receipt.total <= 0:
             row.update(status="error", error=messages.text("items_sum_positive"), include=False)
-            rows.append(row)
             continue
         if receipt.key in imported:
             row.update(status="imported", include=False)
-            rows.append(row)
             continue
-        candidates = payments(db, accounts, receipt, claimed)
+        status = "maybe_booked" if maybe_booked(db, accounts, receipt) else "new"
+        include = choice.get("include")
+        row.update(status=status, include=bool(include) if include is not None else status == "new")
+        candidates = payments(db, accounts, receipt)
         row["payments"] = [
             {"id": t.id, "description": t.description, "date": reconcile.swiss_day(t).isoformat(), "amount": t.amount}
             for t in candidates
         ]
-        payment = choice.get("payment") or (candidates[0].id if candidates else "new")
-        if payment != "new":
-            if payment in claimed or payment not in {t.id for t in candidates}:
-                raise messages.api_error(400, "migros_payment_taken")
-            claimed.add(payment)
-            default_account = by_id[next(t.account_id for t in candidates if t.id == payment)]
-        account_id = choice.get("account_id") or (default_account.id if default_account else None)
-        status = "maybe_booked" if maybe_booked(db, accounts, receipt) else "new"
-        include = choice.get("include")
-        row.update(
-            status=status,
-            payment=payment,
-            account_id=account_id,
-            include=bool(include) if include is not None else status == "new",
-        )
-        rows.append(row)
-    used = {
-        norm(line["name"]) for row in rows if row["include"] for line in row["lines"] if line["source"] != "discount"
-    }
+        open_rows.append((receipt, row, candidates))
+    chosen = {key: c["payment"] for key, c in choices["receipts"].items() if isinstance(c, dict) and c.get("payment")}
+    taken = assign(open_rows, chosen)
+    # A receipt booked new goes where the newest matched one went (receipts are newest first), else to the person's
+    # first own bank account
+    matched = [taken[receipt.key].account_id for receipt, _, _ in open_rows if receipt.key in taken]
+    own_bank = [a.id for a in accounts if a.user_id == user.id and a.type == models.AccountType.BANK]
+    fallbacks = matched or own_bank or [a.id for a in accounts]
+    default: Optional[str] = fallbacks[0] if fallbacks else None
+    for receipt, row, _ in open_rows:
+        choice = choices["receipts"].get(receipt.key) or {}
+        row["payment"] = taken[receipt.key].id if receipt.key in taken else "new"
+        row["account_id"] = choice.get("account_id") or default
+    used = {line["key"] for row in rows if row["include"] for line in row["lines"] if line["source"] != "discount"}
     return {
         "receipts": rows,
         "articles": articles,
@@ -295,6 +338,8 @@ def run_migros(
             booking.description = f"Migros {receipt.store}"
             booking.date = to_utc(receipt)
             booking.reference = receipt.key
+            # The export is the receipt a payment rule asked for
+            booking.receipt_expected = False
             items.apply(db, current_user, booking, lines)
             db.flush()
             db.refresh(booking)
@@ -304,7 +349,7 @@ def run_migros(
         tags = {t.id: t for t in db.query(models.Tag)}
         learnt = 0
         used = {
-            norm(line["name"])
+            line["key"]
             for row in result["receipts"]
             if row["include"] and row["status"] in ("new", "maybe_booked")
             for line in row["lines"]

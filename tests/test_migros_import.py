@@ -210,6 +210,7 @@ def test_voucher_is_a_discount_line_in_the_main_category(client):
     [found] = result["receipts"]
     assert found["total"] == 7.4
     assert found["lines"][-1] == {
+        "key": "cumulus bon 5.-",
         "name": "CUMULUS BON 5.-",
         "amount": -5.0,
         "category_id": category_id(client, "Groceries"),
@@ -269,3 +270,121 @@ def test_typed_receipt_on_another_day_is_not_maybe_booked(client):
     typed_receipt(client, mum, account_id, "2026-09-20", 12.4)
     [found] = preview(client, mum, migros(*FIRST))["receipts"]
     assert found["status"] == "new"
+
+
+# The whole-branch review's findings (2026-10-28)
+
+
+def second_receipt(time="17:02:00", number="140", amounts=None):
+    rows = [row.replace("11:35:25", time).replace(";133;", f";{number};") for row in FIRST]
+    return rows if amounts is None else [rows[0].replace(";3.50", f";{amounts}")]
+
+
+def test_exact_match_wins_over_a_near_one(client):
+    mum, account_id = setup(client)
+    statement(client, mum, line("Einkauf TWINT Migros", "-12.40", booked="2026-09-13"))
+    [payment] = listed(client, mum, account_id)
+    # A newer receipt of 12.90 (paid by card) is within CHF 1.00, but the older one is exact
+    newer = [r.replace("12.09.2026", "14.09.2026") for r in second_receipt(amounts="12.90")]
+    result = preview(client, mum, migros(*FIRST, *newer))
+    by_store = {r["total"]: r["payment"] for r in result["receipts"]}
+    assert by_store == {12.4: payment, 12.9: "new"}
+
+
+def test_unticked_receipt_leaves_its_payment(client):
+    mum, account_id = setup(client)
+    statement(client, mum, line("Einkauf TWINT Migros", "-12.40", booked="2026-09-13"))
+    [payment] = listed(client, mum, account_id)
+    newer_key = "migros:12.09.2026:17:02:00:Filiale Muster:270:140"
+    content = migros(*FIRST, *second_receipt())
+    result = preview(client, mum, content, choices={"articles": {}, "receipts": {newer_key: {"include": False}}})
+    by_key = {r["key"]: (r["include"], r["payment"]) for r in result["receipts"]}
+    assert by_key == {newer_key: (False, "new"), FIRST_KEY: (True, payment)}
+
+
+def test_payment_chosen_for_another_receipt_moves(client):
+    mum, account_id = setup(client)
+    statement(
+        client,
+        mum,
+        line("Einkauf TWINT Migros", "-12.40", booked="2026-09-13"),
+        line("Einkauf Debit Migros", "-12.40", booked="2026-09-14", saldo="987.6"),
+    )
+    content = migros(*FIRST, *second_receipt())
+    first = {r["key"]: r["payment"] for r in preview(client, mum, content)["receipts"]}
+    newer_key = "migros:12.09.2026:17:02:00:Filiale Muster:270:140"
+    # The person gives the newer receipt the payment the older one had: only that choice is sent
+    wanted = first[FIRST_KEY]
+    result = preview(client, mum, content, choices={"articles": {}, "receipts": {newer_key: {"payment": wanted}}})
+    after = {r["key"]: r["payment"] for r in result["receipts"]}
+    assert after[newer_key] == wanted and after[FIRST_KEY] == first[newer_key]
+    # Every payment is offered, also the one another receipt holds
+    assert all(len(r["payments"]) == 2 for r in result["receipts"])
+
+
+def test_new_receipts_default_to_the_newest_matched_account(client):
+    mum, household = setup(client)
+    joint = client.post(
+        f"{BASE_URL}/accounts",
+        json={"name": "Joint", "type": "BANK", "iban": "CH56 0483 5012 3456 7800 9"},
+        headers=mum,
+    ).json()["id"]
+    statement(client, mum, line("Einkauf TWINT Migros", "-12.40", booked="2026-09-13", iban="CH5604835012345678009"))
+    # The newest receipt has no statement line yet: it goes where the matched one went
+    newer = [r.replace("12.09.2026", "20.09.2026") for r in second_receipt(amounts="20.00")]
+    result = preview(client, mum, migros(*FIRST, *newer))
+    by_total = {r["total"]: (r["payment"] != "new", r["account_id"]) for r in result["receipts"]}
+    assert by_total[12.4][0] is True
+    assert by_total[20.0] == (False, joint)
+    assert household != joint
+
+
+def test_converter_booking_is_already_imported(client):
+    mum, account_id = setup(client)
+    reference = "migros:2026-09-12:Filiale Muster:270:133:Groceries:"
+    add = {
+        "account_id": account_id,
+        "category_id": category_id(client, "Groceries"),
+        "amount": 12.4,
+        "date": "2026-09-12T10:00:00Z",
+        "description": "Migros Filiale Muster",
+        "reference": reference,
+    }
+    assert client.post(f"{BASE_URL}/transactions", json=add, headers=mum).status_code == 200
+    [found] = preview(client, mum, migros(*FIRST))["receipts"]
+    assert (found["status"], found["include"]) == ("imported", False)
+
+
+def test_receipt_expected_is_met_by_the_import(client):
+    mum, account_id = setup(client)
+    statement(client, mum, line("Einkauf TWINT Migros", "-12.40", booked="2026-09-13"))
+    [payment] = listed(client, mum, account_id)
+    client.put(f"{BASE_URL}/transactions/{payment}", json={"receipt_expected": True}, headers=mum)
+    assert listed(client, mum, account_id)[payment]["state"]["receipt_missing"] is True
+    result = preview(client, mum, migros(*FIRST))
+    run(client, mum, migros(*FIRST), choices_of(result))
+    assert listed(client, mum, account_id)[payment]["state"]["receipt_missing"] is False
+
+
+def test_line_key_is_the_servers(client):
+    mum, _ = setup(client)
+    content = migros("12.09.2026;11:35:25;Filiale Muster;270;133;Weißwurst;1;0.00;4.20")
+    [found] = preview(client, mum, content)["receipts"]
+    assert found["lines"][0]["key"] == "weisswurst"
+    choices = {
+        "articles": {
+            "weisswurst": {"category_id": category_id(client, "Other Expense"), "tag_ids": [], "source": "change"}
+        },
+        "receipts": {},
+    }
+    [again] = preview(client, mum, content, choices=choices)["receipts"]
+    assert again["lines"][0]["category_id"] == category_id(client, "Other Expense")
+
+
+def test_failed_import_rolls_back_receipts_already_booked(client):
+    mum, account_id = setup(client)
+    content = migros(*FIRST, *second_receipt())
+    # The newer receipt (booked first) is fine, the older one's account is not
+    response = run(client, mum, content, {"articles": {}, "receipts": {FIRST_KEY: {"account_id": "nope"}}})
+    assert response.status_code == 404
+    assert listed(client, mum, account_id) == {}
