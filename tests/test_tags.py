@@ -71,7 +71,12 @@ def test_delete_removes_the_tag_from_items(client):
     admin = admin_headers(client)
     velo, sport = add(client, admin, "Velo").json(), add(client, admin, "Sport").json()
     item_with_tags(client, admin, [velo["id"], sport["id"]])
-    assert client.get(f"{TAGS}/usage", headers=admin).json()[velo["id"]] == {"items": 1, "budgets": 0, "assets": 0}
+    assert client.get(f"{TAGS}/usage", headers=admin).json()[velo["id"]] == {
+        "items": 1,
+        "budgets": 0,
+        "assets": 0,
+        "article_rules": 0,
+    }
     assert client.delete(f"{TAGS}/{velo['id']}", headers=admin).status_code == 200
     with database.SessionLocal() as db:
         item = db.query(models.TransactionItem).one()
@@ -98,4 +103,9 @@ def test_usage_counts_investments(client):
     body = {"name": "Velo", "price": 1200, "purchase_date": "2025-04-01", "lifespan_years": 8}
     body |= {"owner_id": user_id(client, mum, "mum"), "tag_ids": [velo["id"]]}
     assert client.post(f"{BASE_URL}/assets", json=body, headers=mum).status_code == 200
-    assert client.get(f"{TAGS}/usage", headers=mum).json()[velo["id"]] == {"items": 0, "budgets": 0, "assets": 1}
+    assert client.get(f"{TAGS}/usage", headers=mum).json()[velo["id"]] == {
+        "items": 0,
+        "budgets": 0,
+        "assets": 1,
+        "article_rules": 0,
+    }

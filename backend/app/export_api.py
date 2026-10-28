@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from . import auth, database, finance, i18n, models, privacy
+from . import article_rules, auth, database, finance, i18n, models, privacy
 from .common_api import asset_out, planned_cost_out, shared_transactions, visible_owner
 from .wishes_api import visible_wishes, wish_out
 
@@ -157,6 +157,22 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
     tags = {t.id: t for t in db.query(models.Tag)}
     files["tags.csv"] = to_csv(
         ["tag_id", "name", "icon"], [[t.id, t.name, t.icon] for t in sorted(tags.values(), key=lambda t: t.name)]
+    )
+    # What receipt articles are booked as (Migros import); parents' rules, like the import rules
+    rules = sorted(article_rules.load(db).values(), key=lambda r: r.name.casefold()) if is_parent else []
+    files["article_rules.csv"] = to_csv(
+        ["rule_id", "name", "category_id", "category", "tag_ids", "tags"],
+        [
+            [
+                r.id,
+                r.name,
+                r.category_id,
+                i18n.category_name(r.category),
+                ";".join(r.tag_ids),
+                ";".join(t.name for t in r.tags),
+            ]
+            for r in rules
+        ],
     )
     item_rows = []
     for t in transactions:

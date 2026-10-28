@@ -16,6 +16,7 @@ from . import (
     import_api,
     month_check,
     wishes_api,
+    article_rules,
     import_rules,
     rule_presets,
     reconcile,
@@ -100,6 +101,7 @@ app.include_router(import_api.router, prefix="/api/v1")
 app.include_router(month_check.router, prefix="/api/v1")
 app.include_router(wishes_api.router, prefix="/api/v1")
 app.include_router(import_rules.router, prefix="/api/v1")
+app.include_router(article_rules.router, prefix="/api/v1")
 app.include_router(rule_presets.router, prefix="/api/v1")
 app.include_router(reconcile.router, prefix="/api/v1")
 app.include_router(reports.router, prefix="/api/v1")

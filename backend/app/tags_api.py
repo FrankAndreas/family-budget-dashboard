@@ -31,8 +31,8 @@ def get_tag(db: Session, tag_id: str) -> models.Tag:
 
 
 def usage_counts(db: Session) -> dict[str, dict[str, int]]:
-    """Per tag: how many items, budgets and investments use it."""
-    usage = {t.id: {"items": 0, "budgets": 0, "assets": 0} for t in db.query(models.Tag)}
+    """Per tag: how many items, budgets, investments and article rules use it."""
+    usage = {t.id: {"items": 0, "budgets": 0, "assets": 0, "article_rules": 0} for t in db.query(models.Tag)}
     for tag_id, count in db.query(models.TransactionItemTag.tag_id, func.count()).group_by(
         models.TransactionItemTag.tag_id
     ):
@@ -45,6 +45,10 @@ def usage_counts(db: Session) -> dict[str, dict[str, int]]:
         usage[str(budget_tag_id)]["budgets"] = count
     for asset_tag_id, count in db.query(models.AssetTag.tag_id, func.count()).group_by(models.AssetTag.tag_id):
         usage[str(asset_tag_id)]["assets"] = count
+    for rule_tag_id, count in db.query(models.ArticleRuleTag.tag_id, func.count()).group_by(
+        models.ArticleRuleTag.tag_id
+    ):
+        usage[str(rule_tag_id)]["article_rules"] = count
     return usage
 
 
@@ -110,6 +114,7 @@ def delete_tag(
     db.query(models.TransactionItemTag).filter(models.TransactionItemTag.tag_id == tag.id).delete()
     # Investments keep their other tags; with none left they are in "no tag"
     db.query(models.AssetTag).filter(models.AssetTag.tag_id == tag.id).delete()
+    db.query(models.ArticleRuleTag).filter(models.ArticleRuleTag.tag_id == tag.id).delete()
     db.delete(tag)
     db.commit()
     return {"deleted": True}
