@@ -447,6 +447,12 @@ class Wish(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
 
 
+def article_key(context) -> str:
+    """An article rule's name as compared (migros_csv.norm), from the name on insert; a rename sets it itself."""
+    name = context.get_current_parameters().get("name")
+    return (name or "").strip().casefold()
+
+
 class ArticleRuleTag(Base):
     __tablename__ = "article_rule_tags"
 
@@ -460,8 +466,9 @@ class ArticleRule(Base):
     __tablename__ = "article_rules"
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    # As first written; compared stripped and ignoring case (article_rules.norm)
+    # As first written; compared stripped and ignoring case: name_key, one rule per key
     name: Mapped[str] = mapped_column(String)
+    name_key: Mapped[str] = mapped_column(String, unique=True, default=lambda context: article_key(context))
     category_id: Mapped[str] = mapped_column(String, ForeignKey("categories.id"))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
 

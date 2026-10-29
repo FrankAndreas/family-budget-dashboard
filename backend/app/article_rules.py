@@ -23,12 +23,21 @@ def load(db: Session) -> dict[str, models.ArticleRule]:
     return {norm(rule.name): rule for rule in query}
 
 
-def learn(db: Session, name: str, category: models.Category, tags: list[models.Tag]) -> None:
-    """The article's rule becomes this category and these tags (made if new). The caller commits."""
-    rule = load(db).get(norm(name))
+def learn(
+    db: Session,
+    name: str,
+    category: models.Category,
+    tags: list[models.Tag],
+    rules: Optional[dict[str, models.ArticleRule]] = None,
+) -> None:
+    """The article's rule becomes this category and these tags (made if new). rules: load(db), given once for many
+    articles (a new rule is added to it). The caller commits."""
+    rules = load(db) if rules is None else rules
+    rule = rules.get(norm(name))
     if rule is None:
-        rule = models.ArticleRule(name=name.strip())
+        rule = models.ArticleRule(name=name.strip(), name_key=norm(name))
         db.add(rule)
+        rules[norm(name)] = rule
     rule.category_id = category.id
     rule.tags = tags
     db.flush()
@@ -93,7 +102,7 @@ def create_rule(
 ):
     require_parent(current_user)
     name, category, tags = checked(db, rule_in)
-    rule = models.ArticleRule(name=name, category_id=category.id, tags=tags)
+    rule = models.ArticleRule(name=name, name_key=norm(name), category_id=category.id, tags=tags)
     db.add(rule)
     db.commit()
     db.refresh(rule)
@@ -110,6 +119,7 @@ def update_rule(
     require_parent(current_user)
     rule = get_rule(db, rule_id)
     rule.name, category, rule.tags = checked(db, rule_in, rule.id)
+    rule.name_key = norm(rule.name)
     rule.category_id = category.id
     db.commit()
     db.refresh(rule)

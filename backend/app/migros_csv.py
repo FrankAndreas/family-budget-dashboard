@@ -9,9 +9,9 @@ import csv
 import io
 from dataclasses import dataclass, field
 from datetime import datetime
-from decimal import Decimal, InvalidOperation
+from decimal import Decimal
 
-from . import messages
+from . import bank_csv, messages
 from .crud import to_cents
 
 HEADER = "Datum;Zeit;Filiale;Kassennummer;Transaktionsnummer;Artikel;Menge;Aktion;Umsatz"
@@ -60,18 +60,25 @@ def receipts(text: str) -> list[Receipt]:
             continue
         if len(values) < 9:
             raise messages.api_error(400, "migros_line_invalid", line=reader.line_num)
-        day, clock, store, till, number, article, _, _, paid = (value.strip() for value in values[:9])
+        day, clock, store, till, number, article, quantity, _, paid = (value.strip() for value in values[:9])
+        # As the converter reads them: no time is midnight, amounts may have thousands apostrophes
+        clock = clock or "00:00:00"
+        amount = bank_csv.number(paid)
         try:
             when = datetime.strptime(f"{day} {clock}", "%d.%m.%Y %H:%M:%S")
-            amount = Decimal(paid)
-        except ValueError, InvalidOperation:
+        except ValueError:
+            amount = None
+        if amount is None:
             raise messages.api_error(400, "migros_line_invalid", line=reader.line_num)
         key = f"migros:{day}:{clock}:{store}:{till}:{number}"
         if key not in found:
             found[key] = Receipt(key=key, when=when, store=store, till=till, number=number)
             amounts[key] = {}
-        name, total = amounts[key].get(norm(article), (article.strip(), Decimal(0)))
-        amounts[key][norm(article)] = (name, total + amount)
+        # A voucher (quantity 0, an amount) is a line of its own each time; articles add up (till corrections)
+        voucher = bank_csv.number(quantity) == 0 and amount != 0
+        merge = f"{norm(article)}#{len(amounts[key])}" if voucher else norm(article)
+        name, total = amounts[key].get(merge, (article.strip(), Decimal(0)))
+        amounts[key][merge] = (name, total + amount)
     for key, receipt in found.items():
         receipt.lines = [Line(name, to_cents(float(total))) for name, total in amounts[key].values() if total != 0]
     return sorted(found.values(), key=lambda r: r.when, reverse=True)

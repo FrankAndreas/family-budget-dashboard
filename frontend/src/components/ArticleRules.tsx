@@ -102,8 +102,10 @@ export default function ArticleRules({ version }: { version: number }) {
                                     {rule.name} → {rule.category}
                                     {rule.tag_ids.length > 0 && <span className="text-slate-400"> · {rule.tag_ids.map(tagName).join(', ')}</span>}
                                 </span>
-                                <button className="text-slate-500 hover:text-blue-400" onClick={() => setEditing(rule)}>{t('common.edit')}</button>
-                                <button className="text-slate-500 hover:text-red-400" onClick={() => remove(rule)}>{t('common.delete')}</button>
+                                <button className="text-slate-500 hover:text-blue-400" onClick={() => setEditing(rule)}
+                                    aria-label={t('articleRules.edit', { name: rule.name })}>{t('common.edit')}</button>
+                                <button className="text-slate-500 hover:text-red-400" onClick={() => remove(rule)}
+                                    aria-label={t('articleRules.delete', { name: rule.name })}>{t('common.delete')}</button>
                             </li>
                         ))}
                     </ul>

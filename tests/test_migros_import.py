@@ -388,3 +388,33 @@ def test_failed_import_rolls_back_receipts_already_booked(client):
     response = run(client, mum, content, {"articles": {}, "receipts": {FIRST_KEY: {"account_id": "nope"}}})
     assert response.status_code == 404
     assert listed(client, mum, account_id) == {}
+
+
+def test_ai_asked_only_about_receipts_to_import(client, ai):
+    mum, _ = setup(client)
+    result = preview(client, mum, migros(*FIRST))
+    run(client, mum, migros(*FIRST), choices_of(result))
+    ai.questions.clear()
+    content = migros(*FIRST, "20.09.2026;10:00:00;Filiale Muster;270;150;Seife;1;0.00;2.40")
+    preview(client, mum, content, ai=True)
+    [question] = ai.questions
+    assert json.loads(question.split(receipt_ai.ARTICLE_MARKER, 1)[1]) == ["Seife"]
+
+
+def test_receipt_just_after_midnight(client):
+    # 13.09. 00:30 in Zurich is 12.09. 22:30 UTC: the Swiss day counts, for the payment and for "possibly booked"
+    mum, account_id = setup(client)
+    statement(client, mum, line("Einkauf TWINT Migros", "-12.40", booked="2026-09-09"))
+    night = [row.replace("12.09.2026;11:35:25", "13.09.2026;00:30:00") for row in FIRST]
+    [found] = preview(client, mum, migros(*night))["receipts"]
+    # Paid 3 days before the Swiss day at the most: the 9th is too early for the 13th (but not for the UTC 12th)
+    assert (found["date"], found["payment"]) == ("2026-09-13", "new")
+    body = {
+        "account_id": account_id,
+        "date": "2026-09-12T22:40:00Z",
+        "description": "Migros",
+        "items": [{"name": "Einkauf", "amount": 12.4, "category_id": category_id(client, "Groceries")}],
+    }
+    assert client.post(f"{BASE_URL}/transactions", json=body, headers=mum).status_code == 200
+    [found] = preview(client, mum, migros(*night))["receipts"]
+    assert found["status"] == "maybe_booked"

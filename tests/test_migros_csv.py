@@ -58,3 +58,31 @@ def test_bad_amount_names_the_line():
         migros_csv.receipts(text)
     assert error.value.status_code == 400
     assert "2" in str(error.value.detail)
+
+
+def test_amounts_and_times_like_the_converter():
+    text = file(
+        "12.09.2026;11:35:25;Filiale Muster;270;133;Velo;1;0.00;1'234.50",
+        "13.09.2026;;Filiale Muster;270;134;Brot;1;0.00;3.50",
+    )
+    found = migros_csv.receipts(text)
+    assert [(r.when, r.total) for r in found] == [
+        (datetime(2026, 9, 13, 0, 0, 0), 3.5),
+        (datetime(2026, 9, 12, 11, 35, 25), 1234.5),
+    ]
+    with pytest.raises(HTTPException):
+        migros_csv.receipts(file("12.09.2026;11:35:25;Filiale Muster;270;133;Brot;1;0.00;NaN"))
+
+
+def test_each_voucher_is_its_own_line():
+    text = file(
+        "12.09.2026;11:35:25;Filiale Muster;270;133;Brot;1;0.00;30.00",
+        "12.09.2026;11:35:25;Filiale Muster;270;133;CUMULUS BON 5.-;0;0;-5.00",
+        "12.09.2026;11:35:25;Filiale Muster;270;133;CUMULUS BON 5.-;0;0;-5.00",
+    )
+    [receipt] = migros_csv.receipts(text)
+    assert [(line.name, line.amount) for line in receipt.lines] == [
+        ("Brot", 30.0),
+        ("CUMULUS BON 5.-", -5.0),
+        ("CUMULUS BON 5.-", -5.0),
+    ]

@@ -79,14 +79,18 @@ def is_discount(amount: float) -> bool:
 
 
 def articles_of(
-    db: Session, user: models.User, found: list[Receipt], chosen: dict[str, dict], ask_ai: bool
+    db: Session, user: models.User, found: list[Receipt], chosen: dict[str, dict], ask_ai: bool, skip: set[str]
 ) -> tuple[dict[str, dict[str, Any]], dict[str, str], Optional[dict]]:
-    """Per article (by norm): category_id, tag_ids and source; the names as first written; and what the AI did."""
+    """Per article (by norm): category_id, tag_ids and source; the names as first written; and what the AI did. The
+    AI isn't asked about articles only on receipts in skip (already imported, or not importable)."""
     names: dict[str, str] = {}
+    importable: set[str] = set()
     for receipt in found:
         for line in receipt.lines:
             if not is_discount(line.amount):
                 names.setdefault(norm(line.name), line.name)
+                if receipt.key not in skip:
+                    importable.add(norm(line.name))
     rules = article_rules.load(db)
     categories = {
         c.id: c for c in db.query(models.Category).filter(models.Category.type == models.CategoryType.EXPENSE)
@@ -112,7 +116,8 @@ def articles_of(
             open_names.append(name)
     ai = None
     if ask_ai:
-        suggested, status, message = receipt_ai.suggest_articles(db, user, open_names)
+        asked = [name for name in open_names if norm(name) in importable]
+        suggested, status, message = receipt_ai.suggest_articles(db, user, asked)
         ai = {"status": status, "message": message}
         for name, suggestion in suggested.items():
             result[norm(name)] = {**suggestion, "source": "ai"}
@@ -231,9 +236,10 @@ def checked(
 ) -> dict[str, Any]:
     """The preview: the receipts with their lines, payment, account and state; the articles; what the AI did. The
     receipt choices are only what the person changed (include, payment, account), so the rest can follow them."""
-    articles, names, ai = articles_of(db, user, found, choices["articles"], ask_ai)
-    accounts = writable_accounts(db, user)
     imported = already_imported(db, found)
+    skip = imported | {r.key for r in found if r.total <= 0}
+    articles, names, ai = articles_of(db, user, found, choices["articles"], ask_ai, skip)
+    accounts = writable_accounts(db, user)
     rows = []
     open_rows = []
     for receipt in found:
@@ -347,6 +353,7 @@ def run_migros(
         # What was booked becomes the articles' rules, saved with the bookings so a failed import saves none
         categories = {c.id: c for c in db.query(models.Category)}
         tags = {t.id: t for t in db.query(models.Tag)}
+        rules = article_rules.load(db)
         learnt = 0
         used = {
             line["key"]
@@ -359,7 +366,11 @@ def run_migros(
             article = result["articles"][key]
             if article["source"] in ("change", "ai"):
                 article_rules.learn(
-                    db, result["names"][key], categories[article["category_id"]], [tags[t] for t in article["tag_ids"]]
+                    db,
+                    result["names"][key],
+                    categories[article["category_id"]],
+                    [tags[t] for t in article["tag_ids"]],
+                    rules,
                 )
                 learnt += 1
         db.commit()

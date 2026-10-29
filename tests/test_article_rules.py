@@ -94,7 +94,9 @@ def test_migration_0020_up_and_down(tmp_path):
     )
     database_setup.setup(engine)
     with engine.connect() as conn:
-        conn.exec_driver_sql("INSERT INTO article_rules (id, name, category_id) VALUES ('r1', 'Brot', 'c1')")
+        conn.exec_driver_sql(
+            "INSERT INTO article_rules (id, name, name_key, category_id) VALUES ('r1', 'Brot', 'brot', 'c1')"
+        )
         conn.exec_driver_sql("INSERT INTO article_rule_tags (rule_id, tag_id) VALUES ('r1', 't1')")
         conn.commit()
         assert conn.execute(text("SELECT count(*) FROM article_rule_tags")).scalar() == 1
@@ -102,3 +104,44 @@ def test_migration_0020_up_and_down(tmp_path):
     with engine.connect() as conn:
         tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type = 'table'"))}
     assert "article_rules" not in tables and "article_rule_tags" not in tables
+
+
+def test_one_rule_per_name_in_the_database(client, mum):
+    # Two imports at the same moment can't both make a rule for the same article
+    from sqlalchemy.exc import IntegrityError
+
+    with database.SessionLocal() as db:
+        groceries = db.query(models.Category).filter(models.Category.name == "Groceries").one()
+        db.add(models.ArticleRule(name="Brot", category_id=groceries.id))
+        db.commit()
+        db.add(models.ArticleRule(name=" brot", category_id=groceries.id))
+        with pytest.raises(IntegrityError):
+            db.commit()
+
+
+def test_migration_0021_keeps_the_first_of_two_rules(tmp_path):
+    engine = sqlite(tmp_path)
+    database_setup.setup(engine)
+    database_setup.run(engine, command.downgrade, "0020")
+    without_link_checks(
+        engine,
+        "INSERT INTO categories (id, name, type) VALUES ('c1', 'Groceries', 'EXPENSE')",
+        "INSERT INTO article_rules (id, name, category_id, created_at) VALUES "
+        "('r1', 'Brot', 'c1', '2026-10-01'), ('r2', ' brot', 'c1', '2026-10-02'), ('r3', 'Weißwurst', 'c1', '2026-10-03')",
+    )
+    database_setup.setup(engine)
+    with engine.connect() as conn:
+        rows = conn.execute(text("SELECT id, name_key FROM article_rules ORDER BY id")).all()
+    assert [tuple(row) for row in rows] == [("r1", "brot"), ("r3", "weisswurst")]
+
+
+def test_renaming_or_recategorising_keeps_the_key(client, mum):
+    rule = add(client, mum, "Brot").json()
+    body = {"name": "Brot", "category_id": category_id(client, "Other Expense"), "tag_ids": []}
+    assert client.put(f"{RULES}/{rule['id']}", json=body, headers=mum).status_code == 200
+    body["name"] = "Ruchbrot"
+    assert client.put(f"{RULES}/{rule['id']}", json=body, headers=mum).status_code == 200
+    assert add(client, mum, "Brot").status_code == 200
+    assert add(client, mum, "ruchbrot").status_code == 400
+    with database.SessionLocal() as db:
+        assert sorted(r.name_key for r in db.query(models.ArticleRule)) == ["brot", "ruchbrot"]

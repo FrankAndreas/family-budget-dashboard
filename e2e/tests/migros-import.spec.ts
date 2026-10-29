@@ -53,6 +53,9 @@ test('the Migros export is imported onto its payment', async ({ page, request },
     await expect(page.getByLabel(`Category of ${zahnpasta}`)).toHaveValue(/.+/);
     await expect(page.getByLabel(`Category of ${zahnpasta}`).locator('option:checked')).toHaveText('Healthcare');
     await expect(page.locator('li li', { hasText: zahnpasta }).getByText('AI suggestion')).toBeVisible();
+    // The preview fits a phone
+    await page.setViewportSize({ width: 390, height: 844 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
     // The open receipt's line: the other receipt (folded) has Brot too, and a change applies to both
     const opened = page.locator('li', { hasText: 'Filiale Muster' }).first();
     await opened.getByLabel(`Category of ${brot}`).selectOption({ label: 'Other Expense' });
@@ -70,6 +73,8 @@ test('the Migros export is imported onto its payment', async ({ page, request },
     await page.getByLabel('Search article rules').fill(parent.name);
     await expect(page.getByText(`${brot} → Other Expense`)).toBeVisible();
     await expect(page.getByText(`${zahnpasta} → Healthcare`)).toBeVisible();
+    await expect(page.getByRole('button', { name: `Edit the rule for ${brot}` })).toBeVisible();
+    await expect(page.getByRole('button', { name: `Delete the rule for ${brot}` })).toBeVisible();
 
     // The same file again: nothing to import
     await page.getByLabel('File to import').setInputFiles(file);
