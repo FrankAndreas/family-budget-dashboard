@@ -79,8 +79,11 @@ export default function ReceiptForm({
     const difference = total === null ? 0 : Math.round((total - sum) * 100) / 100;
     const defaultCategory = categories.find(c => c.system_key === 'UNSORTED')?.id ?? categories[0]?.id ?? '';
 
+    // A changed category or tags are no longer the article rule's
     const update = (index: number, change: Partial<Row>) =>
-        setRows(rows.map((row, i) => (i === index ? { ...row, ...change } : row)));
+        setRows(rows.map((row, i) => (i === index
+            ? { ...row, ...change, ...('category_id' in change || 'tag_ids' in change ? { source: undefined } : {}) }
+            : row)));
     const setPersonForAll = (personId: string | null) => setRows(rows.map(row => ({ ...row, person_id: personId })));
     const toggleTag = (index: number, tagId: string) => {
         const current = rows[index].tag_ids;
@@ -201,6 +204,7 @@ export default function ReceiptForm({
                                 onChange={e => update(i, { category_id: e.target.value })} className={field}>
                                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
+                            {row.source === 'rule' && <span className="self-center text-xs text-slate-500">{t('receipt.byArticleRule')}</span>}
                             <select aria-label={t('receipt.itemPerson', { n: i + 1 })} value={row.person_id ?? ''}
                                 onChange={e => update(i, { person_id: e.target.value || null })} className={field}>
                                 <option value="">{t('receipt.noPerson')}</option>

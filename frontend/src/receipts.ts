@@ -15,6 +15,8 @@ export interface Item {
     category_id: string;
     person_id?: string | null;
     tag_ids: string[];
+    // A line of the AI's draft whose category and tags come from an article rule
+    source?: 'rule';
 }
 
 export interface AttachmentInfo {

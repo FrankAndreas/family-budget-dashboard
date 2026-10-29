@@ -56,7 +56,7 @@ On a failure, `test-results/` has a screenshot and a trace (`npx playwright show
 | `investments.spec.ts` | investments grouped by tag with totals per group and overall, a due-soon marker, a new tag from the form, archived out of the totals and restored, Settings counts the investments on a tag; an investment with two tags in both groups, counted once in the total; several new tags added at once (Enter or Add), made on saving |
 | `asset-purchase.spec.ts` | a booking marked as the purchase gives an investment its price and date (no longer an estimate); Analytics shows the tag's spending and its monthly set-aside |
 | `leasing.spec.ts` | a leased car entered in the form: monthly load = rate + the buy-out saved up over the term, kept when editing; a lease ending within a year flagged on its card and group, with the month |
-| `migros-import.spec.ts` | the Cumulus receipt export uploaded as it is: a receipt onto its TWINT payment (till corrections merged, voucher as a discount line), one booked new, articles by the fake AI or a change, learnt as article rules and found in Settings; the same file again is already imported |
+| `migros-import.spec.ts` | the Cumulus receipt export uploaded as it is: a receipt onto its TWINT payment (till corrections merged, voucher as a discount line), one booked new, articles by the fake AI or a change, proposed as article suggestions that are added or ignored in Settings; the same file again is already imported |
 | `receipts.spec.ts` | receipt read by the AI, an item with two tags, analytics and a tag budget |
 | `reconciliation.spec.ts` | a statement confirms a receipt typed in before it; badges and open points |
 | `reports.spec.ts` | budget spending and analytics totals |
