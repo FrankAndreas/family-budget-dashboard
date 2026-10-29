@@ -59,22 +59,31 @@ test('the Migros export is imported onto its payment', async ({ page, request },
     // The open receipt's line: the other receipt (folded) has Brot too, and a change applies to both
     const opened = page.locator('li', { hasText: 'Filiale Muster' }).first();
     await opened.getByLabel(`Category of ${brot}`).selectOption({ label: 'Other Expense' });
-    // Brot changed, Zahnpasta and Karotten by the AI
-    await expect(page.getByText('3 new article rules')).toBeVisible();
+    // Brot changed, Zahnpasta and Karotten by the AI: only proposed
+    await expect(page.getByText('3 new suggestions')).toBeVisible();
 
     await page.getByRole('button', { name: 'Import 2 receipts' }).click();
-    await expect(page.getByText('1 onto payments, 1 booked new, 3 new article rules')).toBeVisible();
+    await expect(page.getByText('1 onto payments, 1 booked new, 3 new article suggestions')).toBeVisible();
     const bookings: { description: string; items: { name: string }[] }[] =
         await call(request, parent, 'GET', `/accounts/${account.id}/transactions`);
     const paid = bookings.find(b => b.description === 'Migros Filiale Muster');
     expect(paid?.items.map(i => i.name)).toEqual([brot, zahnpasta, karotten, 'CUMULUS BON 5.-']);
     expect(bookings).toHaveLength(2);
 
+    // Nothing is a rule yet; the suggestions wait in Settings (other tests' too: the database is shared)
+    const suggestion = (name: string) => page.locator('li', { has: page.getByRole('button', { name: `Add ${name}` }) });
+    await expect(suggestion(brot)).toContainText('Other Expense');
+    await page.getByRole('button', { name: `Ignore ${karotten}` }).click();
+    await expect(page.getByRole('button', { name: `Add ${karotten}` })).toHaveCount(0);
+    await suggestion(zahnpasta).getByLabel(`Category of the suggestion ${zahnpasta}`).selectOption({ label: 'Healthcare' });
+    await page.getByRole('button', { name: `Add ${zahnpasta}` }).click();
+    await page.getByRole('button', { name: `Add ${brot}` }).click();
     await page.getByLabel('Search article rules').fill(parent.name);
     await expect(page.getByText(`${brot} → Other Expense`)).toBeVisible();
     await expect(page.getByText(`${zahnpasta} → Healthcare`)).toBeVisible();
     await expect(page.getByRole('button', { name: `Edit the rule for ${brot}` })).toBeVisible();
     await expect(page.getByRole('button', { name: `Delete the rule for ${brot}` })).toBeVisible();
+    await expect(page.getByText(`${karotten} →`)).toHaveCount(0);
 
     // The same file again: nothing to import
     await page.getByLabel('File to import').setInputFiles(file);

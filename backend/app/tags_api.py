@@ -115,6 +115,7 @@ def delete_tag(
     # Investments keep their other tags; with none left they are in "no tag"
     db.query(models.AssetTag).filter(models.AssetTag.tag_id == tag.id).delete()
     db.query(models.ArticleRuleTag).filter(models.ArticleRuleTag.tag_id == tag.id).delete()
+    db.query(models.ArticleRuleSuggestionTag).filter(models.ArticleRuleSuggestionTag.tag_id == tag.id).delete()
     db.delete(tag)
     db.commit()
     return {"deleted": True}

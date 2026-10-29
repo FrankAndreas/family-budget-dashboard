@@ -77,7 +77,7 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
         setBusy(true);
         try {
             const res = await api.post('/api/v1/import/migros', migrosForm(file, preview.articles, changed));
-            onImported(t('migros.imported', { onto: res.data.onto_payments, booked: res.data.booked, rules: res.data.rules }));
+            onImported(t('migros.imported', { onto: res.data.onto_payments, booked: res.data.booked, suggestions: res.data.suggestions }));
         } catch (err) {
             setError(errorMessage(err, t('migros.importFailed')));
             setBusy(false);
@@ -94,7 +94,7 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
         <div className="mt-4 space-y-3">
             <p className="text-sm text-slate-300">
                 <strong>{file.name}</strong>: {t('migros.summary', { count: preview.receipts.length })}
-                {' · '}{t('migros.newRules', { count: preview.new_rules })}
+                {' · '}{t('migros.newSuggestions', { count: preview.new_suggestions })}
                 {aiNote && aiNote.status !== 'ok' && (
                     <span className="block text-amber-300">{aiNote.message ?? t(`migros.ai.${aiNote.status}`)}</span>
                 )}

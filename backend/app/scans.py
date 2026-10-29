@@ -20,7 +20,7 @@ from PIL import Image
 from sqlalchemy.orm import Session
 from sqlalchemy.orm.exc import StaleDataError
 
-from . import attachments, auth, database, i18n, inbox, messages, models, receipt_ai
+from . import article_rules, attachments, auth, database, i18n, inbox, messages, models, receipt_ai
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -294,4 +294,8 @@ async def open_photo(
         )
         .first()
     ) or attachments.store(db, current_user, filename(photo, attachments.detect(data, "") or ""), data, None)
-    return {"draft": draft, "attachment_id": attachment.id, "attachment": attachments.out(attachment)}
+    return {
+        "draft": article_rules.apply_to_draft(db, draft),
+        "attachment_id": attachment.id,
+        "attachment": attachments.out(attachment),
+    }

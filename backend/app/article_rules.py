@@ -4,6 +4,7 @@ An import looks an article up here first, then asks the AI; what it booked becom
 file knows the article without the AI. Parents see and change the rules in Settings.
 """
 
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends
@@ -41,6 +42,21 @@ def learn(
     rule.category_id = category.id
     rule.tags = tags
     db.flush()
+
+
+def apply_to_draft(db: Session, draft: Optional[dict]) -> Optional[dict]:
+    """An AI draft with the article rules: a line whose name has a rule gets its category and tags, marked "rule";
+    the other lines keep the AI's proposal. Applied when the draft is handed out, so rules made since count."""
+    if not draft or not draft.get("items"):
+        return draft
+    rules = load(db)
+    lines = []
+    for item in draft["items"]:
+        rule = rules.get(norm(str(item.get("name") or "")))
+        lines.append(
+            {**item, "category_id": rule.category_id, "tag_ids": rule.tag_ids, "source": "rule"} if rule else item
+        )
+    return {**draft, "items": lines}
 
 
 def rule_out(rule: models.ArticleRule) -> dict:
@@ -136,3 +152,131 @@ def delete_rule(
     db.delete(get_rule(db, rule_id))
     db.commit()
     return {"deleted": rule_id}
+
+
+# Suggestions: what bookings propose; nothing enters the rules without a parent's Add (spec 2026-10-29)
+
+
+def suggest(db: Session, user: models.User, lines: list[tuple[str, str, list[str]]]) -> int:
+    """Propose a rule per booked line (name, category_id, tag_ids): one suggestion per article, the latest booking
+    wins; none for a line its rule already gives, nor for a child's booking. How many were made or changed. The caller
+    commits."""
+    if user.role != models.UserRole.PARENT:
+        return 0
+    rules = load(db)
+    waiting = {s.name_key: s for s in db.query(models.ArticleRuleSuggestion)}
+    tags = {t.id: t for t in db.query(models.Tag)}
+    changed = 0
+    for name, category_id, tag_ids in lines:
+        key = norm(name)
+        if not key:
+            continue
+        wanted = sorted(dict.fromkeys(t for t in tag_ids if t in tags))
+        rule = rules.get(key)
+        if rule and rule.category_id == category_id and sorted(rule.tag_ids) == wanted:
+            # Booked as its rule says: nothing new (and an older proposal for it is settled)
+            if key in waiting:
+                db.delete(waiting.pop(key))
+            continue
+        suggestion = waiting.get(key)
+        if suggestion is None:
+            suggestion = models.ArticleRuleSuggestion(name=name.strip(), name_key=key)
+            db.add(suggestion)
+            waiting[key] = suggestion
+        elif suggestion.category_id == category_id and sorted(suggestion.tag_ids) == wanted:
+            continue
+        suggestion.category_id = category_id
+        suggestion.tags = [tags[t] for t in wanted]
+        suggestion.updated_at = datetime.utcnow()
+        changed += 1
+    db.flush()
+    return changed
+
+
+def suggestion_out(suggestion: models.ArticleRuleSuggestion, rules: dict[str, models.ArticleRule]) -> dict:
+    rule = rules.get(suggestion.name_key)
+    return {
+        "id": suggestion.id,
+        "name": suggestion.name,
+        "category_id": suggestion.category_id,
+        "category": i18n.category_name(suggestion.category),
+        "tag_ids": suggestion.tag_ids,
+        # The rule it would change
+        "rule": rule and {"category": i18n.category_name(rule.category), "tag_ids": rule.tag_ids},
+    }
+
+
+class SuggestionAdd(BaseModel):
+    category_id: Optional[str] = None
+    tag_ids: Optional[list[str]] = None
+
+
+def get_suggestion(db: Session, suggestion_id: str) -> models.ArticleRuleSuggestion:
+    suggestion = db.get(models.ArticleRuleSuggestion, suggestion_id)
+    if not suggestion:
+        raise messages.api_error(404, "article_suggestion_not_found")
+    return suggestion
+
+
+def adopt(db: Session, suggestion: models.ArticleRuleSuggestion, change: Optional[SuggestionAdd] = None) -> None:
+    """The suggestion becomes its article's rule (made or updated), with any change; then it is gone."""
+    change = change or SuggestionAdd()
+    rule_in = RuleIn(
+        name=suggestion.name,
+        category_id=change.category_id or suggestion.category_id,
+        tag_ids=suggestion.tag_ids if change.tag_ids is None else change.tag_ids,
+    )
+    existing = load(db).get(suggestion.name_key)
+    _, category, tags = checked(db, rule_in, existing.id if existing else None)
+    learn(db, existing.name if existing else suggestion.name, category, tags)
+    db.delete(suggestion)
+
+
+@router.get("/article-rules/suggestions")
+def list_suggestions(
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+):
+    require_parent(current_user)
+    rules = load(db)
+    query = db.query(models.ArticleRuleSuggestion).options(selectinload(models.ArticleRuleSuggestion.tags))
+    found = sorted(query, key=lambda s: s.name.casefold())
+    return [suggestion_out(s, rules) for s in sorted(found, key=lambda s: s.updated_at or datetime.min, reverse=True)]
+
+
+@router.post("/article-rules/suggestions/add-all")
+def add_all_suggestions(
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+):
+    require_parent(current_user)
+    waiting = db.query(models.ArticleRuleSuggestion).all()
+    for suggestion in waiting:
+        adopt(db, suggestion)
+    db.commit()
+    return {"added": len(waiting)}
+
+
+@router.post("/article-rules/suggestions/{suggestion_id}/add")
+def add_suggestion(
+    suggestion_id: str,
+    change: SuggestionAdd,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    require_parent(current_user)
+    suggestion = get_suggestion(db, suggestion_id)
+    key = suggestion.name_key
+    adopt(db, suggestion, change)
+    db.commit()
+    return rule_out(load(db)[key])
+
+
+@router.delete("/article-rules/suggestions/{suggestion_id}")
+def ignore_suggestion(
+    suggestion_id: str,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
+):
+    require_parent(current_user)
+    db.delete(get_suggestion(db, suggestion_id))
+    db.commit()
+    return {"deleted": suggestion_id}

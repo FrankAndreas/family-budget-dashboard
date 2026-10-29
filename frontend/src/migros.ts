@@ -34,7 +34,8 @@ export interface MigrosPreview {
     receipts: MigrosReceipt[];
     articles: Record<string, Article>;
     accounts: { id: string; name: string }[];
-    new_rules: number;
+    // Articles the import will propose as rules (Settings → Article rules)
+    new_suggestions: number;
     ai: { status: 'off' | 'ok' | 'capped' | 'limit' | 'failed'; message: string | null } | null;
 }
 
