@@ -168,3 +168,41 @@ def test_editing_a_receipt_updates_its_suggestion(client, mum):
     update = {"items": receipt_body(client, account_id, ("Zahnpasta", 6.95, "Healthcare"))["items"]}
     assert client.put(f"{BASE_URL}/transactions/{booking['id']}", json=update, headers=mum).status_code == 200
     assert [(s["name"], s["category"]) for s in listed(client, mum)] == [("Zahnpasta", "Healthcare")]
+
+
+def test_ai_draft_takes_the_rule(client, mum, monkeypatch):
+    from files import image_png
+    from test_scans import Fake
+
+    from app import receipt_ai
+
+    monkeypatch.setenv("INFOMANIAK_AI_TOKEN", "t")
+    monkeypatch.setenv("INFOMANIAK_AI_PRODUCT_ID", "p")
+    monkeypatch.setattr(receipt_ai, "client_for", lambda settings: Fake())
+    kinder = client.post(f"{BASE_URL}/tags", json={"name": "Kinder"}, headers=mum).json()["id"]
+    body = {"name": "brot ", "category_id": category_id(client, "Other Expense"), "tag_ids": [kinder]}
+    client.post(RULES, json=body, headers=mum)
+    response = client.post(f"{BASE_URL}/receipts/read", files={"file": ("beleg.png", image_png())}, headers=mum)
+    assert response.status_code == 200, response.text
+    [item] = response.json()["draft"]["items"]
+    assert (item["name"], item["category_id"], item["tag_ids"], item["source"]) == (
+        "Brot",
+        category_id(client, "Other Expense"),
+        [kinder],
+        "rule",
+    )
+
+
+def test_scanned_photo_opened_after_a_new_rule(client, mum, monkeypatch):
+    from test_scans import Fake, opened, scanned
+
+    from app import receipt_ai
+
+    monkeypatch.setenv("INFOMANIAK_AI_TOKEN", "t")
+    monkeypatch.setenv("INFOMANIAK_AI_PRODUCT_ID", "p")
+    monkeypatch.setattr(receipt_ai, "client_for", lambda settings: Fake())
+    photo = scanned(client, mum)
+    # The rule is made after the photo was read: opening it still uses the rule
+    client.post(RULES, json={"name": "Brot", "category_id": category_id(client, "Healthcare")}, headers=mum)
+    [item] = opened(client, mum, photo["id"])["draft"]["items"]
+    assert (item["category_id"], item["source"]) == (category_id(client, "Healthcare"), "rule")

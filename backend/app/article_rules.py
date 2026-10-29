@@ -44,6 +44,21 @@ def learn(
     db.flush()
 
 
+def apply_to_draft(db: Session, draft: Optional[dict]) -> Optional[dict]:
+    """An AI draft with the article rules: a line whose name has a rule gets its category and tags, marked "rule";
+    the other lines keep the AI's proposal. Applied when the draft is handed out, so rules made since count."""
+    if not draft or not draft.get("items"):
+        return draft
+    rules = load(db)
+    lines = []
+    for item in draft["items"]:
+        rule = rules.get(norm(str(item.get("name") or "")))
+        lines.append(
+            {**item, "category_id": rule.category_id, "tag_ids": rule.tag_ids, "source": "rule"} if rule else item
+        )
+    return {**draft, "items": lines}
+
+
 def rule_out(rule: models.ArticleRule) -> dict:
     return {
         "id": rule.id,

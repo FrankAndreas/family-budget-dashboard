@@ -22,7 +22,7 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
-from . import attachments, auth, database, i18n, messages, models, receipt_files
+from . import article_rules, attachments, auth, database, i18n, messages, models, receipt_files
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -465,7 +465,7 @@ def read(db: Session, user: models.User, filename: str, data: bytes) -> dict:
     take_read(db, user.id, settings.reads_per_hour)
     # Kept as a pending attachment: booking the receipt links it, otherwise the sweep removes it after a day
     attachment = attachments.store(db, user, filename, data, None)
-    draft = ai_draft(db, content)
+    draft = article_rules.apply_to_draft(db, ai_draft(db, content))
     return {"draft": draft, "attachment_id": attachment.id, "attachment": attachments.out(attachment)}
 
 
