@@ -25,6 +25,8 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
     const [preview, setPreview] = useState<MigrosPreview | null>(null);
     const [busy, setBusy] = useState(true);
     const [error, setError] = useState('');
+    // What the AI did on the first look (later looks don't ask it), kept while its fallbacks are shown
+    const [aiNote, setAiNote] = useState<MigrosPreview['ai']>(null);
     // What the person changed on receipts; the server fits the rest around it
     const [changed, setChanged] = useState<Record<string, Partial<ReceiptChoice>>>({});
 
@@ -33,7 +35,11 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
         let gone = false;
         api.get('/api/v1/categories').then(res => !gone && setCategories(res.data)).catch(() => undefined);
         api.post('/api/v1/import/migros/preview', migrosForm(file, {}, {}, true))
-            .then(res => !gone && setPreview(res.data))
+            .then(res => {
+                if (gone) return;
+                setPreview(res.data);
+                setAiNote(res.data.ai);
+            })
             .catch(err => !gone && setError(errorMessage(err, t('migros.readFailed'))))
             .finally(() => !gone && setBusy(false));
         return () => { gone = true; };
@@ -89,8 +95,8 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
             <p className="text-sm text-slate-300">
                 <strong>{file.name}</strong>: {t('migros.summary', { count: preview.receipts.length })}
                 {' · '}{t('migros.newRules', { count: preview.new_rules })}
-                {preview.ai && preview.ai.status !== 'ok' && (
-                    <span className="block text-amber-300">{preview.ai.message ?? t(`migros.ai.${preview.ai.status}`)}</span>
+                {aiNote && aiNote.status !== 'ok' && (
+                    <span className="block text-amber-300">{aiNote.message ?? t(`migros.ai.${aiNote.status}`)}</span>
                 )}
             </p>
             {error && <p className="text-red-300 text-sm">{error}</p>}
@@ -133,8 +139,9 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
                                     {receipt.store} · {t('migros.lines', { count: receipt.lines.length })}
                                 </summary>
                                 <ul className="mt-2 space-y-2">
-                                    {receipt.lines.map(line => (
-                                        <li key={line.key} className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                                    {/* Two vouchers of the same name are two lines */}
+                                    {receipt.lines.map((line, index) => (
+                                        <li key={`${line.key}-${index}`} className="flex flex-wrap items-center gap-x-2 gap-y-1">
                                             <span className="min-w-0 break-words">{line.name}</span>
                                             <span className="text-slate-400">{money(line.amount)}</span>
                                             {line.source === 'discount' ? (

@@ -622,6 +622,8 @@ const de = {
         category: 'Kategorie',
         tag: 'Tag {{tag}}',
         confirmDelete: 'Die Regel für «{{name}}» löschen? Beim nächsten Import fragt die App wieder die KI.',
+        edit: 'Regel für {{name}} bearbeiten',
+        delete: 'Regel für {{name}} löschen',
         loadFailed: 'Die Artikelregeln konnten nicht geladen werden',
         saveFailed: 'Die Regel konnte nicht gespeichert werden',
         deleteFailed: 'Die Regel konnte nicht gelöscht werden',

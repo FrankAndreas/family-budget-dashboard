@@ -624,6 +624,8 @@ const en: Messages = {
         category: 'Category',
         tag: 'Tag {{tag}}',
         confirmDelete: 'Delete the rule for "{{name}}"? The next import asks the AI about it again.',
+        edit: 'Edit the rule for {{name}}',
+        delete: 'Delete the rule for {{name}}',
         loadFailed: "The article rules couldn't be loaded",
         saveFailed: "The rule couldn't be saved",
         deleteFailed: "The rule couldn't be deleted",
