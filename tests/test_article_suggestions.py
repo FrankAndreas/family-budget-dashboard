@@ -137,3 +137,34 @@ def test_migration_0022(tmp_path):
     with engine.connect() as conn:
         tables = {row[0] for row in conn.execute(text("SELECT name FROM sqlite_master WHERE type = 'table'"))}
     assert "article_rule_suggestions" not in tables and "article_rule_suggestion_tags" not in tables
+
+
+def receipt_body(client, account_id, *items):
+    return {
+        "account_id": account_id,
+        "date": "2026-09-12T10:00:00Z",
+        "description": "Muster Laden",
+        "items": [{"name": n, "amount": a, "category_id": category_id(client, c)} for n, a, c in items],
+    }
+
+
+def test_receipt_form_booking_suggests(client, mum):
+    from helpers import create_account
+
+    account_id = create_account(client, mum, "Konto")
+    body = receipt_body(client, account_id, ("Brot", 3.5, "Groceries"), ("Rabatt", -1.0, "Groceries"))
+    assert client.post(f"{BASE_URL}/transactions", json=body, headers=mum).status_code == 200
+    # The discount line proposes nothing
+    assert [(s["name"], s["category"]) for s in listed(client, mum)] == [("Brot", "Groceries")]
+    assert rules(client, mum) == {}
+
+
+def test_editing_a_receipt_updates_its_suggestion(client, mum):
+    from helpers import create_account
+
+    account_id = create_account(client, mum, "Konto")
+    body = receipt_body(client, account_id, ("Zahnpasta", 6.95, "Groceries"))
+    booking = client.post(f"{BASE_URL}/transactions", json=body, headers=mum).json()
+    update = {"items": receipt_body(client, account_id, ("Zahnpasta", 6.95, "Healthcare"))["items"]}
+    assert client.put(f"{BASE_URL}/transactions/{booking['id']}", json=update, headers=mum).status_code == 200
+    assert [(s["name"], s["category"]) for s in listed(client, mum)] == [("Zahnpasta", "Healthcare")]

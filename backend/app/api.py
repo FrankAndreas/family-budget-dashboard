@@ -6,7 +6,21 @@ import math
 from datetime import datetime, timedelta
 from fastapi import Body
 
-from . import attachments, crud, schemas, auth, database, models, privacy, reconcile, reports, i18n, items, messages
+from . import (
+    article_rules,
+    attachments,
+    crud,
+    schemas,
+    auth,
+    database,
+    models,
+    privacy,
+    reconcile,
+    reports,
+    i18n,
+    items,
+    messages,
+)
 from .common_api import apply_item_decisions, visible_owner
 from .seed import SETTLE_UP
 
@@ -397,6 +411,12 @@ def with_attachments(db: Session, user: models.User, transaction: models.Transac
     return transaction
 
 
+def suggest_rules(db: Session, user: models.User, transaction: models.Transaction) -> None:
+    """A booked receipt proposes article rules for its lines (not discounts); nothing becomes a rule by itself."""
+    lines = [(i.name, i.category_id, [t.id for t in i.tags]) for i in transaction.items if i.amount > 0]
+    article_rules.suggest(db, user, lines)
+
+
 def create_receipt(db: Session, user: models.User, data: schemas.TransactionCreate) -> models.Transaction:
     """A booking with items (issue #56): amount and category come from the items."""
     transaction = models.Transaction(
@@ -414,6 +434,7 @@ def create_receipt(db: Session, user: models.User, data: schemas.TransactionCrea
     db.add(transaction)
     db.flush()
     attachments.link(db, user, transaction, data.attachment_ids)
+    suggest_rules(db, user, transaction)
     db.commit()
     db.refresh(transaction)
     return transaction
@@ -439,6 +460,7 @@ def update_receipt(
         check_asset(db, user, update.asset_id, transaction.asset_id)
         transaction.asset_id = update.asset_id
     attachments.link(db, user, transaction, update.attachment_ids)
+    suggest_rules(db, user, transaction)
     db.commit()
     db.refresh(transaction)
     return transaction

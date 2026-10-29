@@ -3,7 +3,7 @@
 Each article gets a category and tags from its article rule, else from the AI (first preview only), else Groceries.
 Each receipt goes onto the bank booking that paid it (reconcile.payments_for_receipt) or is booked new, so a later
 bank import finds it. Like the bank import, the preview and the import are stateless: the frontend sends its choices
-back with the file. Importing saves what was booked as the articles' rules; a fallback teaches nothing.
+back with the file. What was booked is proposed as the articles' rules (spec 2026-10-29); a fallback proposes nothing.
 """
 
 import json
@@ -74,7 +74,7 @@ def fallback_category(db: Session) -> models.Category:
 
 
 def is_discount(amount: float) -> bool:
-    """A Cumulus voucher or a return: it lowers the receipt, takes its main category and teaches no rule."""
+    """A Cumulus voucher or a return: it lowers the receipt, takes its main category and proposes no rule."""
     return amount < 0
 
 
@@ -290,7 +290,7 @@ def checked(
         "articles": articles,
         "names": names,
         "accounts": [{"id": a.id, "name": a.name} for a in accounts],
-        "new_rules": sum(1 for key in used if articles[key]["source"] in ("change", "ai")),
+        "new_suggestions": sum(1 for key in used if articles[key]["source"] in ("change", "ai")),
         "ai": ai,
     }
 
@@ -350,11 +350,8 @@ def run_migros(
             db.flush()
             db.refresh(booking)
             reconcile.fit(db, booking)
-        # What was booked becomes the articles' rules, saved with the bookings so a failed import saves none
-        categories = {c.id: c for c in db.query(models.Category)}
-        tags = {t.id: t for t in db.query(models.Tag)}
-        rules = article_rules.load(db)
-        learnt = 0
+        # What was booked is proposed as the articles' rules (a parent adds them in Settings), saved with the bookings
+        # so a failed import proposes nothing; a fallback proposes nothing, so the AI gets another try
         used = {
             line["key"]
             for row in result["receipts"]
@@ -362,19 +359,14 @@ def run_migros(
             for line in row["lines"]
             if line["source"] != "discount"
         }
-        for key in used:
-            article = result["articles"][key]
-            if article["source"] in ("change", "ai"):
-                article_rules.learn(
-                    db,
-                    result["names"][key],
-                    categories[article["category_id"]],
-                    [tags[t] for t in article["tag_ids"]],
-                    rules,
-                )
-                learnt += 1
+        proposed = [
+            (result["names"][key], result["articles"][key]["category_id"], result["articles"][key]["tag_ids"])
+            for key in sorted(used)
+            if result["articles"][key]["source"] in ("change", "ai")
+        ]
+        suggested = article_rules.suggest(db, current_user, proposed)
         db.commit()
     except Exception:
         db.rollback()
         raise
-    return {"onto_payments": onto, "booked": booked, "rules": learnt}
+    return {"onto_payments": onto, "booked": booked, "suggestions": suggested}

@@ -67,6 +67,11 @@ def ai(monkeypatch):
     return fake
 
 
+def suggestions(client, headers):
+    found = client.get(f"{BASE_URL}/article-rules/suggestions", headers=headers).json()
+    return {s["name"]: (s["category"], s["tag_ids"]) for s in found}
+
+
 def rules(client, headers):
     return {
         r["name"]: (r["category"], r["tag_ids"])
@@ -129,21 +134,23 @@ def test_rule_then_ai_then_fallback(client, ai):
     # One question, with each unknown article once
     [question] = ai.questions
     assert json.loads(question.split(receipt_ai.ARTICLE_MARKER, 1)[1]) == ["Zahnpasta", "Karotten"]
-    assert result["ai"]["status"] == "ok" and result["new_rules"] == 1
+    # The AI's answer is only proposed; the fallback proposes nothing
+    assert result["ai"]["status"] == "ok" and result["new_suggestions"] == 1
     # The receipt's Brot lines are one line (3.50 + 1.00)
     assert [(i["name"], i["amount"]) for i in result["receipts"][0]["lines"]][0] == ("Brot", 4.5)
 
-    assert run(client, mum, content, choices_of(result)).json()["rules"] == 1
-    assert rules(client, mum) == {"Brot": ("Other Expense", []), "Zahnpasta": ("Healthcare", [])}
+    assert run(client, mum, content, choices_of(result)).json()["suggestions"] == 1
+    assert rules(client, mum) == {"Brot": ("Other Expense", [])}
+    assert suggestions(client, mum) == {"Zahnpasta": ("Healthcare", [])}
 
 
 def test_ai_off_leaves_the_fallback_without_rules(client):
     mum, _ = setup(client)
     result = preview(client, mum, migros(*FIRST), ai=True)
     assert {a["source"] for a in result["articles"].values()} == {"fallback"}
-    assert result["ai"]["status"] == "off" and result["new_rules"] == 0
-    assert run(client, mum, migros(*FIRST), choices_of(result)).json()["rules"] == 0
-    assert rules(client, mum) == {}
+    assert result["ai"]["status"] == "off" and result["new_suggestions"] == 0
+    assert run(client, mum, migros(*FIRST), choices_of(result)).json()["suggestions"] == 0
+    assert rules(client, mum) == {} and suggestions(client, mum) == {}
 
 
 def test_changed_article_updates_its_rule(client):
@@ -160,9 +167,11 @@ def test_changed_article_updates_its_rule(client):
         "source": "change",
     }
     again = preview(client, mum, migros(*FIRST), choices=choices)
-    assert again["articles"]["brot"]["source"] == "change" and again["new_rules"] == 1
-    assert run(client, mum, migros(*FIRST), choices).json()["rules"] == 1
-    assert rules(client, mum) == {"Brot": ("Other Expense", [kinder])}
+    assert again["articles"]["brot"]["source"] == "change" and again["new_suggestions"] == 1
+    assert run(client, mum, migros(*FIRST), choices).json()["suggestions"] == 1
+    # The rule stays until a parent adds the suggestion
+    assert rules(client, mum) == {"Brot": ("Groceries", [])}
+    assert suggestions(client, mum) == {"Brot": ("Other Expense", [kinder])}
 
 
 def test_reimport_is_already_imported(client):
@@ -245,7 +254,7 @@ def test_failed_import_saves_nothing(client, ai):
     choices = choices_of(result, **{FIRST_KEY: {"account_id": "nope"}})
     assert run(client, mum, migros(*FIRST), choices).status_code in (403, 404)
     assert listed(client, mum, account_id) == {}
-    assert rules(client, mum) == {}
+    assert rules(client, mum) == {} and suggestions(client, mum) == {}
 
 
 def test_other_parents_unshared_account_is_not_offered(client):
