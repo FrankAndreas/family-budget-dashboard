@@ -148,6 +148,8 @@ def delete_category(
     counts = usage_counts(db).get(category.id)
     if counts:
         raise HTTPException(status_code=409, detail=describe(counts))
+    # Article rule suggestions are only proposals: they go with their category
+    db.query(models.ArticleRuleSuggestion).filter(models.ArticleRuleSuggestion.category_id == category.id).delete()
     db.delete(category)
     db.commit()
     return {"deleted": category_id}

@@ -480,6 +480,35 @@ class ArticleRule(Base):
         return [tag.id for tag in self.tags]
 
 
+class ArticleRuleSuggestionTag(Base):
+    __tablename__ = "article_rule_suggestion_tags"
+
+    suggestion_id: Mapped[str] = mapped_column(
+        String, ForeignKey("article_rule_suggestions.id", ondelete="CASCADE"), primary_key=True
+    )
+    tag_id: Mapped[str] = mapped_column(String, ForeignKey("tags.id", ondelete="CASCADE"), primary_key=True)
+
+
+class ArticleRuleSuggestion(Base):
+    """An article rule a booking proposes (the article as booked); a parent adds or ignores it in Settings."""
+
+    __tablename__ = "article_rule_suggestions"
+
+    id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    name: Mapped[str] = mapped_column(String)
+    name_key: Mapped[str] = mapped_column(String, unique=True)
+    category_id: Mapped[str] = mapped_column(String, ForeignKey("categories.id", ondelete="CASCADE"))
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=True)
+
+    category: Mapped["Category"] = relationship("Category")
+    tags: Mapped[list["Tag"]] = relationship("Tag", secondary="article_rule_suggestion_tags", order_by="Tag.name")
+
+    @property
+    def tag_ids(self) -> list[str]:
+        return [tag.id for tag in self.tags]
+
+
 class ImportRule(Base):
     """Text in an imported row's description → category; learnt in the import preview, also used by the converter."""
 
