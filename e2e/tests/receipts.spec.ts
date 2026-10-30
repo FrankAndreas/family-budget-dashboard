@@ -24,8 +24,12 @@ test('read a receipt, tag an item twice, and see it in analytics and a tag budge
     // Book it today, so it lands in this month and year whenever the test runs
     const today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Europe/Zurich' }).format(new Date());
     await page.getByLabel('Date').fill(today);
-    await page.getByLabel(`Tag ${velo.name} for item 2`).check({ force: true });
-    await page.getByLabel(`Tag ${sport.name} for item 2`).check({ force: true });
+    // The chip around the visually hidden checkbox: a forced click on the box itself can land elsewhere
+    await page.locator('label', { has: page.getByLabel(`Tag ${velo.name} for item 2`) }).click();
+    await expect(page.getByLabel(`Tag ${velo.name} for item 2`)).toBeChecked();
+    // The chip around the visually hidden checkbox: a forced click on the box itself can land elsewhere
+    await page.locator('label', { has: page.getByLabel(`Tag ${sport.name} for item 2`) }).click();
+    await expect(page.getByLabel(`Tag ${sport.name} for item 2`)).toBeChecked();
     await page.getByRole('button', { name: 'Book', exact: true }).click();
 
     const items = page.getByRole('button', { name: /2 items/ });
