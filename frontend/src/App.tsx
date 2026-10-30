@@ -1,23 +1,21 @@
-import type { ReactElement } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { AuthProvider, useAuth } from './AuthContext';
-import Login from './pages/Login';
 import Dashboard from './pages/dashboard/Dashboard';
+import ChildCosts from './pages/ChildCosts';
+import NoAccess from './pages/NoAccess';
 import './index.css';
 
-// Protected Route Component
-const ProtectedRoute = ({ children }: { children: ReactElement }) => {
-  const { user, isLoading } = useAuth();
+// What the logged-in person sees: the app, or for a child without Jugendlohn only their own costs
+const Home = () => {
+  const { user, state } = useAuth();
   const { t } = useTranslation();
 
-  if (isLoading) return <div className="flex h-screen items-center justify-center">{t('common.loading')}</div>;
-
-  if (!user) {
-    return <Navigate to="/login" replace />;
-  }
-
-  return children;
+  if (state === 'no_access' || state === 'hub_down') return <NoAccess reason={state} />;
+  // Not logged in yet: the browser is on its way to the family hub's login
+  if (!user) return <div className="flex h-screen items-center justify-center">{t('common.loading')}</div>;
+  if (user.role === 'CHILD' && !user.has_allowance) return <ChildCosts />;
+  return <Dashboard />;
 };
 
 function App() {
@@ -25,15 +23,9 @@ function App() {
     <AuthProvider>
       <BrowserRouter>
         <Routes>
-          <Route path="/login" element={<Login />} />
-          <Route
-            path="/"
-            element={
-              <ProtectedRoute>
-                <Dashboard />
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/" element={<Home />} />
+          {/* The login is the family hub's now; old links to /login land here */}
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </AuthProvider>

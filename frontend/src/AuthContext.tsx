@@ -1,6 +1,6 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from 'react';
-import api from './api';
-import { applyLanguage, browserLanguage, type Language } from './i18n';
+import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
+import api, { errorCode, goToHub } from './api';
+import { applyLanguage, type Language } from './i18n';
 
 interface User {
     id: string;
@@ -11,69 +11,69 @@ interface User {
     language: Language;
 }
 
+// Where the login stands: still asking, logged in, logged in at the hub without access here, or the hub can't be reached
+export type AuthState = 'loading' | 'in' | 'no_access' | 'hub_down';
+
 interface AuthContextType {
     user: User | null;
-    login: (username: string, pin: string) => Promise<void>;
-    logout: () => void;
+    state: AuthState;
+    logout: () => Promise<void>;
     refreshUser: () => Promise<void>;
+    retry: () => void;
     isLoading: boolean;
-    // Wrong PINs entered for this name since the last login (issue #86), shown once after logging in
-    wrongPins: number;
-    dismissWrongPins: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
+interface Found { user: User | null; state: AuthState }
+
+// Who is logged in; not logged in: the API client already sends the browser to the hub's login
+async function whoIsLoggedIn(): Promise<Found> {
+    try {
+        const response = await api.get<User>('/api/v1/me');
+        return { user: response.data, state: 'in' };
+    } catch (err) {
+        const code = errorCode(err);
+        if (code === 'not_logged_in') return { user: null, state: 'loading' };
+        return { user: null, state: code === 'no_access' ? 'no_access' : 'hub_down' };
+    }
+}
+
+// The login is the family hub's (spec 2026-10-30): the browser carries its cookie; without one the hub asks for the PIN
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
     const [user, setUser] = useState<User | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [wrongPins, setWrongPins] = useState(0);
+    const [state, setState] = useState<AuthState>('loading');
 
-    // The app speaks the person's own language once they are logged in
-    const signedIn = (me: User) => {
-        applyLanguage(me.language);
-        setUser(me);
-    };
-
-    useEffect(() => {
-        const checkAuth = async () => {
-            const token = localStorage.getItem('token');
-            if (token) {
-                try {
-                    const response = await api.get('/api/v1/me');
-                    signedIn(response.data);
-                } catch {
-                    localStorage.removeItem('token');
-                }
-            }
-            setIsLoading(false);
-        };
-        checkAuth();
+    const apply = useCallback((found: Found) => {
+        if (found.user) {
+            applyLanguage(found.user.language);
+            setUser(found.user);
+        }
+        setState(found.state);
     }, []);
 
-    const login = async (username: string, pin: string) => {
-        const response = await api.post('/api/v1/login', { username, pin });
-        localStorage.setItem('token', response.data.access_token);
-        setWrongPins(response.data.wrong_pins ?? 0);
-        const userResponse = await api.get('/api/v1/me');
-        signedIn(userResponse.data);
-    };
+    useEffect(() => {
+        let current = true;
+        whoIsLoggedIn().then(found => { if (current) apply(found); });
+        return () => { current = false; };
+    }, [apply]);
 
     // Reload the current user after their settings change on the server
     const refreshUser = async () => {
         const response = await api.get('/api/v1/me');
-        signedIn(response.data);
+        applyLanguage(response.data.language);
+        setUser(response.data);
     };
 
-    const logout = () => {
-        localStorage.removeItem('token');
+    // Logs out of every family app in this browser (the hub's cookie), then shows the hub's login
+    const logout = async () => {
+        await api.post('/api/v1/logout');
         setUser(null);
-        setWrongPins(0);
-        applyLanguage(browserLanguage());
+        await goToHub(null);
     };
 
     return (
-        <AuthContext.Provider value={{ user, login, logout, refreshUser, isLoading, wrongPins, dismissWrongPins: () => setWrongPins(0) }}>
+        <AuthContext.Provider value={{ user, state, logout, refreshUser, retry: () => { setState('loading'); void whoIsLoggedIn().then(apply); }, isLoading: state === 'loading' }}>
             {children}
         </AuthContext.Provider>
     );
