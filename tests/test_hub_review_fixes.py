@@ -130,3 +130,14 @@ def test_hub_down_backs_off(client, family_hub, monkeypatch):
             except hub.HubUnavailable:
                 pass
     assert len(calls) == 1
+
+
+# A machine that started less than a minute ago (a fresh CI runner, the NAS after a restart) still refreshes at first
+def test_first_refresh_soon_after_boot(client, family_hub, monkeypatch):
+    calls = []
+    monkeypatch.setattr(hub, "fetch_people", lambda tok: calls.append(tok) or [])
+    monkeypatch.setattr(hub_people.time, "monotonic", lambda: 5.0)
+    hub_people.forget()
+    with database.SessionLocal() as db:
+        hub_people.refresh(db, "tok-Admin")
+    assert calls == ["tok-Admin"]
