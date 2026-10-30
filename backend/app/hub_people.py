@@ -17,14 +17,16 @@ REFRESH_SECONDS = 60
 BACKOFF_SECONDS = 10
 
 _lock = threading.Lock()
-_last = 0.0
+# When the last refresh finished (time.monotonic()); None: not yet. Not 0.0: monotonic counts from the machine's start,
+# so on a machine up for less than a minute 0.0 would look like a refresh a moment ago
+_last: float | None = None
 _running = False
 
 
 def forget() -> None:
     """Refresh at the next chance (tests)."""
     global _last
-    _last = 0.0
+    _last = None
 
 
 def refresh(db: Session, token: str, force: bool = False) -> None:
@@ -33,7 +35,7 @@ def refresh(db: Session, token: str, force: bool = False) -> None:
     time: other requests meanwhile go on with the people kept here instead of waiting for a slow hub."""
     global _last, _running
     with _lock:
-        if _running or (not force and time.monotonic() - _last < REFRESH_SECONDS):
+        if _running or (not force and _last is not None and time.monotonic() - _last < REFRESH_SECONDS):
             return
         _running = True
     try:
