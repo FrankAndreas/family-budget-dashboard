@@ -21,6 +21,8 @@ COOKIE = "hub_session"
 CSRF_HEADER = "X-Requested-With"
 CSRF_VALUE = "budget"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+# All a dependent child (no Jugendlohn) may ask: who they are, and their own costs (read-only, spec 2026-10-30)
+CHILD_PATHS = {("GET", "/api/v1/me"), ("GET", "/api/v1/my-costs")}
 
 
 def request_token(request: Request) -> tuple[Optional[str], bool]:
@@ -64,6 +66,9 @@ def _resolve(request: Request, db: Session) -> tuple[models.User, hub.HubPerson]
         raise messages.CodedError(status.HTTP_503_SERVICE_UNAVAILABLE, "hub_unavailable") from None
     if user is None:
         raise messages.CodedError(status.HTTP_403_FORBIDDEN, "no_access")
+    if user.role == models.UserRole.CHILD and not user.has_allowance:
+        if (request.method, request.url.path) not in CHILD_PATHS:
+            raise messages.CodedError(status.HTTP_403_FORBIDDEN, "read_only_child")
     return user, person
 
 

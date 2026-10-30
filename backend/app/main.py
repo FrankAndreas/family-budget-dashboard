@@ -12,6 +12,7 @@ from . import (
     database,
     database_setup,
     api,
+    child_costs,
     common_api,
     export_api,
     import_api,
@@ -93,6 +94,7 @@ app = FastAPI(
 )
 
 app.include_router(api.router, prefix="/api/v1")
+app.include_router(child_costs.router, prefix="/api/v1")
 app.include_router(common_api.router, prefix="/api/v1")
 app.include_router(export_api.router, prefix="/api/v1")
 app.include_router(import_api.router, prefix="/api/v1")
