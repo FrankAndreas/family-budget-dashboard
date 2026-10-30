@@ -8,6 +8,8 @@ export const PYTHON = configured.includes('/') ? path.resolve(configured) : conf
 export const API = 'http://localhost:8100/api/v1';
 // The family hub the app logs in through (a real one, from a family-hub checkout: playwright.config.ts)
 export const HUB = 'http://localhost:8120';
+// The hub takes changes only with its own header (its security review 2026-10-30)
+const HUB_HEADERS = { 'X-Requested-With': 'hub' };
 const ADMIN_PIN = '1111';
 const PIN = '1234';
 
@@ -15,17 +17,17 @@ export interface Parent { name: string; token: string }
 
 // The hub's login token for a person: the hub only sets it as the cookie, which this API context then drops again
 async function hubToken(request: APIRequestContext, name: string, pin: string): Promise<string> {
-    const response = await request.post(`${HUB}/api/login`, { data: { name, pin } });
+    const response = await request.post(`${HUB}/api/login`, { data: { name, pin }, headers: HUB_HEADERS });
     expect(response.ok(), await response.text()).toBeTruthy();
     const cookie = response.headersArray().find(h => h.name.toLowerCase() === 'set-cookie' && h.value.startsWith('hub_session='));
     expect(cookie, 'the hub sets hub_session').toBeTruthy();
-    await request.post(`${HUB}/api/logout`);
+    await request.post(`${HUB}/api/logout`, { headers: HUB_HEADERS });
     return cookie!.value.split(';')[0].slice('hub_session='.length);
 }
 
 async function asHubAdmin<T = any>(request: APIRequestContext, method: string, path: string, data?: unknown): Promise<T> {
     const token = await hubToken(request, 'Admin', ADMIN_PIN);
-    const response = await request.fetch(`${HUB}${path}`, { method, data, headers: { Cookie: `hub_session=${token}` } });
+    const response = await request.fetch(`${HUB}${path}`, { method, data, headers: { ...HUB_HEADERS, Cookie: `hub_session=${token}` } });
     expect(response.ok(), `${method} ${path}: ${await response.text()}`).toBeTruthy();
     return response.json();
 }
@@ -51,7 +53,7 @@ export async function giveAccess(request: APIRequestContext, personId: number, a
 // it hasn't seen yet
 export async function setHubLanguage(request: APIRequestContext, person: Parent, language: 'de' | 'en'): Promise<void> {
     const response = await request.fetch(`${HUB}/api/me`, {
-        method: 'PATCH', data: { language }, headers: { Cookie: `hub_session=${person.token}` },
+        method: 'PATCH', data: { language }, headers: { ...HUB_HEADERS, Cookie: `hub_session=${person.token}` },
     });
     expect(response.ok(), await response.text()).toBeTruthy();
 }
