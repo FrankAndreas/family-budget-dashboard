@@ -123,11 +123,15 @@ def update_user(
 
 
 @router.post("/logout")
-def logout(response: Response):
+def logout(request: Request, response: Response):
     """Ends the family login in this browser, for every app: the hub's cookie is set for local.<domain>, which this app
-    may clear too. "Log out everywhere" is in the hub."""
+    may clear too. "Log out everywhere" is in the hub. Only with the app's header: another site can't log anyone out."""
+    if request.headers.get(auth.CSRF_HEADER) != auth.CSRF_VALUE:
+        raise messages.CodedError(403, "csrf")
     response.delete_cookie(auth.COOKIE, path="/", domain=os.getenv("COOKIE_DOMAIN") or None)
-    hub.forget()
+    token, _ = auth.request_token(request)
+    if token:
+        hub.forget(token)
     return {"logged_out": True}
 
 

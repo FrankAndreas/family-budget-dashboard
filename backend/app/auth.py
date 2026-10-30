@@ -21,6 +21,7 @@ COOKIE = "hub_session"
 CSRF_HEADER = "X-Requested-With"
 CSRF_VALUE = "budget"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
+TUNNEL_HEADER = "Cf-Connecting-Ip"
 # All a dependent child (no Jugendlohn) may ask: who they are, and their own costs (read-only, spec 2026-10-30)
 CHILD_PATHS = {("GET", "/api/v1/me"), ("GET", "/api/v1/my-costs")}
 
@@ -44,6 +45,10 @@ def _active(db: Session, hub_id: int) -> Optional[models.User]:
 
 def _resolve(request: Request, db: Session) -> tuple[models.User, hub.HubPerson]:
     """The person behind the request's login. Blocking (the hub, the database): runs in a worker thread."""
+    # Home-only: Cloudflare sets this on everything through its tunnel (only the receipt mails come that way, with their
+    # own secret); a hub login arriving from outside can only be a stolen home cookie (family-hub README, "For apps")
+    if TUNNEL_HEADER in request.headers:
+        raise _not_logged_in()
     token, from_cookie = request_token(request)
     if not token:
         raise _not_logged_in()

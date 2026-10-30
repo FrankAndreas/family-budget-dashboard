@@ -73,7 +73,9 @@ this browser. For English as the default of a new database's categories, set `DE
 **Switching an existing installation** to the hub: add `HUB_URL`, `HUB_PUBLIC_URL`, `HUB_APP_KEY` and
 `COOKIE_DOMAIN` to the backend's `environment:` in the NAS's `compose.yaml` (as in `docker-compose.yml`; a value only
 in `.env` doesn't reach the container), set them in `.env`, then `sudo docker-compose up -d`. A person from before the
-hub is linked to the hub person with the same name at the first login (rename one of them first if they differ);
+hub is linked to the hub person with the same name and role at the first login, and only then (rename one of them
+first if they differ; tick everyone who had an account here before that first login). Someone left unlinked stays
+under **Removed in the family hub**, where a parent deletes their data;
 `SECRET_KEY` and `INITIAL_ADMIN_PIN` are no longer used.
 
 `data/` holds everything worth keeping: the database `budget.db` and the stored receipts in
