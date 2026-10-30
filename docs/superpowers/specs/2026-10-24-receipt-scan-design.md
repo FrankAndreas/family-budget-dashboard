@@ -46,7 +46,7 @@ photo opens already read by the AI, check it, **Book & next**.
 
 The scan screen uses the browser's file input with the camera (`<input type="file" accept="image/*"
 capture="environment">`): Chrome opens the phone's camera app, the photo comes back to the page, and the browser
-keeps it as a temporary file only. This works over the NAS's plain `http://192.168.1.107:8081`; a live camera view
+keeps it as a temporary file only. This works over the NAS's plain `http://<NAS_IP>:8081`; a live camera view
 in the page (`getUserMedia`) would not, because browsers allow it only on HTTPS.
 
 Browsers don't let a page reopen the camera on its own, so each photo is one tap: **📷 Next receipt**.
