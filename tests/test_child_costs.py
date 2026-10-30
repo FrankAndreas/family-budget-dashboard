@@ -106,3 +106,27 @@ def test_parent_and_allowance_child_403(client, kim):
 def test_bad_month_422(client, kim):
     for bad in ("2026-13", "March", "2026-3-1"):
         assert costs(client, kim["headers"], bad).status_code == 422, bad
+
+
+# Issue #132: a bank line's text can hold a payer's name or account details; the child sees its category instead
+def test_bank_lines_show_only_their_category(client, kim):
+    with database.SessionLocal() as db:
+        clothing = db.query(models.Category).filter(models.Category.name == "Clothing").one()
+        kim_id = db.query(models.User).filter(models.User.username == "Kim").one().id
+        db.add(
+            models.Transaction(
+                account_id=kim["account"],
+                category_id=clothing.id,
+                amount=-45,
+                date=datetime(2026, 3, 25, 12),
+                description="Zahlung an Erika Muster, CH93 0076 2011 6238 5295 7",
+                member_id=kim_id,
+                reference="bank:0123456789abcdef",
+            )
+        )
+        db.commit()
+    bookings = costs(client, kim["headers"]).json()["bookings"]
+    assert bookings[0] == {"date": "2026-03-25", "description": "Clothing", "category": "Clothing", "amount": 45.0}
+    # What a parent typed in the app, and receipt items, keep their text
+    assert [b["description"] for b in bookings[1:3]] == ["Velo-Hose", "Rabatt"]
+    assert "Jacke" in [b["description"] for b in bookings]

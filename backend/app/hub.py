@@ -89,13 +89,16 @@ def fetch_people(token: str) -> list[HubPerson]:
     return [_person(item) for item in body]
 
 
+# Made-up logins are remembered only while fewer than this many answers are kept: a flood of them can't fill memory
+MAX_REMEMBERED = 1000
 _cache: dict[str, tuple[float, tuple[Optional[HubPerson], bool]]] = {}
 _lock = threading.Lock()
 
 
 def session(token: str) -> tuple[Optional[HubPerson], bool]:
-    """fetch_session, kept for CACHE_SECONDS per token (keyed by its hash, never the token itself). Only a valid login
-    with access is kept: someone given access a moment ago gets in at once."""
+    """fetch_session, kept for CACHE_SECONDS per token (keyed by its hash, never the token itself). Kept: a valid login
+    with access, and no login at all (issue #131: a made-up cookie no longer costs a hub call on every request; such a
+    token never becomes valid). Not kept: "no access", so someone given access a moment ago gets in at once."""
     key = hashlib.sha256(token.encode()).hexdigest()
     now = time.monotonic()
     with _lock:
@@ -104,7 +107,8 @@ def session(token: str) -> tuple[Optional[HubPerson], bool]:
         if key in _cache:
             return _cache[key][1]
     found = fetch_session(token)
-    if found[0] is not None and found[1]:
+    keep = found[1] if found[0] is not None else len(_cache) < MAX_REMEMBERED
+    if keep:
         with _lock:
             _cache[key] = (now, found)
     return found

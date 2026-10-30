@@ -538,7 +538,16 @@ def find_item(db: Session, kind: str, item_id: str) -> models.Asset | models.Pla
 
 
 @router.get("/users/{user_id}/items", response_model=List[schemas.OwnedItem])
-def list_owned_items(user_id: str, _: models.User = Depends(require_parent), db: Session = Depends(database.get_db)):
+def list_owned_items(
+    user_id: str, current_user: models.User = Depends(require_parent), db: Session = Depends(database.get_db)
+):
+    """What a person owns, for deciding where it goes when their data is deleted (issue #134): of someone removed in
+    the family hub (any parent may delete their data), or of someone whose money this parent sees."""
+    owner = db.query(models.User).filter(models.User.id == user_id).first()
+    if owner is None:
+        raise messages.api_error(404, "user_not_found")
+    if owner.is_active is not False and privacy.access_level(db, current_user, owner) is None:
+        raise messages.api_error(403, "no_access_to_person")
     return owned_items(db, user_id)
 
 

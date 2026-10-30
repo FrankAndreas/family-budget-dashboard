@@ -25,6 +25,14 @@ def is_dependent(user: models.User) -> bool:
     return user.role == models.UserRole.CHILD and not user.has_allowance
 
 
+def _child_text(booking: models.Transaction) -> str:
+    """What the child reads for a plain booking (issue #132): a text a parent typed in the app; an imported line (a
+    bank statement's text can hold a payer's name or account details) shows its category instead."""
+    if booking.reference or booking.bank_rows:
+        return i18n.category_name(booking.category)
+    return booking.description or ""
+
+
 def year_costs(db: Session, child_id: str, year: int) -> list[dict]:
     """The child's costs in a year: a tagged plain booking, or each receipt item for them (as the reports count)."""
     found = (
@@ -39,6 +47,7 @@ def year_costs(db: Session, child_id: str, year: int) -> list[dict]:
         )
         .options(
             selectinload(models.Transaction.category),
+            selectinload(models.Transaction.bank_rows),
             selectinload(models.Transaction.items).selectinload(models.TransactionItem.category),
         )
         .all()
@@ -48,7 +57,7 @@ def year_costs(db: Session, child_id: str, year: int) -> list[dict]:
         day = swiss_day(booking.date)
         if not booking.items:
             if booking.category and booking.category.type == EXPENSE:
-                result.append((day, booking.description or "", booking.category, abs(booking.amount)))
+                result.append((day, _child_text(booking), booking.category, abs(booking.amount)))
             continue
         for item in booking.items:
             if item.person_id == child_id and item.category.type == EXPENSE:

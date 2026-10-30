@@ -112,6 +112,13 @@ def update_user(
     if not target_user:
         raise messages.api_error(404, "user_not_found")
 
+    # Privacy is the person's own switch (issue #134): a parent can't end a child's privacy mode
+    changes_privacy = (
+        user_update.privacy_enabled is not None and user_update.privacy_enabled != target_user.privacy_enabled
+    )
+    if changes_privacy and target_user.id != current_user.id:
+        raise messages.api_error(403, "own_privacy_only")
+
     if user_update.has_allowance is not None and user_update.has_allowance != target_user.has_allowance:
         if target_user.role != "CHILD":
             raise messages.api_error(400, "allowance_children_only")
