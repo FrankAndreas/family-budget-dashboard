@@ -7,6 +7,8 @@ on:
     branches: [ main, develop ]
   release:
     types: [ created ]
+  # To try the build jobs on a branch before merging (they're skipped on pull requests); a branch never gets `latest`
+  workflow_dispatch:
 
 env:
   REGISTRY: ghcr.io
@@ -14,6 +16,7 @@ env:
   # (expressions have no lower()); change these if the repository moves
   IMAGE_NAME_BACKEND: frankandreas/family-budget-dashboard/backend
   IMAGE_NAME_FRONTEND: frankandreas/family-budget-dashboard/frontend
+  IMAGE_PREFIX: frankandreas/family-budget-dashboard
 
 jobs:
   # Backend Testing and Linting
@@ -231,11 +234,76 @@ jobs:
           sarif_file: 'trivy-backend-results.sarif'
         continue-on-error: true
 
-  # Build and Push Docker Images
-  build-and-push:
-    name: Build & Push Docker Images
+  # Docker images, built while the tests run: each image and platform on a machine of its own (arm64 natively, not
+  # emulated), pushed by digest only. `publish` joins the platforms under the commit's tag; `release-tags` adds
+  # latest and the other tags once every test and the integration test passed, so the NAS never pulls an untested build
+  build:
+    name: Build ${{ matrix.image }} (${{ matrix.platform }})
+    runs-on: ${{ matrix.runner }}
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [backend, frontend]
+        platform: [amd64, arm64]
+        include:
+          - platform: amd64
+            runner: ubuntu-latest
+          - platform: arm64
+            runner: ubuntu-24.04-arm
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Only the labels (source, commit, ...); the tags are set in `publish` and `release-tags`
+      - name: Extract labels
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+
+      - name: Build and push by digest
+        id: build
+        uses: docker/build-push-action@v7
+        with:
+          context: ./${{ matrix.image }}
+          platforms: linux/${{ matrix.platform }}
+          labels: ${{ steps.meta.outputs.labels }}
+          outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.platform }}
+          cache-to: type=gha,scope=${{ matrix.image }}-${{ matrix.platform }},mode=max
+
+      - name: Keep the digest
+        run: mkdir -p digests && touch "digests/${DIGEST#sha256:}"
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+
+      - name: Upload the digest
+        uses: actions/upload-artifact@v7
+        with:
+          name: digest-${{ matrix.image }}-${{ matrix.platform }}
+          path: digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  # One image per app for both platforms, tagged with the full commit hash (what the integration tests pull)
+  publish:
+    name: Publish ${{ matrix.image }}
     runs-on: ubuntu-latest
-    needs: [backend-test, frontend-test, e2e-test, worker-test]
+    needs: [build]
     if: github.event_name != 'pull_request'
     permissions:
       contents: read
@@ -243,94 +311,49 @@ jobs:
       # Needed by attest-build-provenance to sign and store the attestations
       id-token: write
       attestations: write
-    
+    strategy:
+      matrix:
+        image: [backend, frontend]
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v7
-      
+      - name: Download the digests
+        uses: actions/download-artifact@v7
+        with:
+          pattern: digest-${{ matrix.image }}-*
+          path: digests
+          merge-multiple: true
+
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-      
+
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v4
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      
-      - name: Extract metadata (tags, labels) for Backend
-        id: meta-backend
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-            # Full commit hash, used by the integration tests to pull exactly this build
-            type=raw,value=${{ github.sha }}
-      
-      - name: Extract metadata (tags, labels) for Frontend
-        id: meta-frontend
-        uses: docker/metadata-action@v6
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha,prefix={{branch}}-
-            type=raw,value=latest,enable={{is_default_branch}}
-            # Full commit hash, used by the integration tests to pull exactly this build
-            type=raw,value=${{ github.sha }}
-      
-      - name: Build and push Backend image
-        id: build-backend
-        uses: docker/build-push-action@v7
-        with:
-          context: ./backend
-          push: true
-          tags: ${{ steps.meta-backend.outputs.tags }}
-          labels: ${{ steps.meta-backend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
-      
-      - name: Build and push Frontend image
-        id: build-frontend
-        uses: docker/build-push-action@v7
-        with:
-          context: ./frontend
-          push: true
-          tags: ${{ steps.meta-frontend.outputs.tags }}
-          labels: ${{ steps.meta-frontend.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          platforms: linux/amd64,linux/arm64
-      
-      - name: Generate artifact attestation for Backend
+
+      - name: Join the platforms under the commit's tag
+        id: manifest
+        working-directory: digests
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+        run: |
+          docker buildx imagetools create -t "$IMAGE:$GITHUB_SHA" $(printf "$IMAGE@sha256:%s " *)
+          echo "digest=$(docker buildx imagetools inspect "$IMAGE:$GITHUB_SHA" --format '{{json .Manifest}}' | jq -r .digest)" >> "$GITHUB_OUTPUT"
+
+      - name: Generate artifact attestation
         uses: actions/attest-build-provenance@v4
         with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}
-          subject-digest: ${{ steps.build-backend.outputs.digest }}
-          push-to-registry: true
-      
-      - name: Generate artifact attestation for Frontend
-        uses: actions/attest-build-provenance@v4
-        with:
-          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}
-          subject-digest: ${{ steps.build-frontend.outputs.digest }}
+          subject-name: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
           push-to-registry: true
 
   # Integration Tests
   integration-test:
     name: Integration Tests
     runs-on: ubuntu-latest
-    needs: [build-and-push]
+    needs: [publish, backend-test, frontend-test, e2e-test, worker-test]
     if: github.event_name != 'pull_request'
     
     steps:
@@ -386,13 +409,55 @@ jobs:
         if: always()
         run: docker rm -f hub backend frontend; docker network rm budget || true
 
+  # The tested images get their names: latest (main only), the branch, versions of a release, branch-sha
+  release-tags:
+    name: Tag ${{ matrix.image }}
+    runs-on: ubuntu-latest
+    needs: [integration-test]
+    if: github.event_name != 'pull_request'
+    permissions:
+      contents: read
+      packages: write
+    strategy:
+      matrix:
+        image: [backend, frontend]
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract tags
+        id: meta
+        uses: docker/metadata-action@v6
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+          tags: |
+            type=ref,event=branch
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
+            type=sha,prefix={{branch}}-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Point the tags at the tested image
+        env:
+          IMAGE: ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}/${{ matrix.image }}
+        run: |
+          docker buildx imagetools create $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") "$IMAGE:$GITHUB_SHA"
+
   # Deployment (example for production)
   # Disabled until there is a real target: the steps below only print a message.
   # To enable, replace `false` with: github.ref == 'refs/heads/main' && github.event_name == 'push'
   deploy:
     name: Deploy to Production
     runs-on: ubuntu-latest
-    needs: [integration-test]
+    needs: [release-tags]
     if: false
     environment:
       name: production
