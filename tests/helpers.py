@@ -48,6 +48,14 @@ def remove_from_hub(name):
     fake_hub.current.remove_access(name)
 
 
+def remove_id_from_hub(person_id):
+    """remove_from_hub() for a person known by their id in the app (before deleting their data here)."""
+    from app import database, models
+
+    with database.SessionLocal() as db:
+        remove_from_hub(db.query(models.User).filter(models.User.id == person_id).one().username)
+
+
 def set_language(headers, language):
     """The person (by their login headers) picks a language in the hub, where it now lives."""
     import fake_hub

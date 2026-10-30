@@ -6,6 +6,7 @@ import pytest
 
 from app import common_api
 from helpers import (
+    remove_id_from_hub,
     add_member,
     BASE_URL,
     add_transaction,
@@ -41,6 +42,8 @@ def add_asset(client, headers, **fields):
 
 
 def remove_member(client, headers, member_id, items=None):
+    # Their data can only go once the family hub no longer lists them
+    remove_id_from_hub(member_id)
     body = {"items": items} if items is not None else None
     return client.request("DELETE", f"{BASE_URL}/users/{member_id}", json=body, headers=headers)
 

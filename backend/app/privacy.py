@@ -24,6 +24,9 @@ def share_level(db: Session, owner_id: str, grantee_id: str) -> Optional[str]:
 def access_level(db: Session, current_user: models.User, target_user: models.User) -> Optional[str]:
     if target_user.id == current_user.id:
         return "OWN"
+    # Removed in the family hub: hidden with all their money until they're back or a parent deletes it
+    if target_user.is_active is False:
+        return None
     if current_user.role != models.UserRole.PARENT:
         return None
     if target_user.role == models.UserRole.CHILD and not target_user.has_allowance:
@@ -74,7 +77,11 @@ def get_accessible_accounts(db: Session, current_user: models.User) -> list[mode
 def can_list_user(current_user: models.User, target_user: models.User) -> bool:
     """Who appears in the family list: parents see everyone except children with privacy on;
     children see themselves and the parents (to choose whom to share with)."""
-    if target_user.id == current_user.id or target_user.role == models.UserRole.PARENT:
+    if target_user.id == current_user.id:
+        return True
+    if target_user.is_active is False:
+        return False
+    if target_user.role == models.UserRole.PARENT:
         return True
     return current_user.role == models.UserRole.PARENT and not target_user.privacy_enabled
 

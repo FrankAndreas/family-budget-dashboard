@@ -2,7 +2,16 @@
 
 import pytest
 
-from helpers import add_member, BASE_URL, add_transaction, category_id, create_account, register, user_id
+from helpers import (
+    remove_id_from_hub,
+    add_member,
+    BASE_URL,
+    add_transaction,
+    category_id,
+    create_account,
+    register,
+    user_id,
+)
 
 
 @pytest.fixture
@@ -101,6 +110,7 @@ def test_deleting_child_keeps_tagged_expense(client, family):
     expense = add_transaction(
         client, family["mum"], family["mum_account"], category_id(client, "Clothing"), 20, member_id=family["timmy_id"]
     ).json()
+    remove_id_from_hub(family["timmy_id"])
     client.delete(f"{BASE_URL}/users/{family['timmy_id']}", headers=family["mum"])
     remaining = client.get(f"{BASE_URL}/accounts/{family['mum_account']}/transactions", headers=family["mum"]).json()
     kept = [t for t in remaining if t["id"] == expense["id"]]

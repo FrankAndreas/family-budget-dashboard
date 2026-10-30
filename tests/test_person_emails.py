@@ -1,6 +1,6 @@
 """E-mail addresses of family members (issue #57): the allow list for forwarded receipt mails."""
 
-from helpers import BASE_URL, admin_headers, register, user_id
+from helpers import remove_id_from_hub, BASE_URL, admin_headers, register, user_id
 
 from app import database, emails_api, models
 
@@ -79,6 +79,7 @@ def test_removing_a_person_removes_their_addresses(client):
     register(client, "dad")
     dad_id = user_id(client, mum, "dad")
     add(client, mum, dad_id, "dad@example.ch")
+    remove_id_from_hub(dad_id)
     assert client.delete(f"{BASE_URL}/users/{dad_id}", headers=mum).status_code == 200
     assert client.get(EMAILS, headers=mum).json() == []
 

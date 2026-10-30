@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from helpers import add_member, BASE_URL, admin_headers, create_account, register, user_id
+from helpers import remove_id_from_hub, add_member, BASE_URL, admin_headers, create_account, register, user_id
 
 from app import database, models
 
@@ -70,6 +70,7 @@ def test_removing_a_person_clears_their_items(client):
     add_member(client, "kid")
     kid = user_id(client, admin, "kid")
     itemized_booking(create_account(client, admin), person_id=kid)
+    remove_id_from_hub(kid)
     assert client.request("DELETE", f"{BASE_URL}/users/{kid}", json={"items": []}, headers=admin).status_code == 200
     with database.SessionLocal() as db:
         items = db.query(models.TransactionItem).all()

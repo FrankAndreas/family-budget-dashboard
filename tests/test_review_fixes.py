@@ -37,18 +37,20 @@ class TestUserLifecycle:
         remove_from_hub("kid")
         assert client.get(f"{BASE_URL}/me", headers=child).status_code == 403
 
-    def test_last_parent_protected(self, client):
-        # The admin is the only parent of a fresh install
+    def test_active_parent_protected(self, client):
+        # Only someone the family hub no longer lists can be deleted here
         parent = admin_headers(client)
         pid = user_id(client, parent, ADMIN)
-        assert client.delete(f"{BASE_URL}/users/{pid}", headers=parent).status_code == 400
+        assert client.delete(f"{BASE_URL}/users/{pid}", headers=parent).status_code == 409
 
     def test_delete_user_removes_their_data(self, client):
         parent = register(client, "p")
         child = register(client, "kid", role="CHILD")
         account = create_account(client, child)
         add_transaction(client, child, account, category_id(client, "Groceries"), 5)
-        client.delete(f"{BASE_URL}/users/{user_id(client, parent, 'kid')}", headers=parent)
+        kid_id = user_id(client, parent, "kid")
+        remove_from_hub("kid")
+        client.delete(f"{BASE_URL}/users/{kid_id}", headers=parent)
         assert client.get(f"{BASE_URL}/accounts/{account}/transactions", headers=parent).status_code == 404
 
 

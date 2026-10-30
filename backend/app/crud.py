@@ -24,14 +24,6 @@ def update_user(db: Session, user_id: str, user_update: schemas.UserUpdate):
     return db_user
 
 
-def count_admins(db: Session):
-    return (
-        db.query(models.User)
-        .filter(models.User.role == models.UserRole.PARENT, models.User.is_active.is_(True))
-        .count()
-    )
-
-
 def delete_user(db: Session, user_id: str):
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:

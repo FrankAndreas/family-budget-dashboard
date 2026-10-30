@@ -127,6 +127,21 @@ def hub_login():
     return {"login_url": hub.public_url()}
 
 
+@router.get("/users/removed", response_model=List[schemas.RemovedUser])
+def removed_users(
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+):
+    """People the family hub no longer lists for this app: their data is kept until a parent deletes it here."""
+    if current_user.role != "PARENT":
+        raise messages.api_error(403, "only_parents_delete_users")
+    return (
+        db.query(crud.models.User)
+        .filter(crud.models.User.is_active.is_(False))
+        .order_by(crud.models.User.username)
+        .all()
+    )
+
+
 @router.delete("/users/{user_id}", response_model=schemas.User)
 def delete_user(
     user_id: str,
@@ -140,15 +155,9 @@ def delete_user(
     user_to_delete = db.query(crud.models.User).filter(crud.models.User.id == user_id).first()
     if not user_to_delete:
         raise messages.api_error(404, "user_not_found")
-
-    # Check if we are deleting an admin (PARENT)
-    if user_to_delete.role == "PARENT":
-        # Check if it's the last active admin
-        admin_count = crud.count_admins(db)
-        # If we are deleting/inactivating an active admin, we need to ensure at least one OTHER active admin remains
-        # If user is active, count includes them. So if count <= 1, we can't delete.
-        if user_to_delete.is_active and admin_count <= 1:
-            raise messages.api_error(400, "last_admin_delete")
+    # Only people the family hub no longer lists: an active family member's data is never deleted by mistake
+    if user_to_delete.is_active:
+        raise messages.api_error(409, "still_in_hub")
 
     # Their investments and yearly bills go where the parent decided (409 lists any without a decision)
     apply_item_decisions(db, user_id, removal.items if removal else [])
@@ -538,12 +547,14 @@ def delete_budget(
 def get_shares(
     current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
 ):
-    # What the current user shared, and what was shared with them
-    return (
+    # What the current user shared, and what was shared with them; not with people removed in the hub
+    shares = (
         db.query(models.Share)
         .filter((models.Share.owner_id == current_user.id) | (models.Share.grantee_id == current_user.id))
         .all()
     )
+    active = {u.id for u in db.query(models.User).filter(models.User.is_active.is_(True))}
+    return [s for s in shares if s.owner_id in active and s.grantee_id in active]
 
 
 @router.put("/shares/{grantee_id}")

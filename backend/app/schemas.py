@@ -23,6 +23,16 @@ class User(UserBase):
         from_attributes = True
 
 
+class RemovedUser(BaseModel):
+    # Someone the family hub no longer lists for this app, whose data a parent may delete
+    id: str
+    username: str
+    role: UserRole
+
+    class Config:
+        from_attributes = True
+
+
 class UserUpdate(BaseModel):
     # Only what this app knows about a person; name, role, PIN and who is in come from the family hub
     model_config = {"extra": "forbid"}

@@ -3,7 +3,7 @@
 import pytest
 
 from app import database, models
-from helpers import BASE_URL, create_split, register, user_id, remove_from_hub
+from helpers import remove_id_from_hub, BASE_URL, create_split, register, user_id, remove_from_hub
 
 
 @pytest.fixture
@@ -262,6 +262,7 @@ class TestCleanup:
         kid = register(client, "kid", role="CHILD", by=family["mum"])
         kid_id = user_id(client, family["mum"], "kid")
         wish(client, kid, "Game", kid_id)
+        remove_id_from_hub(kid_id)
         assert client.delete(f"{BASE_URL}/users/{kid_id}", headers=family["mum"]).status_code == 200
         with database.SessionLocal() as db:
             assert db.query(models.Wish).count() == 0
