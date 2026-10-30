@@ -65,7 +65,12 @@ def hub_call(hub_url, method, path, body=None, token=None):
         f"{hub_url}{path}",
         method=method,
         data=json.dumps(body).encode() if body is not None else None,
-        headers={"Content-Type": "application/json", **({"Cookie": f"hub_session={token}"} if token else {})},
+        # The hub takes changes only with its own header (its security review 2026-10-30)
+        headers={
+            "Content-Type": "application/json",
+            "X-Requested-With": "hub",
+            **({"Cookie": f"hub_session={token}"} if token else {}),
+        },
     )
     with urllib.request.urlopen(request, timeout=10) as response:
         cookies = response.headers.get_all("Set-Cookie") or []
