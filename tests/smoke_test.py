@@ -59,8 +59,9 @@ def download(base_url, path, token):
         return response.status, response.read()
 
 
-def hub_call(hub_url, method, path, body=None, token=None):
-    """A call to the family hub as a logged-in person (its cookie), or to log in: then also the new login token."""
+def hub_call(hub_url, method, path, body=None, cookies=None):
+    """A call to the family hub as a logged-in person (its cookies), or to log in: then also the new login's cookies
+    ("hub_session=…; hub_manage=…": changing something in the hub needs both since its 2026-10-30 hardening)."""
     request = urllib.request.Request(
         f"{hub_url}{path}",
         method=method,
@@ -69,25 +70,30 @@ def hub_call(hub_url, method, path, body=None, token=None):
         headers={
             "Content-Type": "application/json",
             "X-Requested-With": "hub",
-            **({"Cookie": f"hub_session={token}"} if token else {}),
+            **({"Cookie": cookies} if cookies else {}),
         },
     )
     with urllib.request.urlopen(request, timeout=10) as response:
-        cookies = response.headers.get_all("Set-Cookie") or []
-        login = next((c.split(";")[0].split("=", 1)[1] for c in cookies if c.startswith("hub_session=")), None)
+        found = [c.split(";")[0] for c in response.headers.get_all("Set-Cookie") or []]
+        login = "; ".join(c for c in found if c.startswith(("hub_session=", "hub_manage="))) or None
         return response.status, json.loads(response.read() or b"null"), login
+
+
+def session_of(cookies):
+    """The hub login this app gets, out of the hub's cookies."""
+    return next(c.split("=", 1)[1] for c in cookies.split("; ") if c.startswith("hub_session="))
 
 
 def hub_person(hub_url, admin, name):
     """A parent in the hub with access to the budget app (the hub tile with the key "budget", made on first use)."""
     _, person, _ = hub_call(hub_url, "POST", "/api/people", {"name": name, "pin": "1234", "role": "PARENT"}, admin)
-    _, tiles, _ = hub_call(hub_url, "GET", "/api/tiles/manage", token=admin)
+    _, tiles, _ = hub_call(hub_url, "GET", "/api/tiles/manage", cookies=admin)
     tile = next((t for t in tiles if t["app_key"] == "budget"), None)
     if tile is None:
         body = {"name": "Budget", "local_url": "http://localhost:8080", "app_key": "budget"}
         _, tile, _ = hub_call(hub_url, "POST", "/api/tiles", body, admin)
     hub_call(hub_url, "PATCH", f"/api/tiles/{tile['id']}", {"people": tile["people"] + [person["id"]]}, admin)
-    return hub_call(hub_url, "POST", "/api/login", {"name": name, "pin": "1234"})[2]
+    return session_of(hub_call(hub_url, "POST", "/api/login", {"name": name, "pin": "1234"})[2])
 
 
 def check(description, condition):

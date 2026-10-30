@@ -60,3 +60,10 @@ test('a dependent child sees only their costs', async ({ page, request }) => {
     await expect(byCategory).toContainText("CHF 25.00");
     await expect(page.getByRole('button', { name: 'Settings' })).toHaveCount(0);
 });
+
+// "Log out" ends the login in the hub, for every app, and the hub's login leads back here afterwards
+test('log out goes through the hub', async ({ page, request }) => {
+    await login(page, await newParent(request));
+    await page.getByRole('button', { name: 'Logout' }).click();
+    await expect(page).toHaveURL(new RegExp(`^${HUB}/logout\\?next=${encodeURIComponent('http://localhost:3100')}`));
+});

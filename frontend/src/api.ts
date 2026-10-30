@@ -31,6 +31,12 @@ export async function goToHub(next: string | null = window.location.href): Promi
     window.location.href = next ? `${data.login_url}/?next=${encodeURIComponent(next)}` : data.login_url;
 }
 
+// "Log out": the hub ends the login, for this app and every other, then shows its login, which leads back here
+export async function goToHubLogout(): Promise<void> {
+    const { data } = await api.get<{ login_url: string }>('/api/v1/hub');
+    window.location.href = `${data.login_url}/logout?next=${encodeURIComponent(window.location.origin)}`;
+}
+
 // The `code` of an error the app acts on (no_access, hub_unavailable, not_logged_in, read_only_child)
 export function errorCode(error: unknown): string | undefined {
     return axios.isAxiosError(error) ? error.response?.data?.code : undefined;

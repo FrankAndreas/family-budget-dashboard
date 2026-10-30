@@ -39,7 +39,7 @@ Same setup as the family-chore app (SQLite variant), so both run side by side on
 3. **Create `.env`** with the user's IDs, the port and the family hub (see `.env.example` for all settings, and
    [Logging in: the family hub](#logging-in-the-family-hub)):
    ```bash
-   printf 'PUID=1031\nPGID=100\nPORT=8081\nHUB_URL=http://<NAS_IP>:8086\nHUB_PUBLIC_URL=https://home.local.<domain>\nCOOKIE_DOMAIN=local.<domain>\n' | sudo tee .env
+   printf 'PUID=1031\nPGID=100\nPORT=8081\nHUB_URL=http://<NAS_IP>:8086\nHUB_PUBLIC_URL=https://home.local.<domain>\n' | sudo tee .env
    sudo chmod 600 .env
    ```
    `PORT` is the port on the NAS (default 8081; family-chore uses 8080).
@@ -67,11 +67,11 @@ README_DOCKER.md), which sets its login for every app at `*.local.<domain>`. Set
 Someone whose access is taken away (or who is deactivated) in the hub is hidden here with all their data; if they get
 access again, it is all back. **Settings → Family → Removed in the family hub** deletes their data for good.
 
-PINs, the language and logging out on every device are in the hub; **Log out** here logs out of all family apps in
-this browser. For English as the default of a new database's categories, set `DEFAULT_LANGUAGE=en` in `.env`.
+PINs, the language and logging out on every device are in the hub; **Log out** here goes to the hub, which ends the login for all
+family apps and shows its login. For English as the default of a new database's categories, set `DEFAULT_LANGUAGE=en` in `.env`.
 
-**Switching an existing installation** to the hub: add `HUB_URL`, `HUB_PUBLIC_URL`, `HUB_APP_KEY` and
-`COOKIE_DOMAIN` to the backend's `environment:` in the NAS's `compose.yaml` (as in `docker-compose.yml`; a value only
+**Switching an existing installation** to the hub: add `HUB_URL`, `HUB_PUBLIC_URL`, and `HUB_APP_KEY` to
+the backend's `environment:` in the NAS's `compose.yaml` (as in `docker-compose.yml`; a value only
 in `.env` doesn't reach the container), set them in `.env`, then `sudo docker-compose up -d`. A person from before the
 hub is linked to the hub person with the same name and role at the first login, and only then (rename one of them
 first if they differ; tick everyone who had an account here before that first login). Someone left unlinked stays
@@ -373,7 +373,7 @@ Check the generated file in `app/migrations/versions/`, and add a test in `tests
 | Symptom | Cause | Fix |
 |---|---|---|
 | `budget-backend` restarts with *unable to open database file* | `data/` doesn't belong to `PUID:PGID`, or the IDs in `.env` are wrong (check with `id <user>`) | Fix `.env` or `sudo chown -R <PUID>:<PGID> data`, then `sudo docker-compose up -d` and `sudo docker restart budget-frontend` |
-| The app keeps sending you to the family hub, or the hub sends you back to its start page | The app isn't opened at `https://budget.local.<domain>`, or `COOKIE_DOMAIN` is missing in the hub's `.env` | Open the app at its `local.<domain>` address; check the hub's `COOKIE_DOMAIN=local.<domain>` |
+| The app keeps sending you to the family hub, or the hub sends you back to its start page | The app isn't opened at `https://budget.local.<domain>`, or the hub's `COOKIE_DOMAIN` is missing in its `.env` | Open the app at its `local.<domain>` address; check the hub's `COOKIE_DOMAIN=local.<domain>` |
 | *No access* after logging in | The hub doesn't list the person for the app | In the hub, **Einstellungen → Apps**: the tile needs the key `budget` and the person ticked |
 | *The family hub can't be reached* | `HUB_URL` is wrong or the hub is down | Check `HUB_URL` in the backend's environment (`sudo docker exec budget-backend env \| grep HUB`) and the hub's container |
 | *Bind for 0.0.0.0:8081 failed: port is already allocated* | Another app uses the port | Set another `PORT` in `.env` |

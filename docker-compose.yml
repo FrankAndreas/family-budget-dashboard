@@ -20,12 +20,10 @@ services:
       - DATABASE_URL=sqlite:///./data/budget.db
       # The login is the family hub's (FrankAndreas/family-hub): how this
       # backend reaches it (e.g. http://<NAS_IP>:8086), where browsers log in
-      # (https://home.local.<domain>), this app's key in the hub, and the
-      # hub's cookie domain (local.<domain>), so "Log out" here ends the login
+      # and out (https://home.local.<domain>), and this app's key in the hub
       - HUB_URL=${HUB_URL:-}
       - HUB_PUBLIC_URL=${HUB_PUBLIC_URL:-}
       - HUB_APP_KEY=${HUB_APP_KEY:-budget}
-      - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
       # de or en: language of people who haven't picked one, and of a new
       # database's default categories
       - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE:-de}

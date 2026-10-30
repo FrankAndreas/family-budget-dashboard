@@ -1,8 +1,7 @@
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, Request, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
-import os
 from datetime import datetime
 from fastapi import Body
 
@@ -120,19 +119,6 @@ def update_user(
             raise messages.api_error(400, "delete_child_accounts_first")
 
     return crud.update_user(db, user_id, user_update)
-
-
-@router.post("/logout")
-def logout(request: Request, response: Response):
-    """Ends the family login in this browser, for every app: the hub's cookie is set for local.<domain>, which this app
-    may clear too. "Log out everywhere" is in the hub. Only with the app's header: another site can't log anyone out."""
-    if request.headers.get(auth.CSRF_HEADER) != auth.CSRF_VALUE:
-        raise messages.CodedError(403, "csrf")
-    response.delete_cookie(auth.COOKIE, path="/", domain=os.getenv("COOKIE_DOMAIN") or None)
-    token, _ = auth.request_token(request)
-    if token:
-        hub.forget(token)
-    return {"logged_out": True}
 
 
 @router.get("/hub")

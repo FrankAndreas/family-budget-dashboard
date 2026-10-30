@@ -58,28 +58,7 @@ def test_parent_turned_child_stays_private(client, family_hub):
     assert row(user_id(client, dad, "dad")).privacy_enabled is True
 
 
-# 3. Logging out needs the app's header, and forgets only this login
-def test_logout_needs_the_header(client):
-    assert client.post(f"{BASE_URL}/logout").status_code == 403
-    assert client.post(f"{BASE_URL}/logout", headers={"X-Requested-With": "budget"}).status_code == 200
-
-
-def test_logout_forgets_only_this_login(client, family_hub):
-    register(client, "mum")
-    hub.session(fake_hub.token("mum"))
-    hub.session(fake_hub.token(ADMIN))
-    calls = []
-    real = hub.fetch_session
-    hub.fetch_session = lambda tok: calls.append(tok) or real(tok)
-    try:
-        client.cookies.set("hub_session", fake_hub.token("mum"))
-        client.post(f"{BASE_URL}/logout", headers={"X-Requested-With": "budget"})
-        client.cookies.clear()
-        hub.session(fake_hub.token(ADMIN))
-        hub.session(fake_hub.token("mum"))
-    finally:
-        hub.fetch_session = real
-    assert calls == [fake_hub.token("mum")]
+# 3. Logging out happens in the hub now (it ends the login there, for every app): this app has no logout of its own
 
 
 # 4. The app is home-only: nothing that came through the Cloudflare tunnel counts as a login
