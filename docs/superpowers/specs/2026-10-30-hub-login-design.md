@@ -46,8 +46,9 @@ careful migration.
    per tile in the person's form or one of the two; builder's choice). A new tile starts with no one; a new person
    starts with no app. Management stays home-only, parents only, like the rest.
 3. **Start page.** Shows a person only the tiles without a key plus the ones they have access to.
-4. **`GET /api/session?app=<key>`.** As today, plus: with `app`, the answer is `valid: false` when the person has no
-   access to that app. Without `app`, unchanged (the README's contract stays valid).
+4. **`GET /api/session?app=<key>`.** As today, plus: with `app`, the answer adds `"access": true|false`; `valid`
+   stays about the login. (Changed while planning: with `valid: false` an app couldn't tell "not logged in" from
+   "no access", and sending a logged-in person without access to the hub would loop.) Without `app`, unchanged.
 5. **`GET /api/apps/<key>/people`.** Auth as `/api/session` (Bearer hub token, or the Cloudflare headers). Allowed
    for a person who has access to `<key>`. Returns every active person with access to `<key>`:
    `[{"id", "name", "role", "color", "language"}]` (no e-mail, no PIN data). 403 without access, 404 for an unknown
