@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Response, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
@@ -13,6 +13,7 @@ from . import (
     schemas,
     auth,
     hub,
+    hub_people,
     database,
     models,
     privacy,
@@ -76,9 +77,18 @@ def check_asset(db: Session, current_user, asset_id: Optional[str], linked: Opti
 
 @router.get("/users", response_model=List[schemas.User])
 def read_users(
-    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+    request: Request,
+    current_user: models.User = Depends(auth.get_current_user_from_token),
+    db: Session = Depends(database.get_db),
 ):
-    # The people the family hub lists for this app; removed ones stay hidden with their data (spec 2026-10-30)
+    # The people the family hub lists for this app; removed ones stay hidden with their data (spec 2026-10-30). A
+    # parent looking at the family (Settings) sees the hub's list as it is now, not up to a minute old
+    if current_user.role == "PARENT":
+        token, _ = auth.request_token(request)
+        try:
+            hub_people.refresh(db, token or "", force=True)
+        except hub.HubUnavailable:
+            raise messages.CodedError(503, "hub_unavailable") from None
     people = db.query(crud.models.User).filter(crud.models.User.is_active.is_(True)).all()
     return [user for user in people if privacy.can_list_user(current_user, user)]
 

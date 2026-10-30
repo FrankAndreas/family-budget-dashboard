@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { call, login, newParent } from './helpers';
+import { call, login, newParent, setHubLanguage } from './helpers';
 
-// Switching to German (#50): menu, a date, a 🔒 category and a backend error in German, then back to English
-test('switch the app to German and back', async ({ page, request }) => {
+// German chosen in the family hub (#50): menu, a date, a 🔒 category and a backend error in German
+test('the app in German', async ({ page, request }) => {
     const parent = await newParent(request);
+    await setHubLanguage(request, parent, 'de');
     const account = await call(request, parent, 'POST', '/accounts', { name: 'Bank', type: 'BANK' });
     const categories = await call(request, parent, 'GET', '/categories');
     const unsorted = categories.find((c: { system_key: string }) => c.system_key === 'UNSORTED').id;
@@ -12,11 +13,8 @@ test('switch the app to German and back', async ({ page, request }) => {
     });
 
     const errors = await login(page, parent);
-    await page.getByRole('button', { name: 'Settings' }).click();
-    await page.getByLabel('Language').selectOption('de');
-    // The page reloads in the person's new language
-    await expect(page.getByRole('button', { name: 'Einstellungen' })).toBeVisible();
     await expect(page.locator('html')).toHaveAttribute('lang', 'de');
+    await expect(page.getByRole('button', { name: 'Einstellungen' })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Abmelden' })).toBeVisible();
 
     // The booking's date in German
@@ -33,9 +31,6 @@ test('switch the app to German and back', async ({ page, request }) => {
     await section.getByRole('button', { name: 'Kategorie hinzufügen' }).click();
     await expect(section).toContainText('Eine Kategorie mit diesem Namen gibt es schon');
 
-    await page.getByLabel('Sprache').selectOption('en');
-    await expect(page.getByRole('button', { name: 'Settings' })).toBeVisible();
-    await expect(page.locator('html')).toHaveAttribute('lang', 'en');
     // The one error is the refused category name (400), which the browser logs
     expect(errors).toEqual(['Failed to load resource: the server responded with a status of 400 (Bad Request)']);
 });

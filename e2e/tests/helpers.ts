@@ -6,27 +6,66 @@ const configured = process.env.E2E_PYTHON ?? 'python3';
 export const PYTHON = configured.includes('/') ? path.resolve(configured) : configured;
 
 export const API = 'http://localhost:8100/api/v1';
+// The family hub the app logs in through (a real one, from a family-hub checkout: playwright.config.ts)
+export const HUB = 'http://localhost:8120';
 const ADMIN_PIN = '1111';
 const PIN = '1234';
 
 export interface Parent { name: string; token: string }
 
-// Every test works as a parent of its own (accounts and wishes are private), so tests don't see each other's data
-export async function newParent(request: APIRequestContext): Promise<Parent> {
-    const admin = await token(request, 'Admin', ADMIN_PIN);
-    const name = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
-    const created = await request.post(`${API}/users`, {
-        data: { username: name, pin: PIN, role: 'PARENT' },
-        headers: { Authorization: `Bearer ${admin}` },
-    });
-    expect(created.ok(), await created.text()).toBeTruthy();
-    return { name, token: await token(request, name, PIN) };
+// The hub's login token for a person: the hub only sets it as the cookie, which this API context then drops again
+async function hubToken(request: APIRequestContext, name: string, pin: string): Promise<string> {
+    const response = await request.post(`${HUB}/api/login`, { data: { name, pin } });
+    expect(response.ok(), await response.text()).toBeTruthy();
+    const cookie = response.headersArray().find(h => h.name.toLowerCase() === 'set-cookie' && h.value.startsWith('hub_session='));
+    expect(cookie, 'the hub sets hub_session').toBeTruthy();
+    await request.post(`${HUB}/api/logout`);
+    return cookie!.value.split(';')[0].slice('hub_session='.length);
 }
 
-async function token(request: APIRequestContext, username: string, pin: string): Promise<string> {
-    const response = await request.post(`${API}/login`, { data: { username, pin } });
+async function asHubAdmin<T = any>(request: APIRequestContext, method: string, path: string, data?: unknown): Promise<T> {
+    const token = await hubToken(request, 'Admin', ADMIN_PIN);
+    const response = await request.fetch(`${HUB}${path}`, { method, data, headers: { Cookie: `hub_session=${token}` } });
+    expect(response.ok(), `${method} ${path}: ${await response.text()}`).toBeTruthy();
+    return response.json();
+}
+
+// A person in the hub with access to this app (the hub tile with the key "budget", made on first use)
+export async function addToHub(request: APIRequestContext, name: string, role: 'PARENT' | 'CHILD', access = true): Promise<number> {
+    const person = await asHubAdmin(request, 'POST', '/api/people', { name, pin: PIN, role });
+    if (access) await giveAccess(request, person.id, true);
+    return person.id;
+}
+
+export async function giveAccess(request: APIRequestContext, personId: number, access: boolean): Promise<void> {
+    const tiles = await asHubAdmin<{ id: number; app_key: string | null; people: number[] }[]>(request, 'GET', '/api/tiles/manage');
+    let tile = tiles.find(t => t.app_key === 'budget');
+    if (!tile) {
+        tile = await asHubAdmin(request, 'POST', '/api/tiles', { name: 'Budget', local_url: 'http://localhost:3100', app_key: 'budget' });
+    }
+    const people = access ? [...new Set([...tile!.people, personId])] : tile!.people.filter(id => id !== personId);
+    await asHubAdmin(request, 'PATCH', `/api/tiles/${tile!.id}`, { people });
+}
+
+// The person picks a language in the hub (where it lives now); the app follows within a minute, at once for a login
+// it hasn't seen yet
+export async function setHubLanguage(request: APIRequestContext, person: Parent, language: 'de' | 'en'): Promise<void> {
+    const response = await request.fetch(`${HUB}/api/me`, {
+        method: 'PATCH', data: { language }, headers: { Cookie: `hub_session=${person.token}` },
+    });
     expect(response.ok(), await response.text()).toBeTruthy();
-    return (await response.json()).access_token;
+}
+
+// A family member logged in at the hub (their token), for people the tests add themselves
+export async function hubLogin(request: APIRequestContext, name: string): Promise<Parent> {
+    return { name, token: await hubToken(request, name, PIN) };
+}
+
+// Every test works as a parent of its own (accounts and wishes are private), so tests don't see each other's data
+export async function newParent(request: APIRequestContext): Promise<Parent> {
+    const name = `p${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+    await addToHub(request, name, 'PARENT');
+    return hubLogin(request, name);
 }
 
 export async function call<T = any>(
@@ -39,17 +78,16 @@ export async function call<T = any>(
     return response.json();
 }
 
-// Log in through the login page, and fail the test on any error in the browser console
+// Logged in as at home: the hub's cookie in the browser (the hub's own login page is family-hub's to test). Fails the
+// test on any error in the browser console
 export async function login(page: Page, parent: Parent): Promise<string[]> {
     const errors: string[] = [];
     page.on('pageerror', e => errors.push(String(e)));
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     page.on('dialog', d => d.accept());
-    await page.goto('/login');
-    await page.locator('#username').fill(parent.name);
-    await page.locator('#pin').fill(PIN);
-    await page.locator('button[type=submit]').click();
-    await expect(page.getByRole('button', { name: 'Logout' })).toBeVisible();
+    await page.context().addCookies([{ name: 'hub_session', value: parent.token, url: 'http://localhost:3100' }]);
+    await page.goto('/');
+    await expect(page.getByRole('button', { name: /^(Logout|Abmelden)$/ })).toBeVisible();
     return errors;
 }
 

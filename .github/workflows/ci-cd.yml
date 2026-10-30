@@ -133,7 +133,8 @@ jobs:
           path: frontend/dist
           retention-days: 7
 
-  # Browser tests: Playwright starts the backend (fresh SQLite database) and the frontend itself (e2e/)
+  # Browser tests: Playwright starts the backend (fresh SQLite database), the frontend and the family hub the logins
+  # come from itself (e2e/)
   e2e-test:
     name: Browser Tests
     runs-on: ubuntu-latest
@@ -142,14 +143,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
 
+      - name: Checkout the family hub
+        uses: actions/checkout@v7
+        with:
+          repository: FrankAndreas/family-hub
+          path: family-hub
+
       - name: Set up Python
         uses: actions/setup-python@v7
         with:
           python-version: '3.14'
           cache: 'pip'
 
-      - name: Install backend dependencies
-        run: pip install -r backend/requirements.txt
+      - name: Install backend dependencies (the app's and the hub's)
+        run: pip install -r backend/requirements.txt -r family-hub/backend/requirements.txt
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -177,7 +184,7 @@ jobs:
       - name: Run browser tests
         run: |
           cd e2e
-          E2E_PYTHON=python npm test
+          E2E_PYTHON=python HUB_DIR="$GITHUB_WORKSPACE/family-hub" npm test
 
       - name: Upload test report
         if: failure()
@@ -338,13 +345,17 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
       
       # Run the images that were just published as on the NAS (backend as an
-      # unprivileged user other than the image's), and smoke-test through nginx
+      # unprivileged user other than the image's), and smoke-test through nginx;
+      # the logins come from the family hub's published image
       - name: Start published images
         run: |
           docker network create budget
+          docker run -d --name hub --network budget -p 8086:8000 \
+            -e INITIAL_ADMIN_PIN=0000 -e COOKIE_INSECURE=1 \
+            ghcr.io/frankandreas/family-hub/backend:latest
           mkdir -p data && sudo chown 1031:100 data
           docker run -d --name backend --network budget --user 1031:100 -v "$PWD/data:/app/data" \
-            -e INITIAL_ADMIN_PIN=0000 \
+            -e HUB_URL=http://hub:8000 -e HUB_PUBLIC_URL=http://localhost:8086 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_BACKEND }}:${{ github.sha }}
           docker run -d --name frontend --network budget -p 8080:8080 \
             ${{ env.REGISTRY }}/${{ env.IMAGE_NAME_FRONTEND }}:${{ github.sha }}
@@ -352,26 +363,28 @@ jobs:
       - name: Wait for services
         run: |
           for i in $(seq 1 30); do
-            if curl -sf http://localhost:8080/api/v1/categories >/dev/null && curl -sf http://localhost:8080 | grep -q '<div id="root">'; then exit 0; fi
+            if curl -sf http://localhost:8086/health >/dev/null && curl -sf http://localhost:8080/api/v1/categories >/dev/null && curl -sf http://localhost:8080 | grep -q '<div id="root">'; then exit 0; fi
             sleep 2
           done
           echo "Services did not come up"
+          docker logs hub
           docker logs backend
           docker logs frontend
           exit 1
 
       - name: Smoke test
-        run: python3 tests/smoke_test.py http://localhost:8080
+        run: python3 tests/smoke_test.py http://localhost:8080 http://localhost:8086
 
       - name: Show logs on failure
         if: failure()
         run: |
+          docker logs hub
           docker logs backend
           docker logs frontend
 
       - name: Stop services
         if: always()
-        run: docker rm -f backend frontend; docker network rm budget || true
+        run: docker rm -f hub backend frontend; docker network rm budget || true
 
   # Deployment (example for production)
   # Disabled until there is a real target: the steps below only print a message.

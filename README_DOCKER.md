@@ -36,16 +36,13 @@ Same setup as the family-chore app (SQLite variant), so both run side by side on
    sudo mkdir -p data
    sudo chown -R 1031:100 data    # the IDs from step 1, or 999:999
    ```
-3. **Create `.env`** with the user's IDs, the port and a key for logins
-   (see `.env.example` for all settings):
+3. **Create `.env`** with the user's IDs, the port and the family hub (see `.env.example` for all settings, and
+   [Logging in: the family hub](#logging-in-the-family-hub)):
    ```bash
-   printf 'PUID=1031\nPGID=100\nPORT=8081\nSECRET_KEY=%s\n' "$(openssl rand -hex 32)" | sudo tee .env
+   printf 'PUID=1031\nPGID=100\nPORT=8081\nHUB_URL=http://<NAS_IP>:8086\nHUB_PUBLIC_URL=https://home.local.<domain>\nCOOKIE_DOMAIN=local.<domain>\n' | sudo tee .env
    sudo chmod 600 .env
    ```
    `PORT` is the port on the NAS (default 8081; family-chore uses 8080).
-
-   > **Why `SECRET_KEY` matters:** it signs the logins. If it is empty, the backend picks a random one
-   > on every start, and everyone is logged out after each update.
 4. **Start** it:
    ```bash
    sudo docker-compose pull
@@ -53,38 +50,40 @@ Same setup as the family-chore app (SQLite variant), so both run side by side on
    ```
    Or in Container Manager: **Project → Create**, choose the folder (it must contain `compose.yaml`
    and `.env`), **Next → Done**.
-5. **Open** `http://<NAS_IP>:8081`. For daily use, set up [HTTPS at home](#https-at-home-recommended):
-   on plain HTTP the PINs cross the Wi-Fi unencrypted.
+5. Set up [HTTPS at home](#https-at-home-recommended) and open `https://budget.local.<domain>`: the family hub's
+   login only reaches the app at an address under `local.<domain>`.
 
-### First login
-On an empty database the backend creates the parent **Admin** with a random 4-digit PIN,
-printed once in its log:
+### Logging in: the family hub
 
-```bash
-sudo docker logs budget-backend 2>&1 | grep "INITIAL PIN"
-```
+The app has no PINs or users of its own: the family logs in at the family hub (FrankAndreas/family-hub, its
+README_DOCKER.md), which sets its login for every app at `*.local.<domain>`. Set it up first, then in the hub's
+**Einstellungen → Apps**:
 
-Log in as `Admin` with that PIN and change it right away (the log keeps showing the first PIN until the container
-is recreated), then rename Admin in **Settings → Family**. Add the
-other family members there too: there is no sign-up page. Each parent's money is private; to let the other parent
-see or manage it, use **Settings → Sharing** (children with own allowance can share with their parents
-the same way). Costs the parents share, investments and yearly bills are in the **Common**,
-**Investments** and **Yearly bills** tabs. To choose the first PIN yourself, set
-`INITIAL_ADMIN_PIN=1234` in `.env` before the first start.
+1. Add the app (or edit its tile): home address `https://budget.local.<domain>`, **App key** `budget` (the app's
+   `HUB_APP_KEY`), and tick everyone who uses it, including younger children (they see their own costs, read-only).
+2. Opening the app without a login sends you to the hub and back. The people come from the hub within a minute; in
+   **Settings → Family** you set what only this app knows: Jugendlohn or not, and receipt-mail addresses.
 
-The app is German unless a person picks English in **Settings → Logins**. For English as the default (people
-who haven't picked a language, and a new database's default categories), set `DEFAULT_LANGUAGE=en` in `.env`.
+Someone whose access is taken away (or who is deactivated) in the hub is hidden here with all their data; if they get
+access again, it is all back. **Settings → Family → Removed in the family hub** deletes their data for good.
 
-If you lose the PIN before anyone uses the app, stop it, delete `data/budget.db` and start again.
-**This deletes all data.**
+PINs, the language and logging out on every device are in the hub; **Log out** here logs out of all family apps in
+this browser. For English as the default of a new database's categories, set `DEFAULT_LANGUAGE=en` in `.env`.
+
+**Switching an existing installation** to the hub: add `HUB_URL`, `HUB_PUBLIC_URL`, `HUB_APP_KEY` and
+`COOKIE_DOMAIN` to the backend's `environment:` in the NAS's `compose.yaml` (as in `docker-compose.yml`; a value only
+in `.env` doesn't reach the container), set them in `.env`, then `sudo docker-compose up -d`. A person from before the
+hub is linked to the hub person with the same name at the first login (rename one of them first if they differ);
+`SECRET_KEY` and `INITIAL_ADMIN_PIN` are no longer used.
 
 `data/` holds everything worth keeping: the database `budget.db` and the stored receipts in
 `data/attachments/`. Back up the whole folder: the update script's database backup does not include the receipts.
 
 ### HTTPS at home (recommended)
 
-On `http://<NAS_IP>:8081` the PIN at login and the login token (valid 50 hours) cross the Wi-Fi unencrypted, so any
-device on the network (guest Wi-Fi, a smart-home gadget) could read them. The NAS's own reverse proxy fixes this
+The family hub's login only reaches the app at `https://budget.local.<domain>` (its cookie is for `local.<domain>`
+and needs HTTPS), and on plain HTTP it would cross the Wi-Fi unencrypted, where any device on the network (guest
+Wi-Fi, a smart-home gadget) could read it. The NAS's own reverse proxy fixes this
 with a free Let's Encrypt certificate. You need a domain whose DNS is at Cloudflare (the one the receipt mails use is
 fine). Nothing is opened to the internet: the names point to the NAS's home address, and the router forwards no port.
 
@@ -128,10 +127,10 @@ certificate for `*.local.<domain>` covers all of them.
 4. **Assign the certificate.** **Control Panel → Security → Certificate → Settings**: pick the `*.local.<domain>`
    certificate for both reverse proxy entries.
 5. **Open** `https://budget.local.<domain>` on each phone (type `https://` the first time) and save it to the home
-   screen again: the old `http://<NAS_IP>:8081` shortcut keeps working, but unencrypted.
+   screen, or open it from the family hub's start page.
 
 Port 8081 stays open on plain HTTP: the Cloudflare tunnel for [receipt mails](#receipt-mails-cloudflare-email-worker-optional)
-reaches the app there. That last step stays inside the NAS when the tunnel runs on it; the PINs never take it.
+reaches the app there. That last step stays inside the NAS when the tunnel runs on it; the logins never take it.
 
 ### Reading receipts with the Infomaniak AI (optional)
 
@@ -372,11 +371,12 @@ Check the generated file in `app/migrations/versions/`, and add a test in `tests
 | Symptom | Cause | Fix |
 |---|---|---|
 | `budget-backend` restarts with *unable to open database file* | `data/` doesn't belong to `PUID:PGID`, or the IDs in `.env` are wrong (check with `id <user>`) | Fix `.env` or `sudo chown -R <PUID>:<PGID> data`, then `sudo docker-compose up -d` and `sudo docker restart budget-frontend` |
-| Everyone is logged out after each update | `SECRET_KEY` not set in `.env` | Add one (see [Installation](#installation), step 3) |
+| The app keeps sending you to the family hub, or the hub sends you back to its start page | The app isn't opened at `https://budget.local.<domain>`, or `COOKIE_DOMAIN` is missing in the hub's `.env` | Open the app at its `local.<domain>` address; check the hub's `COOKIE_DOMAIN=local.<domain>` |
+| *No access* after logging in | The hub doesn't list the person for the app | In the hub, **Einstellungen → Apps**: the tile needs the key `budget` and the person ticked |
+| *The family hub can't be reached* | `HUB_URL` is wrong or the hub is down | Check `HUB_URL` in the backend's environment (`sudo docker exec budget-backend env \| grep HUB`) and the hub's container |
 | *Bind for 0.0.0.0:8081 failed: port is already allocated* | Another app uses the port | Set another `PORT` in `.env` |
 | Email from Task Scheduler: *up to date, but the backend is not healthy* | The backend keeps crashing without an update, e.g. after a change to `.env` (wrong `PUID`/`PGID`) | Check `logs/update.log`, fix the cause, then `sudo docker-compose up -d` and `sudo docker restart budget-frontend` |
 | Email from Task Scheduler: *backend not healthy* | A new version fails to start | Check `logs/update.log` (it ends with the backend's log), then [roll back](#rolling-back-an-update) |
-| Login says *Too many wrong PINs. Try again in … minutes* (or *hours*) | 5 wrong PINs in a row lock that name for 15 minutes; each further lockout in a row doubles it, up to 24 hours (it starts at 15 minutes again a day after a lock ended, or after a correct login) | Wait, or have another parent set a new PIN in Settings → Family (that unlocks it at once). After the next login, the person sees how many wrong PINs were entered for their name |
 | `http://<name>.local.<domain>` shows *Welcome to Synology Web Station* | The reverse proxy entries listen on HTTPS only; plain HTTP lands on Web Station | Type `https://`; with **Enable HSTS** the browser does it by itself after the first visit |
 | *400 The plain HTTP request was sent to HTTPS port* on `nas.local.<domain>` | The reverse proxy talks HTTP to DSM's HTTPS port 5001 | Set the entry's destination protocol to **HTTPS** |
 | `nslookup <name>.local.<domain>` says *NXDOMAIN* | The DNS record is named `local` instead of `*.local` | Rename it to `*.local` |

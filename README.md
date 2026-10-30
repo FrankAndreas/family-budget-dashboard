@@ -11,14 +11,15 @@ Bookings come in by hand, or in bulk from bank and Migros exports through small 
 
 ## Family model
 
-- **Parents** log in with a 4-digit PIN. Each parent's money is private unless they share it with another parent
+- **Logins** come from the family hub (FrankAndreas/family-hub): one PIN for all family apps, and the hub decides
+  who uses this app. **Parents**' money is private unless they share it with another parent
   (view, or view and manage) in Settings.
 - **Common budget:** costs the parents share are split by a ratio (e.g. 50/50 or by income); the Common tab shows who
   owes whom and books settling up.
-- **Children** either have an own allowance (own login, accounts and budgets) or are dependents whose costs are
-  household expenses tagged with them.
-- There's no sign-up: the first start creates the parent `Admin` (see [README_DOCKER.md](README_DOCKER.md)), and
-  parents add everyone else.
+- **Children** either have an own allowance (Jugendlohn: own accounts and budgets) or are dependents whose costs are
+  household expenses tagged with them; a dependent child sees their own costs, read-only.
+- People are added and removed in the family hub (see [README_DOCKER.md](README_DOCKER.md)); someone removed there is
+  hidden here with their data until a parent deletes it.
 
 ## Stack
 
@@ -37,12 +38,13 @@ Bookings come in by hand, or in bulk from bank and Migros exports through small 
   cd frontend && npm ci && npm run dev                                             # http://localhost:3000
   ```
 
-  The first start logs the `Admin` PIN (or set `INITIAL_ADMIN_PIN`). The database is `backend/data/budget.db`
-  unless `DATABASE_URL` says otherwise.
+  Logins come from a family hub (`HUB_URL`, default `http://localhost:8086`; run family-hub's backend there, with
+  `COOKIE_INSECURE=1` on plain http). Vite forwards `/api` to `API_PROXY` (default `http://localhost:8000`), so the
+  hub's cookie reaches the backend. The database is `backend/data/budget.db` unless `DATABASE_URL` says otherwise.
 
-  The app speaks German and English: each person picks a language in **Settings → Logins**. `DEFAULT_LANGUAGE`
-  (`de` if unset, or `en`) is the language of people who haven't picked one, of the login screen when the browser
-  asks for neither, and of a new database's default categories. The default categories (Groceries/Lebensmittel,
+  The app speaks German and English: each person picks a language in the family hub. `DEFAULT_LANGUAGE`
+  (`de` if unset, or `en`) is the language of messages before a login when the browser asks for neither, and of a
+  new database's default categories. The default categories (Groceries/Lebensmittel,
   …) show in each person's language until a parent renames one; imports and converter rules accept both names.
 
   Reading receipts with the Infomaniak AI (optional): `scripts/dev-backend.sh` starts the backend with the token

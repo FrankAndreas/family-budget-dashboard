@@ -79,3 +79,11 @@ def test_delete_removed_member(client):
     # The household expense stays, without the tag
     kept = client.get(f"{BASE_URL}/accounts/{mum_account}/transactions", headers=mum).json()
     assert [(t["id"], t["member_id"]) for t in kept] == [(tagged["id"], None)]
+
+
+def test_parent_listing_people_asks_the_hub(client, family_hub):
+    mum = register(client, "mum")
+    add_member(client, "kid")
+    # Changed in the hub a moment ago, inside the app's minute between refreshes
+    family_hub.access.discard("kid")
+    assert "kid" not in names(client, mum)

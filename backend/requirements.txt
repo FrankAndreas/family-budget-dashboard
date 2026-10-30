@@ -3,8 +3,6 @@ uvicorn==0.54.0
 sqlalchemy==2.1.6
 pydantic==2.14.1
 python-multipart==0.0.32
-bcrypt==5.0.0
-PyJWT==2.15.1
 tzdata==2026.5
 alembic==1.20.1
 pypdf==6.21.2

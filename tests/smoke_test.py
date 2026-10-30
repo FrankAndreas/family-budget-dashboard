@@ -1,9 +1,10 @@
 """Smoke test against a running backend (used by the CI integration job on the published image).
 
-Usage: python3 tests/smoke_test.py http://localhost:8000 [admin PIN]
+Usage: python3 tests/smoke_test.py http://localhost:8080 [hub URL] [hub admin PIN]
 
-The backend must have started on an empty database with INITIAL_ADMIN_PIN set to that PIN
-(default 0000), so the first parent "Admin" can log in.
+Logins come from a family hub (FrankAndreas/family-hub, default http://localhost:8086) that started on an empty
+database with INITIAL_ADMIN_PIN set to that PIN (default 0000), so its first parent "Admin" can log in; the backend's
+HUB_URL points at that hub.
 
 Only uses the standard library, so it runs without installing anything.
 """
@@ -58,6 +59,32 @@ def download(base_url, path, token):
         return response.status, response.read()
 
 
+def hub_call(hub_url, method, path, body=None, token=None):
+    """A call to the family hub as a logged-in person (its cookie), or to log in: then also the new login token."""
+    request = urllib.request.Request(
+        f"{hub_url}{path}",
+        method=method,
+        data=json.dumps(body).encode() if body is not None else None,
+        headers={"Content-Type": "application/json", **({"Cookie": f"hub_session={token}"} if token else {})},
+    )
+    with urllib.request.urlopen(request, timeout=10) as response:
+        cookies = response.headers.get_all("Set-Cookie") or []
+        login = next((c.split(";")[0].split("=", 1)[1] for c in cookies if c.startswith("hub_session=")), None)
+        return response.status, json.loads(response.read() or b"null"), login
+
+
+def hub_person(hub_url, admin, name):
+    """A parent in the hub with access to the budget app (the hub tile with the key "budget", made on first use)."""
+    _, person, _ = hub_call(hub_url, "POST", "/api/people", {"name": name, "pin": "1234", "role": "PARENT"}, admin)
+    _, tiles, _ = hub_call(hub_url, "GET", "/api/tiles/manage", token=admin)
+    tile = next((t for t in tiles if t["app_key"] == "budget"), None)
+    if tile is None:
+        body = {"name": "Budget", "local_url": "http://localhost:8080", "app_key": "budget"}
+        _, tile, _ = hub_call(hub_url, "POST", "/api/tiles", body, admin)
+    hub_call(hub_url, "PATCH", f"/api/tiles/{tile['id']}", {"people": tile["people"] + [person["id"]]}, admin)
+    return hub_call(hub_url, "POST", "/api/login", {"name": name, "pin": "1234"})[2]
+
+
 def check(description, condition):
     print(f"{'ok  ' if condition else 'FAIL'} {description}")
     if not condition:
@@ -93,24 +120,19 @@ def security_headers(base_url):
     check("index.html still checked on every load", page_headers.get("Cache-Control") == "no-cache")
 
 
-def main(base_url, admin_pin):
+def main(base_url, hub_url, admin_pin):
     username = f"smoke_{int(time.time())}"
     security_headers(base_url)
 
     status, categories = call(base_url, "GET", "/categories")
     check("categories are seeded", status == 200 and len(categories) > 0)
 
-    status, admin_login = call(base_url, "POST", "/login", {"username": "Admin", "pin": admin_pin})
-    check("first parent 'Admin' was created on startup", status == 200)
+    status, _, admin = hub_call(hub_url, "POST", "/api/login", {"name": "Admin", "pin": admin_pin})
+    check("the hub's first parent 'Admin' logs in", status == 200 and admin)
 
-    status, _ = call(
-        base_url, "POST", "/users", {"username": username, "pin": "1234", "role": "PARENT"}, admin_login["access_token"]
-    )
-    check("admin adds a parent", status == 200)
-
-    status, login = call(base_url, "POST", "/login", {"username": username, "pin": "1234"})
-    check("login", status == 200 and "access_token" in login)
-    token = login["access_token"]
+    token = hub_person(hub_url, admin, username)
+    status, me = call(base_url, "GET", "/me", token=token)
+    check("a parent added in the hub logs in here", status == 200 and me["username"] == username)
 
     status, account = call(base_url, "POST", "/accounts", {"name": "Smoke", "type": "BANK"}, token)
     check("create account", status == 200)
@@ -130,8 +152,7 @@ def main(base_url, admin_pin):
     check("balance updated", status == 200 and smoke["balance"] == -12.5)
 
     # Common budget: a second parent, a split, and a shared expense
-    status, _ = call(base_url, "POST", "/users", {"username": f"{username}_b", "pin": "1234", "role": "PARENT"}, token)
-    check("add a second parent", status == 200)
+    check("add a second parent", bool(hub_person(hub_url, admin, f"{username}_b")))
     status, users = call(base_url, "GET", "/users", token=token)
     parent_ids = [u["id"] for u in users if u["role"] == "PARENT" and u["is_active"]]
     # Divide 100 evenly; the first parent gets the remainder
@@ -170,4 +191,8 @@ def main(base_url, admin_pin):
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8000", sys.argv[2] if len(sys.argv) > 2 else "0000")
+    main(
+        sys.argv[1] if len(sys.argv) > 1 else "http://localhost:8080",
+        sys.argv[2] if len(sys.argv) > 2 else "http://localhost:8086",
+        sys.argv[3] if len(sys.argv) > 3 else "0000",
+    )
