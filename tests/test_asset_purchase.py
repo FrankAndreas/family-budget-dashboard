@@ -5,7 +5,16 @@ from datetime import date
 import pytest
 
 from app import common_api, reports
-from helpers import BASE_URL, add_transaction, category_id, create_account, create_split, register, user_id
+from helpers import (
+    BASE_URL,
+    add_transaction,
+    category_id,
+    create_account,
+    create_split,
+    register,
+    user_id,
+    remove_from_hub,
+)
 
 WHEN = "2026-10-10T12:00:00Z"
 
@@ -16,7 +25,7 @@ def family(client, monkeypatch):
     monkeypatch.setattr(reports, "today", lambda: date(2026, 10, 15))
     mum = register(client, "mum")
     dad = register(client, "dad")
-    client.put(f"{BASE_URL}/users/{user_id(client, mum, 'Admin')}", json={"is_active": False}, headers=mum)
+    remove_from_hub("Admin")
     mum_id, dad_id = user_id(client, mum, "mum"), user_id(client, mum, "dad")
     split = create_split(client, mum, "Equal", {mum_id: 50, dad_id: 50}).json()["id"]
     mobility = client.post(f"{BASE_URL}/tags", json={"name": "Mobilität"}, headers=mum).json()["id"]

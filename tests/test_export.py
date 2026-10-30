@@ -8,7 +8,16 @@ from datetime import date
 import pytest
 
 from app import common_api
-from helpers import BASE_URL, add_transaction, category_id, create_account, create_split, register, user_id
+from helpers import (
+    BASE_URL,
+    add_transaction,
+    category_id,
+    create_account,
+    create_split,
+    register,
+    user_id,
+    remove_from_hub,
+)
 
 HEADERS = {
     "members.csv": "member_id,name,role,has_allowance,is_active",
@@ -49,7 +58,7 @@ def family(client, monkeypatch):
     monkeypatch.setattr(common_api, "today", lambda: date(2026, 10, 14))
     mum = register(client, "mum")
     dad = register(client, "dad")
-    client.put(f"{BASE_URL}/users/{user_id(client, mum, 'Admin')}", json={"is_active": False}, headers=mum)
+    remove_from_hub("Admin")
     mum_id, dad_id = user_id(client, mum, "mum"), user_id(client, mum, "dad")
     return {
         "mum": mum,

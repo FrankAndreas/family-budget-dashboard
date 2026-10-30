@@ -1,19 +1,15 @@
 """Regression tests for the fixes from the 2026-10 functional review."""
 
-import time
-
-import jwt
-
 from helpers import (
+    add_member,
     ADMIN,
-    ADMIN_PIN,
     BASE_URL,
     admin_headers,
     add_transaction,
     balance,
     category_id,
     create_account,
-    login,
+    remove_from_hub,
     register,
     user_id,
 )
@@ -27,98 +23,24 @@ class TestSetupAndAuth:
         account = create_account(client, headers)
         assert add_transaction(client, headers, account, category_id(client, "Settle up"), 5).status_code == 400
 
-    def test_token_lasts_configured_time(self, client):
-        register(client, "p")
-        token = client.post(f"{BASE_URL}/login", json={"username": "p", "pin": "1234"}).json()["access_token"]
-        minutes_left = (jwt.decode(token, options={"verify_signature": False})["exp"] - time.time()) / 60
-        assert minutes_left > 2900
-
-    def test_pin_is_four_digits(self, client):
-        admin = admin_headers(client)
-        create = lambda pin: client.post(  # noqa: E731
-            f"{BASE_URL}/users", json={"username": f"u{pin}", "pin": pin}, headers=admin
-        ).status_code
-        assert create("1234") == 200
-        assert create("123") == 422
-        assert create("123456") == 422
-        assert create("12a4") == 422
-
-    def test_no_public_signup(self, client):
+    def test_no_sign_up(self, client):
+        # People are added in the family hub only
         body = {"username": "x", "pin": "1234"}
-        assert client.post(f"{BASE_URL}/users", json=body).status_code == 401
+        assert client.post(f"{BASE_URL}/users", json=body, headers=admin_headers(client)).status_code == 405
         assert client.post(f"{BASE_URL}/register", json=body).status_code in (404, 405)
-        child = register(client, "kid", role="CHILD")
-        assert client.post(f"{BASE_URL}/users", json=body, headers=child).status_code == 403
-
-    def test_rename_members(self, client):
-        admin = admin_headers(client)
-        register(client, "Mum")
-        # Before renaming Admin: the register helper logs in as "Admin"
-        child = register(client, "kid", role="CHILD")
-        timmy = client.post(f"{BASE_URL}/members", json={"username": "Timmy"}, headers=admin).json()
-        admin_id = user_id(client, admin, ADMIN)
-        rename = lambda uid, name: client.put(  # noqa: E731
-            f"{BASE_URL}/users/{uid}", json={"username": name}, headers=admin
-        )
-        assert rename(admin_id, "  Papa ").json()["username"] == "Papa"
-        assert isinstance(login(client, "Papa", ADMIN_PIN), dict)
-        assert rename(timmy["id"], "Tim").json()["username"] == "Tim"
-        assert rename(timmy["id"], "Tim").status_code == 200
-        taken = rename(timmy["id"], "Mum")
-        assert taken.status_code == 400
-        assert taken.json()["detail"] == "That name is already taken"
-        assert rename(timmy["id"], "   ").status_code == 422
-        assert client.put(f"{BASE_URL}/users/{timmy['id']}", json={"username": "x"}, headers=child).status_code == 403
-
-    def test_parent_resets_pin(self, client):
-        admin = admin_headers(client)
-        register(client, "kid", role="CHILD")
-        kid_id = user_id(client, admin, "kid")
-        assert client.put(f"{BASE_URL}/users/{kid_id}", json={"pin": "12"}, headers=admin).status_code == 422
-        assert client.put(f"{BASE_URL}/users/{kid_id}", json={"pin": "4321"}, headers=admin).status_code == 200
-        assert login(client, "kid", "1234") == 401
-        assert isinstance(login(client, "kid", "4321"), dict)
-
-    def test_rename_keeps_session(self, client):
-        headers = register(client, "p")
-        client.put(f"{BASE_URL}/users/{user_id(client, headers, 'p')}", json={"username": "p2"}, headers=headers)
-        assert client.get(f"{BASE_URL}/me", headers=headers).json()["username"] == "p2"
-
-
-class TestPinHashing:
-    def test_pins_hashed_by_passlib_still_work(self, client):
-        # Created by the old passlib-based code for PIN 2468; existing users must keep logging in
-        from app import auth, database, models
-
-        with database.SessionLocal() as db:
-            db.add(
-                models.User(
-                    username="old",
-                    pin_hash="$2b$12$S1D1HlTbO4cDlGTLZHyuoellJh/C78IQ6HohAdzDL0gfnvmup1Cuy",
-                    role=models.UserRole.PARENT,
-                )
-            )
-            db.commit()
-        assert isinstance(login(client, "old", "2468"), dict)
-        assert login(client, "old", "1111") == 401
-        assert auth.verify_pin("2468", "not-a-bcrypt-hash") is False
 
 
 class TestUserLifecycle:
-    def test_inactive_user_locked_out(self, client):
-        parent = register(client, "p")
+    def test_removed_user_locked_out(self, client):
+        register(client, "p")
         child = register(client, "kid", role="CHILD")
-        kid_id = user_id(client, parent, "kid")
-        client.put(f"{BASE_URL}/users/{kid_id}", json={"is_active": False}, headers=parent)
-        assert client.get(f"{BASE_URL}/me", headers=child).status_code == 401
-        assert login(client, "kid") == 403
+        remove_from_hub("kid")
+        assert client.get(f"{BASE_URL}/me", headers=child).status_code == 403
 
     def test_last_parent_protected(self, client):
         # The admin is the only parent of a fresh install
         parent = admin_headers(client)
         pid = user_id(client, parent, ADMIN)
-        assert client.put(f"{BASE_URL}/users/{pid}", json={"is_active": False}, headers=parent).status_code == 400
-        assert client.put(f"{BASE_URL}/users/{pid}", json={"role": "CHILD"}, headers=parent).status_code == 400
         assert client.delete(f"{BASE_URL}/users/{pid}", headers=parent).status_code == 400
 
     def test_delete_user_removes_their_data(self, client):

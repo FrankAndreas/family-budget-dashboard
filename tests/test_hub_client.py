@@ -25,6 +25,11 @@ class Stub:
 
 
 @pytest.fixture
+def family_hub():
+    """The real client here, not the fake hub conftest installs for every other test."""
+
+
+@pytest.fixture
 def stub(monkeypatch):
     found = Stub()
 

@@ -14,11 +14,9 @@ from . import i18n
 MESSAGES: dict[str, dict[str, str]] = {
     "en": {
         "not_logged_in": "Could not validate credentials",
-        "wrong_login": "Incorrect username or PIN",
-        "login_locked_one": "Too many wrong PINs. Try again in {count} minute.",
-        "login_locked_other": "Too many wrong PINs. Try again in {count} minutes.",
-        "login_locked_hours_one": "Too many wrong PINs. Try again in {count} hour.",
-        "login_locked_hours_other": "Too many wrong PINs. Try again in {count} hours.",
+        "no_access": "You don't have access to this app. Ask a parent to give it to you in the family hub.",
+        "hub_unavailable": "The family hub can't be reached right now. Try again in a moment.",
+        "csrf": "This request needs the app's own header.",
         "category_not_found": "Category not found",
         "tag_child_without_allowance": "Expenses can only be tagged with a child without own allowance",
         "tag_household_only": "Only household expenses can be tagged with a child",
@@ -30,15 +28,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "purchase_needs_investment": "Choose the investment this booking bought",
         "lease_incomplete": "A lease needs its monthly rate and term, and must be shorter than the lifespan",
         "archive_date_invalid": "The archive date must be between the purchase date and today",
-        "only_parents_add_members": "Only parents can add family members",
-        "username_taken": "Username already registered",
-        "login_deactivated": "This account has been deactivated",
         "only_parents_update_users": "Only parents can update users",
         "user_not_found": "User not found",
-        "name_taken": "That name is already taken",
-        "last_admin_demote": "Cannot deactivate or demote the last admin user",
         "allowance_children_only": "Only children can have an own allowance",
-        "child_needs_pin": "Set a PIN so the child can log in",
         "delete_child_accounts_first": "Delete the child's own accounts first",
         "only_parents_delete_users": "Only parents can delete users",
         "last_admin_delete": "Cannot delete the last admin user",
@@ -200,11 +192,9 @@ MESSAGES: dict[str, dict[str, str]] = {
     },
     "de": {
         "not_logged_in": "Anmeldung ungültig, bitte melde dich neu an",
-        "wrong_login": "Benutzername oder PIN falsch",
-        "login_locked_one": "Zu viele falsche PINs. Versuche es in {count} Minute wieder.",
-        "login_locked_other": "Zu viele falsche PINs. Versuche es in {count} Minuten wieder.",
-        "login_locked_hours_one": "Zu viele falsche PINs. Versuche es in {count} Stunde wieder.",
-        "login_locked_hours_other": "Zu viele falsche PINs. Versuche es in {count} Stunden wieder.",
+        "no_access": "Du hast keinen Zugang zu dieser App. Bitte einen Elternteil, ihn dir im Familien-Hub zu geben.",
+        "hub_unavailable": "Der Familien-Hub ist gerade nicht erreichbar. Versuche es gleich nochmals.",
+        "csrf": "Dieser Aufruf braucht die Kopfzeile der App.",
         "category_not_found": "Kategorie nicht gefunden",
         "tag_child_without_allowance": "Ausgaben kannst du nur einem Kind ohne Jugendlohn zuordnen",
         "tag_household_only": "Nur Haushaltsausgaben kannst du einem Kind zuordnen",
@@ -216,15 +206,9 @@ MESSAGES: dict[str, dict[str, str]] = {
         "purchase_needs_investment": "Wähle die Anschaffung, die mit dieser Buchung gekauft wurde",
         "lease_incomplete": "Ein Leasing braucht Monatsrate und Laufzeit und muss kürzer sein als die Nutzungsdauer",
         "archive_date_invalid": "Das Archivdatum muss zwischen Kaufdatum und heute liegen",
-        "only_parents_add_members": "Nur Eltern können Familienmitglieder hinzufügen",
-        "username_taken": "Dieser Benutzername ist schon vergeben",
-        "login_deactivated": "Diese Anmeldung wurde deaktiviert",
         "only_parents_update_users": "Nur Eltern können Personen ändern",
         "user_not_found": "Person nicht gefunden",
-        "name_taken": "Dieser Name ist schon vergeben",
-        "last_admin_demote": "Der letzte Elternteil kann nicht deaktiviert oder zum Kind gemacht werden",
         "allowance_children_only": "Nur Kinder können einen Jugendlohn haben",
-        "child_needs_pin": "Lege eine PIN fest, damit sich das Kind anmelden kann",
         "delete_child_accounts_first": "Lösche zuerst die eigenen Konten des Kindes",
         "only_parents_delete_users": "Nur Eltern können Personen entfernen",
         "last_admin_delete": "Der letzte Elternteil kann nicht entfernt werden",
@@ -403,3 +387,11 @@ def plural(key: str, count: int, **params) -> str:
 
 def api_error(status_code: int, key: str, headers: Optional[dict] = None, **params) -> HTTPException:
     return HTTPException(status_code=status_code, detail=text(key, **params), headers=headers)
+
+
+class CodedError(HTTPException):
+    """An error the frontend acts on, not just shows: the answer carries `code` next to the text (main.py)."""
+
+    def __init__(self, status_code: int, key: str, headers: Optional[dict] = None):
+        super().__init__(status_code=status_code, detail=text(key), headers=headers)
+        self.code = key

@@ -7,7 +7,7 @@ from datetime import date
 import pytest
 
 from app import reports
-from helpers import BASE_URL, admin_headers, category_id, create_account, register, user_id
+from helpers import add_member, BASE_URL, admin_headers, category_id, create_account, register, user_id
 
 TODAY = date(2026, 10, 15)
 WHEN = "2026-10-10T12:00:00Z"
@@ -105,7 +105,7 @@ def test_by_person(client, mum):
 
 def test_child_costs_include_items_for_a_dependent_child(client):
     admin = admin_headers(client)
-    client.post(f"{BASE_URL}/members", json={"username": "kid"}, headers=admin)
+    add_member(client, "kid")
     kid = user_id(client, admin, "kid")
     who = {"headers": admin, "account": create_account(client, admin)}
     receipt(client, who, [item(client, "Schuhe", 50, "Clothing", person_id=kid), item(client, "Brot", 5, "Groceries")])

@@ -1,7 +1,7 @@
 from typing import Optional
 
 from sqlalchemy.orm import Session, selectinload
-from . import auth, ibans, messages, models, schemas
+from . import ibans, messages, models, schemas
 from datetime import datetime, timezone
 
 
@@ -10,45 +10,12 @@ def get_user_by_username(db: Session, username: str):
     return db.query(models.User).filter(models.User.username == username).first()
 
 
-def create_user(db: Session, user: schemas.UserCreate):
-    hashed_pin = auth.get_pin_hash(user.pin)
-    db_user = models.User(
-        username=user.username,
-        pin_hash=hashed_pin,
-        role=user.role,
-        # A child with a login manages own money; younger children are added via create_member
-        has_allowance=True,
-    )
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
-
-
-def create_member(db: Session, username: str):
-    db_user = models.User(username=username, pin_hash=None, role=models.UserRole.CHILD, has_allowance=False)
-    db.add(db_user)
-    db.commit()
-    db.refresh(db_user)
-    return db_user
-
-
 def update_user(db: Session, user_id: str, user_update: schemas.UserUpdate):
     db_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not db_user:
         return None
 
-    update_data = user_update.dict(exclude_unset=True)
-
-    # Handle PIN update separately to hash it
-    if "pin" in update_data:
-        update_data["pin_hash"] = auth.get_pin_hash(update_data.pop("pin"))
-        # A new PIN (e.g. set by a parent for a locked-out child) ends a lock after wrong PINs
-        update_data.update(failed_logins=0, locked_until=None, lockouts=0)
-    # A new PIN or deactivation ends all of the user's logins
-    if "pin_hash" in update_data or update_data.get("is_active") is False:
-        update_data["token_version"] = (db_user.token_version or 0) + 1
-
+    update_data = user_update.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_user, key, value)
 

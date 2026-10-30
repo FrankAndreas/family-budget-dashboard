@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 
 from app import reports
-from helpers import BASE_URL, add_transaction, category_id, create_account, register, user_id
+from helpers import add_member, BASE_URL, add_transaction, category_id, create_account, register, user_id
 
 TODAY = date(2026, 10, 15)
 
@@ -92,7 +92,7 @@ class TestSummary:
         assert summary(client, mum, "3months")["expenses"] == 5.0
 
     def test_children(self, client, mum):
-        client.post(f"{BASE_URL}/members", json={"username": "Kim"}, headers=mum["headers"])
+        add_member(client, "Kim")
         kim = user_id(client, mum["headers"], "Kim")
         book(client, mum, "Clothing", 60, "2026-10-02", member_id=kim)
         book(client, mum, "Clothing", 40, "2026-10-02")

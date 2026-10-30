@@ -4,7 +4,7 @@ the AI and the name check accept both names."""
 from alembic import command
 from sqlalchemy import text
 
-from helpers import BASE_URL, create_account, register
+from helpers import set_language, BASE_URL, create_account, register
 
 from app import database, database_setup, models, seed
 from test_database import sqlite, without_link_checks
@@ -12,7 +12,7 @@ from test_database import sqlite, without_link_checks
 
 def german(client, name="mum"):
     headers = register(client, name)
-    client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=headers)
+    set_language(headers, "de")
     return headers
 
 

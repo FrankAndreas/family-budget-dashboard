@@ -1,109 +1,85 @@
+"""Who is logged in: the family hub's login (spec 2026-10-30, part B).
+
+At home the browser sends the hub's cookie `hub_session` (set for local.<domain>, so every family app gets it); tests
+and scripts may send the same token as `Authorization: Bearer`. The hub says whose login it is and whether they may
+use this app; the app's people come from the hub too (hub_people.py). No PINs here any more."""
+
 import logging
-import os
-import secrets
-from datetime import datetime, timedelta
 from typing import Optional
-import jwt
-import bcrypt
-from fastapi.security import OAuth2PasswordBearer
-from fastapi import Depends, HTTPException, status
+
+from fastapi import Depends, Request, status
+from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
-from . import schemas, database, models, i18n, messages
+
+from . import database, hub, hub_people, i18n, messages, models
 
 logger = logging.getLogger(__name__)
 
-# Signs the login tokens. Without SECRET_KEY a random key is used, which is safe but logs everyone
-# out whenever the backend restarts; set it (e.g. in .env) to keep sessions across restarts.
-SECRET_KEY = os.getenv("SECRET_KEY") or secrets.token_urlsafe(32)
-if not os.getenv("SECRET_KEY"):
-    logger.warning("SECRET_KEY is not set; using a random key, so logins won't survive a restart")
-ALGORITHM = "HS256"
-# A PIN has only 4 digits: after this many wrong ones in a row, the username is locked for a while
-MAX_WRONG_PINS = 5
-LOCK_MINUTES = 15
-# Each lockout in a row doubles the lock, up to a day: about 5 guesses a day once it is reached (issue #86). A day
-# after a lock ended, or after a correct login or a new PIN, it starts again at 15 minutes.
-MAX_LOCK_MINUTES = 24 * 60
-LOCKOUTS_FORGOTTEN_AFTER = timedelta(days=1)
-ACCESS_TOKEN_EXPIRE_MINUTES = 3000
-
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
-optional_oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token", auto_error=False)
+COOKIE = "hub_session"
+# With the cookie, a change must carry this header: another site can make the browser send the cookie (sibling apps
+# share the site), but not a custom header without this app allowing it (spec: CSRF)
+CSRF_HEADER = "X-Requested-With"
+CSRF_VALUE = "budget"
+SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 
 
-# PINs are hashed with bcrypt directly (passlib is unmaintained and breaks with bcrypt 5).
-# The hash format is unchanged, so PINs hashed by passlib keep working.
-def verify_pin(plain_pin: str, hashed_pin: str) -> bool:
+def request_token(request: Request) -> tuple[Optional[str], bool]:
+    """The hub token of the request, and whether it came as the cookie."""
+    scheme, _, value = request.headers.get("Authorization", "").partition(" ")
+    if scheme.lower() == "bearer" and value.strip():
+        return value.strip(), False
+    cookie = request.cookies.get(COOKIE)
+    return (cookie, True) if cookie else (None, False)
+
+
+def _not_logged_in() -> messages.CodedError:
+    return messages.CodedError(status.HTTP_401_UNAUTHORIZED, "not_logged_in", headers={"WWW-Authenticate": "Bearer"})
+
+
+def _active(db: Session, hub_id: int) -> Optional[models.User]:
+    return db.query(models.User).filter(models.User.hub_id == hub_id, models.User.is_active.is_(True)).first()
+
+
+def _resolve(request: Request, db: Session) -> tuple[models.User, hub.HubPerson]:
+    """The person behind the request's login. Blocking (the hub, the database): runs in a worker thread."""
+    token, from_cookie = request_token(request)
+    if not token:
+        raise _not_logged_in()
+    if from_cookie and request.method not in SAFE_METHODS and request.headers.get(CSRF_HEADER) != CSRF_VALUE:
+        raise messages.CodedError(status.HTTP_403_FORBIDDEN, "csrf")
     try:
-        return bcrypt.checkpw(plain_pin.encode(), hashed_pin.encode())
-    except ValueError:
-        # Not a valid bcrypt hash: treat it like a wrong PIN instead of a server error
-        return False
+        person, access = hub.session(token)
+        if person is None:
+            raise _not_logged_in()
+        if not access:
+            raise messages.CodedError(status.HTTP_403_FORBIDDEN, "no_access")
+        hub_people.refresh(db, token)
+        user = _active(db, person.id)
+        if user is None:
+            # Given access a moment ago: the people kept here are older than that
+            hub_people.refresh(db, token, force=True)
+            user = _active(db, person.id)
+    except hub.HubUnavailable as error:
+        logger.warning("The family hub can't be reached (%s)", error)
+        raise messages.CodedError(status.HTTP_503_SERVICE_UNAVAILABLE, "hub_unavailable") from None
+    if user is None:
+        raise messages.CodedError(status.HTTP_403_FORBIDDEN, "no_access")
+    return user, person
 
 
-# bcrypt's default cost; the tests lower it, because hashing dominated their run time
-PIN_HASH_ROUNDS = 12
-
-
-def get_pin_hash(pin: str) -> str:
-    return bcrypt.hashpw(pin.encode(), bcrypt.gensalt(rounds=PIN_HASH_ROUNDS)).decode()
-
-
-def lock_minutes(lockouts: int) -> int:
-    """15, 30, 60, ... minutes for the first, second, third lockout in a row; at most a day."""
-    return min(LOCK_MINUTES << max(lockouts - 1, 0), MAX_LOCK_MINUTES)
-
-
-def now() -> datetime:
-    """The current time as stored (naive UTC); tests replace it."""
-    return datetime.utcnow()
-
-
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-    if expires_delta:
-        expire = datetime.utcnow() + expires_delta
-    else:
-        expire = datetime.utcnow() + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
-    encoded_jwt = jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
-    return encoded_jwt
-
-
-async def get_current_user_from_token(
-    token: str = Depends(oauth2_scheme), db: Session = Depends(database.get_db)
-) -> models.User:
-    # Built before the token is checked, so in the browser's language (right for an expired login)
-    credentials_exception = messages.api_error(
-        status.HTTP_401_UNAUTHORIZED, "not_logged_in", headers={"WWW-Authenticate": "Bearer"}
-    )
-    try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
-        # The subject is the user id, so renaming a user keeps their session valid
-        user_id: Optional[str] = payload.get("sub")
-        if user_id is None:
-            raise credentials_exception
-        # Tokens issued before session versions existed have none: version 0
-        version = payload.get("ver", 0)
-        token_data = schemas.TokenData(user_id=user_id)
-    except jwt.PyJWTError:
-        raise credentials_exception
-
-    user = db.query(models.User).filter(models.User.id == token_data.user_id).first()
-    if user is None or not user.is_active or version != (user.token_version or 0):
-        raise credentials_exception
-    # From here on, the request speaks the person's language
-    i18n.set_current(i18n.user_language(user))
+async def get_current_user_from_token(request: Request, db: Session = Depends(database.get_db)) -> models.User:
+    user, person = await run_in_threadpool(_resolve, request, db)
+    # From here on, the request speaks the person's language (the hub's, which may be newer than the row's). Set here,
+    # in the request's own context: a worker thread's setting wouldn't reach the endpoint
+    i18n.set_current(person.language if person.language in i18n.LANGUAGES else i18n.user_language(user))
     return user
 
 
-async def get_optional_user(
-    token: Optional[str] = Depends(optional_oauth2_scheme), db: Session = Depends(database.get_db)
-) -> Optional[models.User]:
+async def get_optional_user(request: Request, db: Session = Depends(database.get_db)) -> Optional[models.User]:
     """The logged-in person if the request has a valid login, else None (for endpoints open to everyone)."""
-    if not token:
+    if request_token(request)[0] is None:
         return None
     try:
-        return await get_current_user_from_token(token, db)
-    except HTTPException:
+        return await get_current_user_from_token(request, db)
+    except messages.CodedError:
         return None

@@ -5,7 +5,7 @@ from datetime import date
 import pytest
 
 from app import common_api
-from helpers import BASE_URL, category_id, create_split, register, user_id
+from helpers import add_member, BASE_URL, category_id, create_split, register, user_id, remove_from_hub
 
 
 @pytest.fixture
@@ -13,7 +13,7 @@ def parents(client, monkeypatch):
     monkeypatch.setattr(common_api, "today", lambda: date(2026, 11, 20))
     mum = register(client, "mum")
     dad = register(client, "dad")
-    client.put(f"{BASE_URL}/users/{user_id(client, mum, 'Admin')}", json={"is_active": False}, headers=mum)
+    remove_from_hub("Admin")
     mum_id, dad_id = user_id(client, mum, "mum"), user_id(client, mum, "dad")
     split = create_split(client, mum, "By income", {mum_id: 70, dad_id: 30}).json()["id"]
     return {"mum": mum, "dad": dad, "mum_id": mum_id, "dad_id": dad_id, "split": split}
@@ -60,7 +60,7 @@ def test_planned_cost_validation(client, parents):
     teen = register(client, "teen", role="CHILD", by=mum)
     assert client.get(f"{BASE_URL}/planned-costs", headers=teen).status_code == 403
     # A younger child's bills are managed by the parents
-    timmy = client.post(f"{BASE_URL}/members", json={"username": "timmy"}, headers=mum).json()
+    timmy = {"id": add_member(client, "timmy"), "username": "timmy"}
     assert add_cost(client, parents["dad"], owner_id=timmy["id"], name="Football club").status_code == 200
 
 

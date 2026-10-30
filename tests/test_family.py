@@ -2,7 +2,7 @@
 
 import pytest
 
-from helpers import BASE_URL, add_transaction, category_id, create_account, login, register, user_id
+from helpers import add_member, BASE_URL, add_transaction, category_id, create_account, register, user_id
 
 
 @pytest.fixture
@@ -10,7 +10,7 @@ def family(client):
     mum = register(client, "mum")
     dad = register(client, "dad")
     teen = register(client, "teen", role="CHILD")
-    timmy = client.post(f"{BASE_URL}/members", json={"username": "timmy"}, headers=mum).json()
+    timmy = {"id": add_member(client, "timmy"), "username": "timmy"}
     return {
         "mum": mum,
         "dad": dad,
@@ -21,15 +21,6 @@ def family(client):
         "dad_account": create_account(client, dad, "Dad bank"),
         "teen_account": create_account(client, teen, "Teen bank"),
     }
-
-
-def test_dependent_child_has_no_login(client, family):
-    assert login(client, "timmy", "") == 401
-    assert login(client, "timmy", "1234") == 401
-
-
-def test_only_parents_add_members(client, family):
-    assert client.post(f"{BASE_URL}/members", json={"username": "x"}, headers=family["teen"]).status_code == 403
 
 
 def test_parents_are_private(client, family):
@@ -91,12 +82,12 @@ def test_parent_and_child_budgets(client, family):
 
 def test_switching_allowance(client, family):
     timmy, mum = family["timmy_id"], family["mum"]
-    assert client.put(f"{BASE_URL}/users/{timmy}", json={"has_allowance": True}, headers=mum).status_code == 400
+    # No PIN needed any more: the child logs in through the family hub
+    assert client.put(f"{BASE_URL}/users/{timmy}", json={"has_allowance": True}, headers=mum).status_code == 200
     assert (
         client.put(f"{BASE_URL}/users/{timmy}", json={"has_allowance": True, "pin": "5678"}, headers=mum).status_code
-        == 200
+        == 422
     )
-    assert isinstance(login(client, "timmy", "5678"), dict)
     # A child with own accounts can't become a dependent until those are gone
     assert (
         client.put(f"{BASE_URL}/users/{family['teen_id']}", json={"has_allowance": False}, headers=mum).status_code
