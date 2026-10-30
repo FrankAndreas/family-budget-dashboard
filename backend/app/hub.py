@@ -31,19 +31,20 @@ class HubUnavailable(Exception):
     """The hub didn't answer, or not as expected: nobody is let in."""
 
 
+# An empty setting counts as unset (docker-compose passes HUB_URL=${HUB_URL:-})
 def hub_url() -> str:
     """How this backend reaches the hub, e.g. http://<NAS_IP>:8086."""
-    return os.getenv("HUB_URL", "http://localhost:8086").rstrip("/")
+    return (os.getenv("HUB_URL") or "http://localhost:8086").rstrip("/")
 
 
 def public_url() -> str:
     """Where browsers log in, e.g. https://home.local.<domain>."""
-    return os.getenv("HUB_PUBLIC_URL", hub_url()).rstrip("/")
+    return (os.getenv("HUB_PUBLIC_URL") or hub_url()).rstrip("/")
 
 
 def app_key() -> str:
     """This app's key in the hub (Einstellungen → Apps)."""
-    return os.getenv("HUB_APP_KEY", "budget")
+    return os.getenv("HUB_APP_KEY") or "budget"
 
 
 def _person(data: dict) -> HubPerson:
@@ -93,7 +94,8 @@ _lock = threading.Lock()
 
 
 def session(token: str) -> tuple[Optional[HubPerson], bool]:
-    """fetch_session, kept for CACHE_SECONDS per token (keyed by its hash, never the token itself)."""
+    """fetch_session, kept for CACHE_SECONDS per token (keyed by its hash, never the token itself). Only a valid login
+    with access is kept: someone given access a moment ago gets in at once."""
     key = hashlib.sha256(token.encode()).hexdigest()
     now = time.monotonic()
     with _lock:
@@ -102,8 +104,9 @@ def session(token: str) -> tuple[Optional[HubPerson], bool]:
         if key in _cache:
             return _cache[key][1]
     found = fetch_session(token)
-    with _lock:
-        _cache[key] = (now, found)
+    if found[0] is not None and found[1]:
+        with _lock:
+            _cache[key] = (now, found)
     return found
 
 

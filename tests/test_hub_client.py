@@ -130,3 +130,26 @@ def test_settings(monkeypatch):
         "https://home.local.example.ch",
         "money",
     )
+
+
+def test_empty_settings_count_as_unset(monkeypatch):
+    # docker-compose passes HUB_URL=${HUB_URL:-}: an empty value, never a login address of "" (the app would send the
+    # browser to itself, again and again)
+    for name in ("HUB_URL", "HUB_PUBLIC_URL", "HUB_APP_KEY"):
+        monkeypatch.setenv(name, "")
+    assert (hub.hub_url(), hub.public_url(), hub.app_key()) == (
+        "http://localhost:8086",
+        "http://localhost:8086",
+        "budget",
+    )
+
+
+def test_no_access_not_kept(stub):
+    # Someone given access a moment ago gets in at once; only a valid login with access is kept for a minute
+    stub.session["access"] = False
+    assert hub.session(TOKEN)[1] is False
+    stub.session["access"] = True
+    assert hub.session(TOKEN)[1] is True
+    stub.session = {"valid": False, "person": None}
+    assert hub.session("tok-other") == (None, False)
+    assert len(stub.requests) == 3
