@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { expect, type APIRequestContext, type Page } from '@playwright/test';
+import { expect, request as playwrightRequest, type APIRequestContext, type Page } from '@playwright/test';
 
 // The Python with the backend's packages; a path is made absolute (Python warns about relative ones with "..")
 const configured = process.env.E2E_PYTHON ?? 'python3';
@@ -13,21 +13,30 @@ const HUB_HEADERS = { 'X-Requested-With': 'hub' };
 const ADMIN_PIN = '1111';
 const PIN = '1234';
 
-export interface Parent { name: string; token: string }
+// token: the hub login this app gets (hub_session); hubCookies: what the hub itself needs to change something
+// (hub_session and, from the hub's 2026-10-30 hardening on, hub_manage)
+export interface Parent { name: string; token: string; hubCookies: string }
 
-// The hub's login token for a person: the hub only sets it as the cookie, which this API context then drops again
-async function hubToken(request: APIRequestContext, name: string, pin: string): Promise<string> {
-    const response = await request.post(`${HUB}/api/login`, { data: { name, pin }, headers: HUB_HEADERS });
-    expect(response.ok(), await response.text()).toBeTruthy();
-    const cookie = response.headersArray().find(h => h.name.toLowerCase() === 'set-cookie' && h.value.startsWith('hub_session='));
-    expect(cookie, 'the hub sets hub_session').toBeTruthy();
-    await request.post(`${HUB}/api/logout`, { headers: HUB_HEADERS });
-    return cookie!.value.split(';')[0].slice('hub_session='.length);
+// A login at the hub, in a throwaway API context: logging out would end the login, so the cookies are only read
+async function hubCookies(name: string, pin: string): Promise<{ token: string; cookies: string }> {
+    const context = await playwrightRequest.newContext();
+    try {
+        const response = await context.post(`${HUB}/api/login`, { data: { name, pin }, headers: HUB_HEADERS });
+        expect(response.ok(), await response.text()).toBeTruthy();
+        const found = response.headersArray()
+            .filter(h => h.name.toLowerCase() === 'set-cookie' && /^hub_(session|manage)=/.test(h.value))
+            .map(h => h.value.split(';')[0]);
+        const session = found.find(c => c.startsWith('hub_session='));
+        expect(session, 'the hub sets hub_session').toBeTruthy();
+        return { token: session!.slice('hub_session='.length), cookies: found.join('; ') };
+    } finally {
+        await context.dispose();
+    }
 }
 
 async function asHubAdmin<T = any>(request: APIRequestContext, method: string, path: string, data?: unknown): Promise<T> {
-    const token = await hubToken(request, 'Admin', ADMIN_PIN);
-    const response = await request.fetch(`${HUB}${path}`, { method, data, headers: { ...HUB_HEADERS, Cookie: `hub_session=${token}` } });
+    const { cookies } = await hubCookies('Admin', ADMIN_PIN);
+    const response = await request.fetch(`${HUB}${path}`, { method, data, headers: { ...HUB_HEADERS, Cookie: cookies } });
     expect(response.ok(), `${method} ${path}: ${await response.text()}`).toBeTruthy();
     return response.json();
 }
@@ -53,14 +62,15 @@ export async function giveAccess(request: APIRequestContext, personId: number, a
 // it hasn't seen yet
 export async function setHubLanguage(request: APIRequestContext, person: Parent, language: 'de' | 'en'): Promise<void> {
     const response = await request.fetch(`${HUB}/api/me`, {
-        method: 'PATCH', data: { language }, headers: { ...HUB_HEADERS, Cookie: `hub_session=${person.token}` },
+        method: 'PATCH', data: { language }, headers: { ...HUB_HEADERS, Cookie: person.hubCookies },
     });
     expect(response.ok(), await response.text()).toBeTruthy();
 }
 
 // A family member logged in at the hub (their token), for people the tests add themselves
 export async function hubLogin(request: APIRequestContext, name: string): Promise<Parent> {
-    return { name, token: await hubToken(request, name, PIN) };
+    const { token, cookies } = await hubCookies(name, PIN);
+    return { name, token, hubCookies: cookies };
 }
 
 // Every test works as a parent of its own (accounts and wishes are private), so tests don't see each other's data

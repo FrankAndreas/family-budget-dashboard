@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import api, { errorCode, goToHub } from './api';
+import api, { errorCode, goToHubLogout } from './api';
 import { applyLanguage, type Language } from './i18n';
 
 interface User {
@@ -65,11 +65,9 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUser(response.data);
     };
 
-    // Logs out of every family app in this browser (the hub's cookie), then shows the hub's login
+    // Logs out in the family hub: that ends the login for every family app, then shows the hub's login
     const logout = async () => {
-        await api.post('/api/v1/logout');
-        setUser(null);
-        await goToHub(null);
+        await goToHubLogout();
     };
 
     return (

@@ -125,14 +125,9 @@ def test_concurrent_first_requests(client, family_hub):
     assert names == ["Admin", "Lena", "Max"]
 
 
-def test_logout_clears_cookie(client, monkeypatch):
-    monkeypatch.setenv("COOKIE_DOMAIN", "local.example.ch")
-    response = client.post(f"{BASE_URL}/logout", headers={"X-Requested-With": "budget"})
-    assert response.status_code == 200
-    cookie = response.headers["set-cookie"]
-    assert cookie.startswith("hub_session=")
-    assert "Domain=local.example.ch" in cookie
-    assert "Max-Age=0" in cookie or "expires=Thu, 01 Jan 1970" in cookie
+def test_logout_is_in_the_hub(client):
+    # "Log out" sends the browser to the hub's /logout, which ends the login for every app
+    assert client.post(f"{BASE_URL}/logout", headers={"X-Requested-With": "budget"}).status_code in (404, 405)
 
 
 def test_hub_login_url(client, monkeypatch):
