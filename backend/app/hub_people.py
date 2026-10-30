@@ -13,9 +13,12 @@ from sqlalchemy.orm import Session
 from . import hub, models
 
 REFRESH_SECONDS = 60
+# After the hub failed to answer, the next try waits this long (requests go on with the people kept here)
+BACKOFF_SECONDS = 10
 
 _lock = threading.Lock()
 _last = 0.0
+_running = False
 
 
 def forget() -> None:
@@ -26,30 +29,49 @@ def forget() -> None:
 
 def refresh(db: Session, token: str, force: bool = False) -> None:
     """Take this app's people from the hub, at most every REFRESH_SECONDS unless forced. Asked with the token of the
-    person using the app; when the hub answers no one (that person has no access), nothing changes."""
-    global _last
+    person using the app; when the hub answers no one (that person has no access), nothing changes. One refresh at a
+    time: other requests meanwhile go on with the people kept here instead of waiting for a slow hub."""
+    global _last, _running
     with _lock:
-        if not force and time.monotonic() - _last < REFRESH_SECONDS:
+        if _running or (not force and time.monotonic() - _last < REFRESH_SECONDS):
             return
-        people = hub.fetch_people(token)
+        _running = True
+    try:
+        try:
+            people = hub.fetch_people(token)
+        except hub.HubUnavailable:
+            with _lock:
+                _last = time.monotonic() - REFRESH_SECONDS + BACKOFF_SECONDS
+            raise
         if not people:
             return
-        try:
-            _apply(db, people)
-        except IntegrityError:
-            # Another process got there first: start from what it wrote
-            db.rollback()
-            _apply(db, people)
-        _last = time.monotonic()
+        with _lock:
+            try:
+                _apply(db, people)
+            except IntegrityError:
+                # Another process got there first: start from what it wrote
+                db.rollback()
+                _apply(db, people)
+            _last = time.monotonic()
+    finally:
+        with _lock:
+            _running = False
 
 
 def _apply(db: Session, people: list[hub.HubPerson]) -> None:
     rows = db.query(models.User).all()
     by_hub = {row.hub_id: row for row in rows if row.hub_id is not None}
-    unlinked = {row.username.casefold(): row for row in rows if row.hub_id is None and row.username}
+    # Rows from before the hub are linked by name at the switch only (while no row has a hub id yet), and only to a
+    # hub person of the same role: later, a new person with an old name would take over that row and its money
+    at_switch = not by_hub
+    unlinked = {row.username.casefold(): row for row in rows if at_switch and row.username}
     matched: dict[int, models.User] = {}
     for person in people:
-        row = by_hub.get(person.id) or unlinked.pop(person.name.casefold(), None)
+        row = by_hub.get(person.id)
+        if row is None:
+            candidate = unlinked.get(person.name.casefold())
+            if candidate is not None and candidate.role == models.UserRole(person.role):
+                row = unlinked.pop(person.name.casefold())
         if row is not None:
             row.hub_id = person.id
             matched[person.id] = row
@@ -77,6 +99,10 @@ def _apply(db: Session, people: list[hub.HubPerson]) -> None:
             )
             db.add(row)
         row.username = person.name
+        if row.role == models.UserRole.PARENT and person.role == "CHILD":
+            # A parent's money stays theirs: as a child with privacy on, the other parents don't see it
+            row.privacy_enabled = True
+            row.has_allowance = True
         row.role = models.UserRole(person.role)
         row.settings = {**(row.settings or {}), "language": person.language}
         row.is_active = True

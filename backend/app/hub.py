@@ -110,7 +110,10 @@ def session(token: str) -> tuple[Optional[HubPerson], bool]:
     return found
 
 
-def forget() -> None:
-    """Drop every kept answer (logging out, tests)."""
+def forget(token: Optional[str] = None) -> None:
+    """Drop the kept answer for one login (logging out), or all of them (tests)."""
     with _lock:
-        _cache.clear()
+        if token is None:
+            _cache.clear()
+        else:
+            _cache.pop(hashlib.sha256(token.encode()).hexdigest(), None)

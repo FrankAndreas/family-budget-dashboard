@@ -127,7 +127,7 @@ def test_concurrent_first_requests(client, family_hub):
 
 def test_logout_clears_cookie(client, monkeypatch):
     monkeypatch.setenv("COOKIE_DOMAIN", "local.example.ch")
-    response = client.post(f"{BASE_URL}/logout")
+    response = client.post(f"{BASE_URL}/logout", headers={"X-Requested-With": "budget"})
     assert response.status_code == 200
     cookie = response.headers["set-cookie"]
     assert cookie.startswith("hub_session=")
