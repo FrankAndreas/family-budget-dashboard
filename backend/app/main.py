@@ -4,13 +4,15 @@ import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
 
-from fastapi import FastAPI, Depends
+from fastapi import FastAPI, Depends, Request
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from . import (
     database,
     database_setup,
     api,
+    child_costs,
     common_api,
     export_api,
     import_api,
@@ -31,7 +33,7 @@ from . import (
     scans,
     i18n,
 )
-from .seed import seed_admin
+from . import hub, messages
 
 # The app's own lines (start-up status, receipt mails, AI errors) go to the container log next to uvicorn's;
 # without a handler Python would only print warnings
@@ -45,11 +47,10 @@ database_setup.setup(database.engine)
 
 logger = logging.getLogger(__name__)
 
-# Make sure a fresh database has categories (transactions need one) and a first parent to log in with;
+# Make sure a fresh database has categories (transactions need one); the people come from the family hub;
 # receipts read but never booked are removed after a day (issue #56), unreleased receipt mails after 30 (#57)
 with database.SessionLocal() as db:
     rule_presets.seed_new_database(db)
-    initial_pin = seed_admin(db)
     attachments.sweep(db)
     inbox.sweep(db)
     # Scanned receipts whose reading a restart cut off are read again
@@ -57,10 +58,7 @@ with database.SessionLocal() as db:
 logger.info(
     "Receipt mails: %s", "configured" if os.getenv("INBOUND_SECRET") else "not configured (INBOUND_SECRET empty)"
 )
-if initial_pin:
-    logger.warning(
-        "Created the first parent 'Admin' with INITIAL PIN %s. Log in and change it in Settings > Family.", initial_pin
-    )
+logger.info("Family hub: %s (logins at %s, app key %s)", hub.hub_url(), hub.public_url(), hub.app_key())
 
 
 async def sweep_daily() -> None:
@@ -96,6 +94,7 @@ app = FastAPI(
 )
 
 app.include_router(api.router, prefix="/api/v1")
+app.include_router(child_costs.router, prefix="/api/v1")
 app.include_router(common_api.router, prefix="/api/v1")
 app.include_router(export_api.router, prefix="/api/v1")
 app.include_router(import_api.router, prefix="/api/v1")
@@ -115,12 +114,22 @@ app.include_router(emails_api.router, prefix="/api/v1")
 app.include_router(inbox.router, prefix="/api/v1")
 app.include_router(scans.router, prefix="/api/v1")
 
+
+@app.exception_handler(messages.CodedError)
+async def coded_error(_request: Request, error: messages.CodedError) -> JSONResponse:
+    """An error the frontend acts on (not logged in, no access, hub down): the text and its code."""
+    return JSONResponse(
+        status_code=error.status_code, content={"detail": error.detail, "code": error.code}, headers=error.headers
+    )
+
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
     # Comma-separated; the browser tests run the frontend on their own port (e2e/playwright.config.ts)
     allow_origins=os.getenv("CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000").split(","),
-    allow_credentials=True,
+    # Logins come as the hub's cookie: no other site may send them along (spec 2026-10-30)
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

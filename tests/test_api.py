@@ -7,8 +7,9 @@ import pytest
 from datetime import datetime
 from fastapi.testclient import TestClient
 
+import fake_hub
 from app.main import app
-from helpers import admin_headers
+from helpers import register
 
 # Runs the API in-process against the temporary database set up in conftest.py
 client = TestClient(app)
@@ -18,69 +19,11 @@ BASE_URL = "/api/v1"
 class TestAuthentication:
     """Test authentication and user management"""
 
-    def test_register_user(self):
-        """Test user registration"""
-        response = client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": f"test_user_{datetime.now().timestamp()}", "pin": "1234", "role": "PARENT"},
-        )
-        assert response.status_code == 200
-        data = response.json()
-        assert "id" in data
-        assert "username" in data
-        assert data["role"] == "PARENT"
-
-    def test_register_duplicate_user(self):
-        """Test that duplicate usernames are rejected"""
-        username = f"duplicate_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": username, "pin": "1234", "role": "PARENT"},
-        )
-        response = client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": username, "pin": "1234", "role": "PARENT"},
-        )
-        assert response.status_code == 400
-
-    def test_login_success(self):
-        """Test successful login"""
-        username = f"login_test_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": username, "pin": "1234", "role": "PARENT"},
-        )
-        response = client.post(f"{BASE_URL}/login", json={"username": username, "pin": "1234"})
-        assert response.status_code == 200
-        data = response.json()
-        assert "access_token" in data
-        assert data["token_type"] == "bearer"
-
-    def test_login_wrong_pin(self):
-        """Test login with wrong PIN"""
-        username = f"wrong_pin_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": username, "pin": "1234", "role": "PARENT"},
-        )
-        response = client.post(f"{BASE_URL}/login", json={"username": username, "pin": "9999"})
-        assert response.status_code == 401
-
     def test_get_current_user(self):
         """Test getting current user info"""
         username = f"current_user_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": username, "pin": "1234", "role": "PARENT"},
-        )
-        token_response = client.post(f"{BASE_URL}/login", json={"username": username, "pin": "1234"})
-        token = token_response.json()["access_token"]
+        register(client, username, "PARENT")
+        token = fake_hub.token(username)
 
         response = client.get(f"{BASE_URL}/me", headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == 200
@@ -95,13 +38,8 @@ class TestAccountManagement:
     def auth_token(self):
         """Create a user and return auth token"""
         username = f"account_test_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": username, "pin": "1234", "role": "PARENT"},
-        )
-        response = client.post(f"{BASE_URL}/login", json={"username": username, "pin": "1234"})
-        return response.json()["access_token"]
+        register(client, username, "PARENT")
+        return fake_hub.token(username)
 
     def test_create_account(self, auth_token):
         """Test creating an account"""
@@ -139,13 +77,8 @@ class TestTransactionManagement:
     def setup_account(self):
         """Create user, login, and create account"""
         username = f"trans_test_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": username, "pin": "1234", "role": "PARENT"},
-        )
-        token_response = client.post(f"{BASE_URL}/login", json={"username": username, "pin": "1234"})
-        token = token_response.json()["access_token"]
+        register(client, username, "PARENT")
+        token = fake_hub.token(username)
 
         account_response = client.post(
             f"{BASE_URL}/accounts",
@@ -223,13 +156,8 @@ class TestBudgetManagement:
     def auth_setup(self):
         """Create user and get token with category"""
         username = f"budget_test_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": username, "pin": "1234", "role": "PARENT"},
-        )
-        token_response = client.post(f"{BASE_URL}/login", json={"username": username, "pin": "1234"})
-        token = token_response.json()["access_token"]
+        register(client, username, "PARENT")
+        token = fake_hub.token(username)
 
         categories = client.get(f"{BASE_URL}/categories", headers={"Authorization": f"Bearer {token}"}).json()
         category_id = next(c["id"] for c in categories if c["type"] == "EXPENSE")
@@ -275,25 +203,13 @@ class TestPrivacyEnforcement:
         """Test parent can see child's data when privacy is disabled"""
         # Create parent
         parent_username = f"parent_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": parent_username, "pin": "1111", "role": "PARENT"},
-        )
-        parent_token = client.post(f"{BASE_URL}/login", json={"username": parent_username, "pin": "1111"}).json()[
-            "access_token"
-        ]
+        register(client, parent_username, "PARENT")
+        parent_token = fake_hub.token(parent_username)
 
         # Create child
         child_username = f"child_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": child_username, "pin": "2222", "role": "CHILD"},
-        )
-        child_token = client.post(f"{BASE_URL}/login", json={"username": child_username, "pin": "2222"}).json()[
-            "access_token"
-        ]
+        register(client, child_username, "CHILD")
+        child_token = fake_hub.token(child_username)
 
         # Child creates account
         child_account = client.post(
@@ -312,25 +228,13 @@ class TestPrivacyEnforcement:
         """Test parent cannot see child's data when privacy is enabled"""
         # Create parent
         parent_username = f"parent_priv_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": parent_username, "pin": "1111", "role": "PARENT"},
-        )
-        parent_token = client.post(f"{BASE_URL}/login", json={"username": parent_username, "pin": "1111"}).json()[
-            "access_token"
-        ]
+        register(client, parent_username, "PARENT")
+        parent_token = fake_hub.token(parent_username)
 
         # Create child
         child_username = f"child_priv_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": child_username, "pin": "2222", "role": "CHILD"},
-        )
-        child_token = client.post(f"{BASE_URL}/login", json={"username": child_username, "pin": "2222"}).json()[
-            "access_token"
-        ]
+        register(client, child_username, "CHILD")
+        child_token = fake_hub.token(child_username)
 
         # Child creates account
         client.post(
@@ -353,14 +257,8 @@ class TestPrivacyEnforcement:
     def test_child_can_toggle_privacy(self):
         """Test child can enable and disable privacy"""
         child_username = f"child_toggle_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": child_username, "pin": "2222", "role": "CHILD"},
-        )
-        child_token = client.post(f"{BASE_URL}/login", json={"username": child_username, "pin": "2222"}).json()[
-            "access_token"
-        ]
+        register(client, child_username, "CHILD")
+        child_token = fake_hub.token(child_username)
 
         # Enable privacy
         response = client.patch(
@@ -381,14 +279,8 @@ class TestPrivacyEnforcement:
     def test_parent_cannot_toggle_privacy(self):
         """Test parent cannot modify privacy settings"""
         parent_username = f"parent_no_priv_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": parent_username, "pin": "1111", "role": "PARENT"},
-        )
-        parent_token = client.post(f"{BASE_URL}/login", json={"username": parent_username, "pin": "1111"}).json()[
-            "access_token"
-        ]
+        register(client, parent_username, "PARENT")
+        parent_token = fake_hub.token(parent_username)
 
         response = client.patch(
             f"{BASE_URL}/me/privacy",
@@ -405,12 +297,8 @@ class TestCategories:
         """Test getting all categories"""
         # Create a user to get token
         username = f"cat_test_{datetime.now().timestamp()}"
-        client.post(
-            f"{BASE_URL}/users",
-            headers=admin_headers(client),
-            json={"username": username, "pin": "1234", "role": "PARENT"},
-        )
-        token = client.post(f"{BASE_URL}/login", json={"username": username, "pin": "1234"}).json()["access_token"]
+        register(client, username, "PARENT")
+        token = fake_hub.token(username)
 
         response = client.get(f"{BASE_URL}/categories", headers={"Authorization": f"Bearer {token}"})
         assert response.status_code == 200

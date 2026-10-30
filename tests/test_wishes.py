@@ -3,14 +3,14 @@
 import pytest
 
 from app import database, models
-from helpers import BASE_URL, create_split, register, user_id
+from helpers import remove_id_from_hub, BASE_URL, create_split, register, user_id, remove_from_hub
 
 
 @pytest.fixture
 def family(client):
     mum = register(client, "mum")
     dad = register(client, "dad")
-    client.put(f"{BASE_URL}/users/{user_id(client, mum, 'Admin')}", json={"is_active": False}, headers=mum)
+    remove_from_hub("Admin")
     mum_id, dad_id = user_id(client, mum, "mum"), user_id(client, mum, "dad")
     split = create_split(client, mum, "Half", {mum_id: 50, dad_id: 50}).json()["id"]
     return {"mum": mum, "dad": dad, "mum_id": mum_id, "dad_id": dad_id, "split": split}
@@ -262,6 +262,7 @@ class TestCleanup:
         kid = register(client, "kid", role="CHILD", by=family["mum"])
         kid_id = user_id(client, family["mum"], "kid")
         wish(client, kid, "Game", kid_id)
+        remove_id_from_hub(kid_id)
         assert client.delete(f"{BASE_URL}/users/{kid_id}", headers=family["mum"]).status_code == 200
         with database.SessionLocal() as db:
             assert db.query(models.Wish).count() == 0

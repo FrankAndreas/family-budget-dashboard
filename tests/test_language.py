@@ -1,19 +1,12 @@
-"""Each person's language (issue #50): stored in users.settings, German by default, used for error messages."""
+"""Each person's language (issue #50): chosen in the family hub, German by default, used for error messages."""
 
-from helpers import BASE_URL, login, register
+from helpers import BASE_URL, login, register, set_language
 
 from app import i18n
 
 
 def me(client, headers):
     return client.get(f"{BASE_URL}/me", headers=headers).json()
-
-
-def test_language_defaults_to_the_configured_default(client, monkeypatch):
-    mum = register(client, "mum")
-    assert me(client, mum)["language"] == "en"
-    monkeypatch.setenv("DEFAULT_LANGUAGE", "de")
-    assert me(client, mum)["language"] == "de"
 
 
 def test_unsupported_default_falls_back_to_german(monkeypatch):
@@ -23,29 +16,20 @@ def test_unsupported_default_falls_back_to_german(monkeypatch):
     assert i18n.default_language() == "de"
 
 
-def test_set_language(client):
+def test_language_comes_from_the_hub(client):
     mum = register(client, "mum")
-    response = client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=mum)
-    assert response.status_code == 200 and response.json()["language"] == "de"
-    assert me(client, mum)["language"] == "de"
-    assert me(client, login(client, "mum"))["language"] == "de"
-
-
-def test_other_settings_are_kept(client):
-    mum = register(client, "mum")
-    client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=mum)
-    client.patch(f"{BASE_URL}/me/language", json={"language": "en"}, headers=mum)
     assert me(client, mum)["language"] == "en"
+    set_language(mum, "de")
+    assert me(client, mum)["language"] == "de"
+    # Error messages too
+    assert client.get(f"{BASE_URL}/accounts/nope/transactions", headers=mum).json()["detail"] == "Konto nicht gefunden"
 
 
-def test_unknown_language_is_rejected(client):
-    mum = register(client, "mum")
-    assert client.patch(f"{BASE_URL}/me/language", json={"language": "fr"}, headers=mum).status_code == 422
-
-
-def test_children_choose_their_own_language(client):
+def test_children_have_their_own_language(client):
     kid = register(client, "kid", role="CHILD")
-    assert client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=kid).status_code == 200
+    set_language(kid, "de")
+    assert me(client, kid)["language"] == "de"
+    assert me(client, login(client, "Admin"))["language"] == "en"
 
 
 def test_accept_language_parsing():

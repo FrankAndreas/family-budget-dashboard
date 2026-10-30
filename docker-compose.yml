@@ -18,12 +18,14 @@ services:
       - ./data:/app/data          # SQLite database
     environment:
       - DATABASE_URL=sqlite:///./data/budget.db
-      # Signs login tokens. If empty, a random key is used and everyone is
-      # logged out whenever the container restarts (e.g. on every update).
-      - SECRET_KEY=${SECRET_KEY:-}
-      # PIN for the first parent "Admin" on an empty database; empty means a
-      # random PIN, printed once in the backend log
-      - INITIAL_ADMIN_PIN=${INITIAL_ADMIN_PIN:-}
+      # The login is the family hub's (FrankAndreas/family-hub): how this
+      # backend reaches it (e.g. http://<NAS_IP>:8086), where browsers log in
+      # (https://home.local.<domain>), this app's key in the hub, and the
+      # hub's cookie domain (local.<domain>), so "Log out" here ends the login
+      - HUB_URL=${HUB_URL:-}
+      - HUB_PUBLIC_URL=${HUB_PUBLIC_URL:-}
+      - HUB_APP_KEY=${HUB_APP_KEY:-budget}
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN:-}
       # de or en: language of people who haven't picked one, and of a new
       # database's default categories
       - DEFAULT_LANGUAGE=${DEFAULT_LANGUAGE:-de}

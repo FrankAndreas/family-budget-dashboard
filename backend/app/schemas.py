@@ -4,12 +4,6 @@ from datetime import date, datetime, timezone
 from .models import UserRole, AccountType, CategoryType, ShareLevel
 from . import i18n
 
-# PINs are exactly 4 digits (same rule as the family-chore app)
-Pin = Annotated[str, Field(pattern=r"^\d{4}$")]
-
-# Names people log in with: surrounding spaces are dropped, and they can't be empty
-Username = Annotated[str, StringConstraints(strip_whitespace=True, min_length=1)]
-
 
 # User Schemas
 class UserBase(BaseModel):
@@ -17,23 +11,6 @@ class UserBase(BaseModel):
     role: UserRole = UserRole.PARENT
     privacy_enabled: bool = False
     has_allowance: bool = True
-
-
-class UserCreate(BaseModel):
-    # A parent, or a child with own allowance; both log in with a PIN
-    username: Username
-    pin: Pin
-    role: UserRole = UserRole.PARENT
-
-
-class MemberCreate(BaseModel):
-    # A dependent child added by a parent: no login, no own accounts
-    username: Username
-
-
-class UserLogin(BaseModel):
-    username: str
-    pin: str
 
 
 class User(UserBase):
@@ -46,28 +23,22 @@ class User(UserBase):
         from_attributes = True
 
 
-class LanguageUpdate(BaseModel):
-    language: Literal["de", "en"]
+class RemovedUser(BaseModel):
+    # Someone the family hub no longer lists for this app, whose data a parent may delete
+    id: str
+    username: str
+    role: UserRole
+
+    class Config:
+        from_attributes = True
 
 
 class UserUpdate(BaseModel):
-    username: Optional[Username] = None
-    role: Optional[UserRole] = None
+    # Only what this app knows about a person; name, role, PIN and who is in come from the family hub
+    model_config = {"extra": "forbid"}
+
     privacy_enabled: Optional[bool] = None
-    pin: Optional[Pin] = None
-    is_active: Optional[bool] = None
     has_allowance: Optional[bool] = None
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str
-    # Wrong PINs entered for this name since the last login
-    wrong_pins: int = 0
-
-
-class TokenData(BaseModel):
-    user_id: Optional[str] = None
 
 
 # Account Schemas

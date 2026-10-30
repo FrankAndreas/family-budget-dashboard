@@ -5,35 +5,30 @@ import re
 import string
 from pathlib import Path
 
-from helpers import BASE_URL, add_transaction, create_account, register
+from helpers import set_language, BASE_URL, add_transaction, create_account, register
 
 from app import messages
 
 WRONG = {"username": "nobody", "pin": "9999"}
 
 
-def test_wrong_pin_before_login_follows_the_browser(client):
-    german = client.post(f"{BASE_URL}/login", json=WRONG, headers={"Accept-Language": "de-CH,de;q=0.9"})
-    english = client.post(f"{BASE_URL}/login", json=WRONG, headers={"Accept-Language": "en-US"})
-    assert german.json()["detail"] == messages.MESSAGES["de"]["wrong_login"]
-    assert english.json()["detail"] == messages.MESSAGES["en"]["wrong_login"]
+def test_not_logged_in_follows_the_browser(client):
+    german = client.get(f"{BASE_URL}/me", headers={"Accept-Language": "de-CH,de;q=0.9"})
+    english = client.get(f"{BASE_URL}/me", headers={"Accept-Language": "en-US"})
+    assert german.json()["detail"] == messages.MESSAGES["de"]["not_logged_in"]
+    assert english.json()["detail"] == messages.MESSAGES["en"]["not_logged_in"]
 
 
 def test_without_a_header_the_default_applies(client, monkeypatch):
     monkeypatch.setenv("DEFAULT_LANGUAGE", "de")
-    assert client.post(f"{BASE_URL}/login", json=WRONG).json()["detail"] == messages.MESSAGES["de"]["wrong_login"]
+    assert client.get(f"{BASE_URL}/me").json()["detail"] == messages.MESSAGES["de"]["not_logged_in"]
 
 
 def test_the_persons_setting_beats_the_browser(client):
     mum = register(client, "mum")
-    client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=mum)
+    set_language(mum, "de")
     response = client.delete(f"{BASE_URL}/categories/nope", headers={**mum, "Accept-Language": "en"})
     assert response.json()["detail"] == messages.MESSAGES["de"]["category_not_found"]
-
-
-def test_too_many_wrong_pins_counts_minutes():
-    assert messages.plural("login_locked", 1) != messages.plural("login_locked", 2)
-    assert "2" in messages.plural("login_locked", 2)
 
 
 def placeholders(text):
@@ -101,7 +96,7 @@ def test_every_used_key_is_in_the_catalog():
 
 def test_category_in_use_counts_in_german(client):
     mum = register(client, "mum")
-    client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=mum)
+    set_language(mum, "de")
     category = client.post(f"{BASE_URL}/categories", json={"name": "Velo", "type": "EXPENSE"}, headers=mum).json()
     account = create_account(client, mum)
     add_transaction(client, mum, account, category["id"], 10)

@@ -5,7 +5,18 @@ from datetime import date
 import pytest
 
 from app import common_api
-from helpers import BASE_URL, add_transaction, category_id, create_account, create_split, register, user_id
+from helpers import (
+    remove_id_from_hub,
+    add_member,
+    BASE_URL,
+    add_transaction,
+    category_id,
+    create_account,
+    create_split,
+    register,
+    user_id,
+    remove_from_hub,
+)
 
 
 @pytest.fixture
@@ -13,7 +24,7 @@ def parents(client, monkeypatch):
     monkeypatch.setattr(common_api, "today", lambda: date(2026, 10, 14))
     mum = register(client, "mum")
     dad = register(client, "dad")
-    client.put(f"{BASE_URL}/users/{user_id(client, mum, 'Admin')}", json={"is_active": False}, headers=mum)
+    remove_from_hub("Admin")
     mum_id, dad_id = user_id(client, mum, "mum"), user_id(client, mum, "dad")
     return {
         "mum": mum,
@@ -31,6 +42,8 @@ def add_asset(client, headers, **fields):
 
 
 def remove_member(client, headers, member_id, items=None):
+    # Their data can only go once the family hub no longer lists them
+    remove_id_from_hub(member_id)
     body = {"items": items} if items is not None else None
     return client.request("DELETE", f"{BASE_URL}/users/{member_id}", json=body, headers=headers)
 
@@ -151,7 +164,7 @@ def test_removing_a_member_decides_where_items_go(client, parents):
 
 
 def test_removing_member_without_items(client, parents):
-    timmy = client.post(f"{BASE_URL}/members", json={"username": "timmy"}, headers=parents["mum"]).json()
+    timmy = {"id": add_member(client, "timmy"), "username": "timmy"}
     assert client.get(f"{BASE_URL}/users/{timmy['id']}/items", headers=parents["mum"]).json() == []
     assert remove_member(client, parents["mum"], timmy["id"]).status_code == 200
 

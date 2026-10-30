@@ -1,6 +1,6 @@
 """The 🔒 categories in each person's language; the stored (English) name stays the reference (issue #50)."""
 
-from helpers import BASE_URL, add_transaction, create_account, register
+from helpers import set_language, BASE_URL, add_transaction, create_account, register
 
 from app import database, models
 from app.seed import seed_categories
@@ -8,7 +8,7 @@ from app.seed import seed_categories
 
 def german(client, name="mum"):
     headers = register(client, name)
-    client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=headers)
+    set_language(headers, "de")
     return headers
 
 

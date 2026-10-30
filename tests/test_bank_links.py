@@ -3,7 +3,7 @@
 from test_bank_import import HOUSEHOLD, JOINT, account, bank_file, line
 from test_reconcile_states import listed, setup, statement, typed
 
-from helpers import BASE_URL, balance, category_id, register, user_id
+from helpers import set_language, BASE_URL, balance, category_id, register, user_id
 
 
 def items(client, *amounts, category="Groceries"):
@@ -62,7 +62,7 @@ def test_negative_difference(client):
 def test_german_difference_item(client):
     mum, account_id = setup(client)
     booking = imported(client, mum, account_id)
-    client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=mum)
+    set_language(mum, "de")
     response = client.put(f"{BASE_URL}/transactions/{booking['id']}", json={"items": items(client, 80.0)}, headers=mum)
     assert response.json()["items"][-1]["name"] == "Differenz"
 

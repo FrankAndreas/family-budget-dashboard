@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from helpers import BASE_URL, category_id, create_account, register, user_id
+from helpers import remove_id_from_hub, BASE_URL, category_id, create_account, register, user_id
 from mails import SECRET, post, with_pdf
 
 from app import attachments, database, inbox, models, receipt_ai
@@ -199,7 +199,9 @@ def test_forwarder_removed_keeps_the_entry(client):
     parent(client, "dad", "dad@example.ch")
     create_account(client, mum)
     entry = received(client)
-    assert client.delete(f"{BASE_URL}/users/{user_id(client, mum, 'dad')}", headers=mum).status_code == 200
+    dad_id = user_id(client, mum, "dad")
+    remove_id_from_hub(dad_id)
+    assert client.delete(f"{BASE_URL}/users/{dad_id}", headers=mum).status_code == 200
     [row] = listing(client, mum)
     assert row["id"] == entry and row["person_id"] is None and row["suggested_account_id"] is None
 

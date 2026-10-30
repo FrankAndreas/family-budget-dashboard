@@ -9,7 +9,7 @@ import FamilyManager from '../../components/FamilyManager';
 import CategoryManager from '../../components/CategoryManager';
 import TagManager from '../../components/TagManager';
 import ShareSettings from '../../components/ShareSettings';
-import Logins from '../../components/Logins';
+import HubSettings from '../../components/HubSettings';
 import CommonBudget from '../../components/CommonBudget';
 import Investments from '../../components/Investments';
 import YearlyBills from '../../components/YearlyBills';
@@ -26,7 +26,7 @@ import { accessTo, canWrite, dependents } from '../../family';
 
 export default function Dashboard() {
     const { t } = useTranslation();
-    const { user, logout, wrongPins, dismissWrongPins } = useAuth();
+    const { user, logout } = useAuth();
     const { users, shares, reload: reloadFamily } = useFamily();
     const { splits, reload: reloadSplits } = useSplits();
     const { assets, reload: reloadAssets } = useAssets();
@@ -114,18 +114,11 @@ export default function Dashboard() {
                             {t('dashboard.welcome', { name: user?.username, role: user ? t(`common.roles.${user.role}`) : '' })}
                         </p>
                     </div>
-                    <button onClick={logout} className="btn-primary">
+                    <button onClick={() => void logout()} className="btn-primary">
                         {t('dashboard.logout')}
                     </button>
                 </div>
             </div>
-
-            {wrongPins > 0 && (
-                <div role="alert" className="mb-4 sm:mb-6 p-4 bg-amber-500/15 border border-amber-500/50 rounded-lg text-amber-200 flex justify-between items-start gap-3">
-                    <span>{t('dashboard.wrongPins', { count: wrongPins })}</span>
-                    <button onClick={dismissWrongPins} className="text-amber-200 hover:text-white" aria-label={t('dashboard.wrongPinsOk')}>✕</button>
-                </div>
-            )}
 
             {error && (
                 <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 flex justify-between items-center">
@@ -239,7 +232,7 @@ export default function Dashboard() {
                     {user?.role === 'PARENT' && <CategoryManager />}
                     {user?.role === 'PARENT' && <TagManager />}
                     <ShareSettings />
-                    <Logins />
+                    <HubSettings />
                     <DataManager onDataChanged={refresh} />
                 </div>
             )}

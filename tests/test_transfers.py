@@ -2,7 +2,17 @@
 
 import pytest
 
-from helpers import BASE_URL, add_transaction, balance, category_id, create_account, register, user_id
+from helpers import (
+    add_member,
+    BASE_URL,
+    add_transaction,
+    balance,
+    category_id,
+    create_account,
+    register,
+    user_id,
+    remove_from_hub,
+)
 from test_import import csv_file, preview, upload
 
 HEADER = "date,account,category,amount,direction,description,for,item"
@@ -68,7 +78,7 @@ class TestImport:
         assert error in rows[0]["errors"]
 
     def test_transfer_takes_no_tags(self, client, mum):
-        client.post(f"{BASE_URL}/members", json={"username": "Kim"}, headers=mum["headers"])
+        add_member(client, "Kim")
         rows = preview(client, mum["headers"], csv_file("2026-09-01,Bank,Transfer,5,out,,Kim,", header=HEADER))["rows"]
         assert "A transfer can't be for a child, shared or linked to an investment" in rows[0]["errors"]
 
@@ -141,7 +151,7 @@ class TestSettleUpUnchanged:
     def settled(self, client):
         mum = register(client, "mum")
         dad = register(client, "dad")
-        client.put(f"{BASE_URL}/users/{user_id(client, mum, 'Admin')}", json={"is_active": False}, headers=mum)
+        remove_from_hub("Admin")
         mum_account, dad_account = create_account(client, mum, "Mum bank"), create_account(client, dad, "Dad bank")
         response = client.post(
             f"{BASE_URL}/settlements",

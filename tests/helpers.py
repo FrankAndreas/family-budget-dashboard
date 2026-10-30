@@ -4,29 +4,73 @@ BASE_URL = "/api/v1"
 
 # The first parent every test database starts with (see conftest.py)
 ADMIN = "Admin"
-ADMIN_PIN = "0000"
 
 
 def admin_headers(client):
-    return login(client, ADMIN, ADMIN_PIN)
+    return login(client, ADMIN)
 
 
-def register(client, username, role="PARENT", pin="1234", by=None):
-    """Have a parent (default: the admin) add a family member, then log in as them."""
-    client.post(
-        f"{BASE_URL}/users",
-        json={"username": username, "pin": pin, "role": role},
-        headers=by or admin_headers(client),
-    )
-    return login(client, username, pin)
+def bearer(token):
+    return {"Authorization": f"Bearer {token}"}
 
 
-def login(client, username, pin="1234"):
-    """Auth headers for the user, or the failed response's status code."""
-    response = client.post(f"{BASE_URL}/login", json={"username": username, "pin": pin})
-    if response.status_code != 200:
-        return response.status_code
-    return {"Authorization": f"Bearer {response.json()['access_token']}"}
+def register(client, username, role="PARENT", pin=None, by=None):
+    """A family member added in the (fake) hub with access to the app, logged in. A child added this way has their own
+    allowance (Jugendlohn), as a parent would switch it on; add_member() adds a dependent child. `pin` and `by` are
+    from before the family hub and ignored."""
+    import fake_hub
+    from app import database, models
+
+    headers = bearer(fake_hub.current.add(username, role))
+    # The first request makes the app's row for the new person
+    assert client.get(f"{BASE_URL}/me", headers=headers).status_code == 200
+    if role == "CHILD":
+        with database.SessionLocal() as db:
+            db.query(models.User).filter(models.User.username == username).update({"has_allowance": True})
+            db.commit()
+    return headers
+
+
+def add_member(client, name):
+    """A dependent child (no Jugendlohn) in the hub with access to the app; returns their id in the app."""
+    import fake_hub
+
+    hub = fake_hub.current
+    hub.add(name, "CHILD")
+    parent = next(n for n in sorted(hub.access) if hub.people[n].role == "PARENT")
+    return user_id(client, bearer(fake_hub.token(parent)), name)
+
+
+def remove_from_hub(name):
+    """The hub no longer lists the person for this app (was: deactivating them here); their data stays, hidden."""
+    import fake_hub
+
+    fake_hub.current.remove_access(name)
+
+
+def remove_id_from_hub(person_id):
+    """remove_from_hub() for a person known by their id in the app (before deleting their data here)."""
+    from app import database, models
+
+    with database.SessionLocal() as db:
+        remove_from_hub(db.query(models.User).filter(models.User.id == person_id).one().username)
+
+
+def set_language(headers, language):
+    """The person (by their login headers) picks a language in the hub, where it now lives."""
+    import fake_hub
+
+    name = headers["Authorization"].removeprefix("Bearer tok-")
+    fake_hub.current.set_language(name, language)
+
+
+def login(client, username, pin=None):
+    """Auth headers for a person the (fake) hub knows, or 401 for anyone else."""
+    import fake_hub
+
+    if username not in fake_hub.current.people:
+        return 401
+    return bearer(fake_hub.token(username))
 
 
 def user_id(client, headers, username):

@@ -81,7 +81,9 @@ test('an investment with two tags', async ({ page, request }) => {
     const card = page.locator('div.rounded-lg', { has: page.getByRole('heading', { name: 'Velo' }) });
     await card.first().getByRole('button', { name: 'Edit', exact: true }).click();
     await expect(page.getByLabel(`Tag Mobility ${parent.name}`)).toBeChecked();
-    await page.getByLabel(`Tag Bike ${parent.name}`).check({ force: true });
+    // The chip around the visually hidden checkbox: a forced click on the box itself can land elsewhere
+    await page.locator('label', { has: page.getByLabel(`Tag Bike ${parent.name}`) }).click();
+    await expect(page.getByLabel(`Tag Bike ${parent.name}`)).toBeChecked();
     await page.getByRole('button', { name: 'Save', exact: true }).click();
 
     for (const name of [`Mobility ${parent.name}`, `Bike ${parent.name}`]) {

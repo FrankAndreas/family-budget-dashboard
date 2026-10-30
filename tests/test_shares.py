@@ -2,7 +2,16 @@
 
 import pytest
 
-from helpers import BASE_URL, add_transaction, category_id, create_account, register, user_id
+from helpers import (
+    remove_id_from_hub,
+    add_member,
+    BASE_URL,
+    add_transaction,
+    category_id,
+    create_account,
+    register,
+    user_id,
+)
 
 
 @pytest.fixture
@@ -92,7 +101,7 @@ def test_shares_listed_for_both_parents(client, parents):
 def test_share_only_with_a_parent(client, parents):
     teen = register(client, "teen", role="CHILD")
     teen_id = user_id(client, parents["mum"], "teen")
-    timmy = client.post(f"{BASE_URL}/members", json={"username": "timmy"}, headers=parents["mum"]).json()
+    timmy = {"id": add_member(client, "timmy"), "username": "timmy"}
     register(client, "sis", role="CHILD")
     sis_id = user_id(client, parents["mum"], "sis")
     assert share(client, parents["mum"], teen_id, "VIEW").status_code == 400
@@ -146,5 +155,6 @@ def test_child_can_hide_from_one_parent(client, parents):
 
 def test_deleting_parent_removes_their_shares(client, parents):
     share(client, parents["dad"], parents["mum_id"], "VIEW")
+    remove_id_from_hub(parents["dad_id"])
     client.delete(f"{BASE_URL}/users/{parents['dad_id']}", headers=parents["mum"])
     assert client.get(f"{BASE_URL}/shares", headers=parents["mum"]).json() == []

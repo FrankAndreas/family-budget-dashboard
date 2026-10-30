@@ -9,7 +9,7 @@ import pytest
 from files import image_png, pdf_with_text
 
 from app import attachments, database, inbox, models, receipt_ai, scans
-from helpers import BASE_URL, category_id, create_account, register
+from helpers import set_language, BASE_URL, category_id, create_account, register
 
 PHOTOS = f"{BASE_URL}/inbox/photos"
 
@@ -179,7 +179,7 @@ def test_upload_reads_in_background(client, ai):
 
 def test_reads_in_takers_language(client, ai):
     mum = register(client, "mum")
-    client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=mum)
+    set_language(mum, "de")
     scanned(client, mum)
     german = receipt_ai.PROMPTS["de"].split("{")[0][:40]
     assert ai.questions[0].startswith(german)

@@ -1,32 +1,40 @@
 import axios from 'axios';
 import i18n from './i18n';
 
+// Same origin: the family hub's login cookie comes along (nginx, or Vite in development, forwards /api)
 const api = axios.create({
-    baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000',
+    baseURL: import.meta.env.VITE_API_URL || '',
 });
 
 api.interceptors.request.use((config) => {
-    const token = localStorage.getItem('token');
-    if (token) {
-        config.headers.Authorization = `Bearer ${token}`;
-    }
+    // The backend refuses changes without it: another site can make the browser send the cookie, not this header
+    config.headers['X-Requested-With'] = 'budget';
     // Error messages from the backend come in the language on screen (before login too)
     config.headers['Accept-Language'] = i18n.language;
     return config;
 });
 
-// Expired or invalid token: drop it and send the user back to the login page
+// The login ended (logged out in the hub, a new PIN): log in at the hub, which sends the browser back here
 api.interceptors.response.use(
     (response) => response,
     (error) => {
-        const isLoginRequest = error.config?.url?.endsWith('/login');
-        if (error.response?.status === 401 && !isLoginRequest && localStorage.getItem('token')) {
-            localStorage.removeItem('token');
-            window.location.href = '/login';
+        if (axios.isAxiosError(error) && error.response?.status === 401 && !error.config?.url?.endsWith('/hub')) {
+            void goToHub();
         }
         return Promise.reject(error);
     }
 );
+
+// Where the family hub's login is, from the backend (HUB_PUBLIC_URL); with next=, the hub sends the browser back
+export async function goToHub(next: string | null = window.location.href): Promise<void> {
+    const { data } = await api.get<{ login_url: string }>('/api/v1/hub');
+    window.location.href = next ? `${data.login_url}/?next=${encodeURIComponent(next)}` : data.login_url;
+}
+
+// The `code` of an error the app acts on (no_access, hub_unavailable, not_logged_in, read_only_child)
+export function errorCode(error: unknown): string | undefined {
+    return axios.isAxiosError(error) ? error.response?.data?.code : undefined;
+}
 
 // Turn an API error into a message for the user (FastAPI sends `detail` as text or a list of validation errors)
 export function errorMessage(error: unknown, fallback: string): string {

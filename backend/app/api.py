@@ -1,9 +1,9 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, Request, Response, status
 from sqlalchemy.orm import Session
 from typing import List, Optional
 import logging
-import math
-from datetime import datetime, timedelta
+import os
+from datetime import datetime
 from fastapi import Body
 
 from . import (
@@ -12,12 +12,13 @@ from . import (
     crud,
     schemas,
     auth,
+    hub,
+    hub_people,
     database,
     models,
     privacy,
     reconcile,
     reports,
-    i18n,
     items,
     messages,
 )
@@ -74,88 +75,22 @@ def check_asset(db: Session, current_user, asset_id: Optional[str], linked: Opti
         raise messages.api_error(400, "investment_archived")
 
 
-# Auth Routes
-@router.post("/users", response_model=schemas.User)
-def create_user(
-    user: schemas.UserCreate,
-    current_user: models.User = Depends(auth.get_current_user_from_token),
-    db: Session = Depends(database.get_db),
-):
-    # No public sign-up: parents add family members (the first parent is created on startup)
-    if current_user.role != "PARENT":
-        raise messages.api_error(403, "only_parents_add_members")
-    if crud.get_user_by_username(db, username=user.username):
-        raise messages.api_error(400, "username_taken")
-    return crud.create_user(db=db, user=user)
-
-
-@router.post("/login", response_model=schemas.Token)
-def login(user: schemas.UserLogin, db: Session = Depends(database.get_db)):
-    db_user = crud.get_user_by_username(db, username=user.username)
-    now = auth.now()
-    # Locked after too many wrong PINs: refused even with the right PIN, so guessing can't go on
-    if db_user and db_user.locked_until and db_user.locked_until > now:
-        minutes = math.ceil((db_user.locked_until - now).total_seconds() / 60)
-        detail = (
-            messages.plural("login_locked_hours", math.ceil(minutes / 60))
-            if minutes >= 60
-            else messages.plural("login_locked", minutes)
-        )
-        raise HTTPException(status_code=status.HTTP_429_TOO_MANY_REQUESTS, detail=detail)
-    if not db_user or not db_user.pin_hash or not auth.verify_pin(user.pin, db_user.pin_hash):
-        # Unknown names aren't counted (nothing to protect, and it doesn't reveal which names exist)
-        if db_user and db_user.pin_hash:
-            db_user.failed_logins = (db_user.failed_logins or 0) + 1
-            db_user.wrong_pins = (db_user.wrong_pins or 0) + 1
-            if db_user.failed_logins >= auth.MAX_WRONG_PINS:
-                # The last lock ended long ago (or there was none): this one counts as the first again
-                recent = db_user.locked_until and db_user.locked_until > now - auth.LOCKOUTS_FORGOTTEN_AFTER
-                db_user.lockouts = (db_user.lockouts or 0) + 1 if recent else 1
-                minutes = auth.lock_minutes(db_user.lockouts)
-                db_user.locked_until = now + timedelta(minutes=minutes)
-                db_user.failed_logins = 0
-                logger.warning(
-                    "Login for '%s' locked for %d minutes after %d wrong PINs (lockout %d in a row)",
-                    db_user.username,
-                    minutes,
-                    auth.MAX_WRONG_PINS,
-                    db_user.lockouts,
-                )
-            db.commit()
-        raise messages.api_error(status.HTTP_401_UNAUTHORIZED, "wrong_login", headers={"WWW-Authenticate": "Bearer"})
-    if not db_user.is_active:
-        raise messages.api_error(status.HTTP_403_FORBIDDEN, "login_deactivated")
-    # The person learns about wrong PINs entered for their name since their last login (issue #86)
-    wrong_pins = db_user.wrong_pins or 0
-    if db_user.failed_logins or db_user.locked_until or db_user.lockouts or wrong_pins:
-        db_user.failed_logins, db_user.locked_until, db_user.lockouts, db_user.wrong_pins = 0, None, 0, 0
-        db.commit()
-    access_token = auth.create_access_token(
-        data={"sub": db_user.id, "ver": db_user.token_version or 0},
-        expires_delta=timedelta(minutes=auth.ACCESS_TOKEN_EXPIRE_MINUTES),
-    )
-    return {"access_token": access_token, "token_type": "bearer", "wrong_pins": wrong_pins}
-
-
 @router.get("/users", response_model=List[schemas.User])
 def read_users(
-    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
-):
-    return [user for user in db.query(crud.models.User).all() if privacy.can_list_user(current_user, user)]
-
-
-@router.post("/members", response_model=schemas.User)
-def create_member(
-    member: schemas.MemberCreate,
+    request: Request,
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
-    # A parent adds a younger child who has no own money and no login
-    if current_user.role != "PARENT":
-        raise messages.api_error(403, "only_parents_add_members")
-    if crud.get_user_by_username(db, username=member.username):
-        raise messages.api_error(400, "username_taken")
-    return crud.create_member(db, username=member.username)
+    # The people the family hub lists for this app; removed ones stay hidden with their data (spec 2026-10-30). A
+    # parent looking at the family (Settings) sees the hub's list as it is now, not up to a minute old
+    if current_user.role == "PARENT":
+        token, _ = auth.request_token(request)
+        try:
+            hub_people.refresh(db, token or "", force=True)
+        except hub.HubUnavailable:
+            raise messages.CodedError(503, "hub_unavailable") from None
+    people = db.query(crud.models.User).filter(crud.models.User.is_active.is_(True)).all()
+    return [user for user in people if privacy.can_list_user(current_user, user)]
 
 
 @router.get("/me", response_model=schemas.User)
@@ -170,8 +105,7 @@ def update_user(
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
-    # Only PARENT can update other users (or themselves)
-    # CHILD can update themselves? Maybe just Parents for now based on requirements "Admin user... edit a user"
+    """What only this app knows about a person: Jugendlohn and privacy. Name, role and PIN are the family hub's."""
     if current_user.role != "PARENT":
         raise messages.api_error(403, "only_parents_update_users")
 
@@ -179,27 +113,43 @@ def update_user(
     if not target_user:
         raise messages.api_error(404, "user_not_found")
 
-    if user_update.username is not None:
-        existing = crud.get_user_by_username(db, username=user_update.username)
-        if existing and existing.id != target_user.id:
-            raise messages.api_error(400, "name_taken")
-
-    # Deactivating or demoting an active parent must leave at least one other active parent
-    is_active_parent = target_user.role == "PARENT" and target_user.is_active
-    removes_parent = user_update.is_active is False or (user_update.role is not None and user_update.role != "PARENT")
-    if is_active_parent and removes_parent and crud.count_admins(db) <= 1:
-        raise messages.api_error(400, "last_admin_demote")
-
     if user_update.has_allowance is not None and user_update.has_allowance != target_user.has_allowance:
         if target_user.role != "CHILD":
             raise messages.api_error(400, "allowance_children_only")
-        # Getting an own allowance means logging in and managing money, so the child needs a PIN
-        if user_update.has_allowance and not target_user.pin_hash and not user_update.pin:
-            raise messages.api_error(400, "child_needs_pin")
         if not user_update.has_allowance and crud.get_accounts(db, user_id):
             raise messages.api_error(400, "delete_child_accounts_first")
 
     return crud.update_user(db, user_id, user_update)
+
+
+@router.post("/logout")
+def logout(response: Response):
+    """Ends the family login in this browser, for every app: the hub's cookie is set for local.<domain>, which this app
+    may clear too. "Log out everywhere" is in the hub."""
+    response.delete_cookie(auth.COOKIE, path="/", domain=os.getenv("COOKIE_DOMAIN") or None)
+    hub.forget()
+    return {"logged_out": True}
+
+
+@router.get("/hub")
+def hub_login():
+    """Where the browser logs in (the family hub), for a visitor without a login."""
+    return {"login_url": hub.public_url()}
+
+
+@router.get("/users/removed", response_model=List[schemas.RemovedUser])
+def removed_users(
+    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
+):
+    """People the family hub no longer lists for this app: their data is kept until a parent deletes it here."""
+    if current_user.role != "PARENT":
+        raise messages.api_error(403, "only_parents_delete_users")
+    return (
+        db.query(crud.models.User)
+        .filter(crud.models.User.is_active.is_(False))
+        .order_by(crud.models.User.username)
+        .all()
+    )
 
 
 @router.delete("/users/{user_id}", response_model=schemas.User)
@@ -215,43 +165,13 @@ def delete_user(
     user_to_delete = db.query(crud.models.User).filter(crud.models.User.id == user_id).first()
     if not user_to_delete:
         raise messages.api_error(404, "user_not_found")
-
-    # Check if we are deleting an admin (PARENT)
-    if user_to_delete.role == "PARENT":
-        # Check if it's the last active admin
-        admin_count = crud.count_admins(db)
-        # If we are deleting/inactivating an active admin, we need to ensure at least one OTHER active admin remains
-        # If user is active, count includes them. So if count <= 1, we can't delete.
-        if user_to_delete.is_active and admin_count <= 1:
-            raise messages.api_error(400, "last_admin_delete")
+    # Only people the family hub no longer lists: an active family member's data is never deleted by mistake
+    if user_to_delete.is_active:
+        raise messages.api_error(409, "still_in_hub")
 
     # Their investments and yearly bills go where the parent decided (409 lists any without a decision)
     apply_item_decisions(db, user_id, removal.items if removal else [])
     return crud.delete_user(db, user_id)
-
-
-@router.post("/me/logout-everywhere")
-def logout_everywhere(
-    current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
-):
-    """End all of the user's logins, on every device, this one included."""
-    current_user.token_version = (current_user.token_version or 0) + 1
-    db.commit()
-    return {"logged_out": True}
-
-
-@router.patch("/me/language", response_model=schemas.User)
-def set_language(
-    change: schemas.LanguageUpdate,
-    db: Session = Depends(database.get_db),
-    current_user: models.User = Depends(auth.get_current_user_from_token),
-):
-    # A new dict, so SQLAlchemy sees the JSON column change
-    current_user.settings = {**(current_user.settings or {}), "language": change.language}
-    db.commit()
-    db.refresh(current_user)
-    i18n.set_current(change.language)
-    return current_user
 
 
 @router.patch("/me/privacy")
@@ -637,12 +557,14 @@ def delete_budget(
 def get_shares(
     current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
 ):
-    # What the current user shared, and what was shared with them
-    return (
+    # What the current user shared, and what was shared with them; not with people removed in the hub
+    shares = (
         db.query(models.Share)
         .filter((models.Share.owner_id == current_user.id) | (models.Share.grantee_id == current_user.id))
         .all()
     )
+    active = {u.id for u in db.query(models.User).filter(models.User.is_active.is_(True))}
+    return [s for s in shares if s.owner_id in active and s.grantee_id in active]
 
 
 @router.put("/shares/{grantee_id}")

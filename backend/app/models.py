@@ -55,6 +55,9 @@ class User(Base):
 
     id: Mapped[str] = mapped_column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
     username: Mapped[str] = mapped_column(String, unique=True, index=True, nullable=True)
+    # The person's id in the family hub, where people, PINs and logins live (spec 2026-10-30); None for a row from
+    # before the hub until its first login links it by name
+    hub_id: Mapped[Optional[int]] = mapped_column(Integer, unique=True, index=True, nullable=True)
     # None for children added by a parent without their own login
     pin_hash: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     role: Mapped[UserRole] = mapped_column(Enum(UserRole), default=UserRole.PARENT, nullable=True)
@@ -63,6 +66,7 @@ class User(Base):
     has_allowance: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
     # If privacy_enabled is True, other parents cannot see this user's details (mainly for children feature)
     privacy_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=True)
+    # Whether the family hub lists the person for this app; a removed person is hidden here, their data kept
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=True)
     settings: Mapped[Any] = mapped_column(JSON, default={}, nullable=True)
     # Wrong PINs in a row, and until when logins are refused after too many (see auth.MAX_WRONG_PINS)

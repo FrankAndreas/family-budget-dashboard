@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 
 from PIL import Image
 
-from helpers import BASE_URL, add_transaction, category_id, create_account, register
+from helpers import remove_id_from_hub, BASE_URL, add_transaction, category_id, create_account, register
 
 from app import attachments, database, models
 
@@ -153,9 +153,9 @@ def test_removing_the_uploader_keeps_the_receipt_on_someone_elses_booking(client
     tx = booking(client, admin)
     stored = upload(client, mum, tx["id"], "beleg.png", PNG).json()
     assert "id" in stored, stored
-    removed = client.request(
-        "DELETE", f"{BASE_URL}/users/{user_id(client, admin, 'mum')}", json={"items": []}, headers=admin
-    )
+    mum_id = user_id(client, admin, "mum")
+    remove_id_from_hub(mum_id)
+    removed = client.request("DELETE", f"{BASE_URL}/users/{mum_id}", json={"items": []}, headers=admin)
     assert removed.status_code == 200
     listed = client.get(f"{BASE_URL}/accounts/{tx['account_id']}/transactions", headers=admin).json()
     assert [a["id"] for a in listed[0]["attachments"]] == [stored["id"]]

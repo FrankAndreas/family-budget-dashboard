@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from helpers import BASE_URL, admin_headers, create_account, register, user_id
+from helpers import set_language, BASE_URL, admin_headers, create_account, register, user_id
 
 from app import database, models
 
@@ -33,7 +33,7 @@ def test_name_rules(client):
 
 def test_duplicate_in_german(client):
     admin = admin_headers(client)
-    client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=admin)
+    set_language(admin, "de")
     add(client, admin, "Velo")
     assert add(client, admin, "VELO").json()["detail"] == "Einen Tag mit diesem Namen gibt es schon"
 

@@ -1,6 +1,6 @@
 """Bookings with items (issue #56): the booking's amount is the items' sum, its category the largest item's."""
 
-from helpers import BASE_URL, admin_headers, category_id, create_account, create_split, register, user_id
+from helpers import add_member, BASE_URL, admin_headers, category_id, create_account, create_split, register, user_id
 
 TX = f"{BASE_URL}/transactions"
 
@@ -98,7 +98,7 @@ def test_person_must_be_visible(client):
 
 def test_person_for_an_item(client):
     admin = admin_headers(client)
-    client.post(f"{BASE_URL}/members", json={"username": "kid"}, headers=admin)
+    add_member(client, "kid")
     kid = user_id(client, admin, "kid")
     booking = receipt(
         client,

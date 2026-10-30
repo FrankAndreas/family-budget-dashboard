@@ -5,6 +5,8 @@ import json
 import pytest
 
 from helpers import (
+    add_member,
+    remove_from_hub,
     BASE_URL,
     add_transaction,
     balance,
@@ -55,9 +57,9 @@ def csv_file(*lines, header=HEADER):
 def family(client):
     mum = register(client, "mum")
     dad = register(client, "dad")
-    client.put(f"{BASE_URL}/users/{user_id(client, mum, 'Admin')}", json={"is_active": False}, headers=mum)
+    remove_from_hub("Admin")
     mum_id, dad_id = user_id(client, mum, "mum"), user_id(client, mum, "dad")
-    client.post(f"{BASE_URL}/members", json={"username": "Timmy"}, headers=mum)
+    add_member(client, "Timmy")
     return {
         "mum": mum,
         "dad": dad,

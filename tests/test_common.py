@@ -2,16 +2,25 @@
 
 import pytest
 
-from helpers import BASE_URL, add_transaction, balance_of, category_id, create_account, create_split, register, user_id
+from helpers import (
+    BASE_URL,
+    add_transaction,
+    balance_of,
+    category_id,
+    create_account,
+    create_split,
+    register,
+    remove_from_hub,
+    user_id,
+)
 
 
 @pytest.fixture
 def parents(client):
-    # The test database starts with the parent "Admin"; deactivate it so mum and dad are the two parents
+    # The test database starts with the parent "Admin"; removed in the hub, so mum and dad are the two parents
     mum = register(client, "mum")
     dad = register(client, "dad")
-    admin_id = user_id(client, mum, "Admin")
-    client.put(f"{BASE_URL}/users/{admin_id}", json={"is_active": False}, headers=mum)
+    remove_from_hub("Admin")
     return {"mum": mum, "dad": dad, "mum_id": user_id(client, mum, "mum"), "dad_id": user_id(client, mum, "dad")}
 
 
@@ -227,9 +236,9 @@ def test_settlement_rules(client, parents, setup):
     assert same.status_code == 400
 
 
-def test_deactivated_parent_can_still_settle(client, parents, setup):
+def test_removed_parent_can_still_settle(client, parents, setup):
     shared(client, parents, setup, 100)
-    client.put(f"{BASE_URL}/users/{parents['dad_id']}", json={"is_active": False}, headers=parents["mum"])
+    remove_from_hub("dad")
     # The open balance stays visible, and can be settled
     assert balance_of(client, parents["mum"], parents["dad_id"]) == -50.0
     assert settle(client, parents["mum"], parents, setup, 50).status_code == 200

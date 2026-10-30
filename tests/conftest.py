@@ -12,27 +12,36 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "backend"))
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 
-from app import auth, database, models  # noqa: E402
+import fake_hub  # noqa: E402
+from app import database, hub, models  # noqa: E402
 from app.main import app  # noqa: E402
 from app.seed import seed_categories  # noqa: E402
-from helpers import ADMIN, ADMIN_PIN  # noqa: E402
-
-# Cheap PIN hashes: at bcrypt's default cost, hashing took about 95% of the suite's time.
-# Verifying reads the cost from the hash, so logins in the tests are cheap too.
-auth.PIN_HASH_ROUNDS = 4
+from helpers import ADMIN  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
 def fresh_db():
-    """Every test starts with the default categories and one parent ("Admin", like a fresh install)."""
+    """Every test starts with the default categories and one parent "Admin": a row from before the family hub
+    (no hub id), which the first login links to the hub's Admin by name."""
     models.Base.metadata.drop_all(bind=database.engine)
     models.Base.metadata.create_all(bind=database.engine)
     with database.SessionLocal() as db:
         seed_categories(db)
-        # Known PIN instead of the random one a real install gets
-        db.add(models.User(username=ADMIN, pin_hash=auth.get_pin_hash(ADMIN_PIN), role=models.UserRole.PARENT))
+        db.add(models.User(username=ADMIN, role=models.UserRole.PARENT))
         db.commit()
     yield
+
+
+@pytest.fixture(autouse=True)
+def family_hub(monkeypatch):
+    """A fake family hub instead of the real one (tests/fake_hub.py), with the parent Admin."""
+    fake = fake_hub.FakeHub()
+    monkeypatch.setattr(fake_hub, "current", fake)
+    monkeypatch.setattr(hub, "fetch_session", fake.fetch_session)
+    monkeypatch.setattr(hub, "fetch_people", fake.fetch_people)
+    fake.add(ADMIN, "PARENT")
+    yield fake
+    hub.forget()
 
 
 @pytest.fixture(autouse=True)
