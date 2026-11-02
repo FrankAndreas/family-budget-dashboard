@@ -5,6 +5,6 @@ pydantic==2.14.1
 python-multipart==0.0.32
 tzdata==2026.5
 alembic==1.20.1
-pypdf==6.21.2
+pypdf==6.21.4
 pypdfium2==5.14.0
 Pillow==13.0.0
