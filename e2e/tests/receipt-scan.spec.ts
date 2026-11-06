@@ -54,6 +54,8 @@ test('scan a pile of receipts, then check and book them one after another', asyn
     await expect(page.getByText('Receipt 1 of 1')).toBeVisible();
     await expect(page.getByText('Sum CHF 83.40')).toBeVisible();
     await page.getByRole('button', { name: 'Book & next' }).click();
+    // Wait for the booking itself: while the check view is still saving, the list (and its rows) isn't shown either
+    await expect.poll(booked).toBe(2);
     await expect(page.getByRole('button', { name: 'Check next' })).toHaveCount(0);
     await expect(rows).toHaveCount(0);
 
