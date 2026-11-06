@@ -66,7 +66,7 @@ function ReceiptPhoto({ attachment }: { attachment: AttachmentInfo }) {
 }
 
 // Receipts photographed on the phone (receipt scan), checked one after another in the order they were taken
-export default function ScannedReceipts({ photos, reload, accounts, categories, people, aiEnabled, onBooked, onChecking }: Props) {
+export default function ScannedReceipts({ photos: loaded, reload, accounts, categories, people, aiEnabled, onBooked, onChecking }: Props) {
     const { t } = useTranslation();
     const { user } = useAuth();
     const [chosen, setChosen] = useState<Record<string, string>>({});
@@ -75,6 +75,10 @@ export default function ScannedReceipts({ photos, reload, accounts, categories, 
     const [current, setCurrent] = useState<{ photo: InboxPhoto; account: Account; result: Release } | null>(null);
     const [busy, setBusy] = useState(false);
     const [error, setError] = useState('');
+    // Booked here, until the reloaded inbox no longer has them: the list never shows (and asks for the thumbnail of)
+    // a photo that is gone already
+    const [booked, setBooked] = useState<string[]>([]);
+    const photos = loaded.filter(photo => !booked.includes(photo.id));
 
     if (photos.length === 0 && !current) return null;
 
@@ -102,16 +106,18 @@ export default function ScannedReceipts({ photos, reload, accounts, categories, 
         }
     };
 
-    // The photos after the one being checked, in the list's order (the one just booked is still in it until reloaded)
+    // The photos after the one being checked, in the list's order
     const after = (photo: InboxPhoto) => photos.slice(photos.findIndex(p => p.id === photo.id) + 1);
 
-    const booked = () => {
+    const bookedOne = () => {
         if (!current) return;
         const used = current.account.id;
+        const next = after(current.photo)[0];
+        setBooked(ids => [...ids, current.photo.id]);
         setLastAccount(used);
         reload();
         onBooked();
-        check(after(current.photo)[0], used);
+        check(next, used);
     };
 
     const remove = async (photo: InboxPhoto) => {
@@ -156,7 +162,7 @@ export default function ScannedReceipts({ photos, reload, accounts, categories, 
                     submitLabel={t('scan.bookNext')}
                     scanned
                     onSkip={() => check(after(current.photo)[0])}
-                    onSaved={booked}
+                    onSaved={bookedOne}
                     onCancel={() => { setCurrent(null); onChecking(false); }}
                 />
             </div>
