@@ -31,6 +31,44 @@ export async function goToHub(next: string | null = window.location.href): Promi
     window.location.href = next ? `${data.login_url}/?next=${encodeURIComponent(next)}` : data.login_url;
 }
 
+// The hub login is in its last week (the backend's X-Hub-Renew, on loading the page): once through the hub, which
+// renews it and sends the browser straight back. At most once a day, in case the renewal doesn't take; without storage
+// not at all, so it can never loop (app integration review 2026-11-07)
+export const RENEWED_AT = 'hubRenewedAt';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+export function renewNow(
+    headers: Record<string, unknown>,
+    storage: Pick<Storage, 'getItem' | 'setItem'> | null,
+    now: number = Date.now(),
+): boolean {
+    if (headers['x-hub-renew'] !== '1' || !storage) return false;
+    try {
+        const last = Number(storage.getItem(RENEWED_AT));
+        if (last && now - last < DAY_MS) return false;
+        storage.setItem(RENEWED_AT, String(now));
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+// The browser's storage, if it may be used (blocked site data, private windows: null)
+function storage(): Storage | null {
+    try {
+        return window.localStorage;
+    } catch {
+        return null;
+    }
+}
+
+// The hub login is in its last week: through the hub once (renewNow above), which sends the browser back here
+export function renewsAtHub(headers: Record<string, unknown>): boolean {
+    if (!renewNow(headers, storage())) return false;
+    void goToHub();
+    return true;
+}
+
 // "Log out": the hub ends the login, for this app and every other, then shows its login, which leads back here
 export async function goToHubLogout(): Promise<void> {
     const { data } = await api.get<{ login_url: string }>('/api/v1/hub');
