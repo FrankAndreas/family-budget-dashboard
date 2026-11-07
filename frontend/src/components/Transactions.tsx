@@ -248,7 +248,7 @@ export default function Transactions({
                 </h2>
                 {canEdit && (
                     <div className="flex flex-wrap justify-end gap-2">
-                        <button onClick={() => { closeForm(); setReceiptFor(receiptFor ? null : 'new'); }} className="btn-primary text-sm">
+                        <button onClick={() => { closeForm(); setReceiptFor(receiptFor ? null : 'new'); }} className="btn-secondary text-sm">
                             {aiEnabled ? t('receipt.open') : t('receipt.openWithoutAi')}
                         </button>
                         <button onClick={() => { setReceiptFor(null); if (showForm) closeForm(); else setShowForm(true); }}

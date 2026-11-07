@@ -46,10 +46,18 @@ const de = {
         common: 'Gemeinsam: {{name}}',
         othersHint: 'Andere erscheinen hier, sobald sie dir erlauben, ihr Geld zu verwalten (Einstellungen → Teilen).',
     },
+    overview: {
+        spent: 'Ausgegeben im {{month}}',
+        ofBudget: '{{spent}} von {{limit}} budgetiert',
+        overBudget_one: '{{count}} Budget überschritten',
+        overBudget_other: '{{count}} Budgets überschritten',
+        left: 'Übrig im {{month}}',
+        short: 'Fehlbetrag im {{month}}',
+        income: 'Einnahmen {{amount}}',
+    },
     accounts: {
         myBalance: 'Mein Saldo',
         title: 'Konten',
-        transactionsInSelected: 'Buchungen im gewählten Konto',
         add: '+ Konto hinzufügen',
         iban: 'IBAN',
         ibanPlaceholder: 'IBAN (optional, für den Import von Kontoauszügen)',
@@ -827,6 +835,7 @@ const de = {
     },
     inbox: {
         titleEmpty: '📥 Eingang',
+        nothingWaiting: 'nichts offen',
         title_one: '📥 {{count}} Beleg wartet',
         title_other: '📥 {{count}} Belege warten',
         intro: 'Weitergeleitete Beleg-Mails. Noch ist nichts darin geöffnet: Erst beim Freigeben liest die KI sie.',

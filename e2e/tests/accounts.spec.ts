@@ -28,7 +28,8 @@ test('accounts and transactions through the forms', async ({ page, request }) =>
     await page.getByPlaceholder('Amount (income or expense is set by the category)').fill('20');
     await page.getByRole('button', { name: 'Save Changes' }).click();
     await expect(card).toContainText('CHF -20.00');
-    await expect(page.locator('.glass-card', { hasText: 'Transactions in Selected Account' })).toContainText('1');
+    // A booking made now counts in this month's spending at the top
+    await expect(page.getByTestId('spent-this-month')).toContainText('CHF 20.00');
 
     await page.getByRole('button', { name: 'Delete transaction' }).click();
     await expect(page.getByText('No transactions yet')).toBeVisible();
@@ -42,7 +43,7 @@ test('accounts and transactions through the forms', async ({ page, request }) =>
     await expect(renamed).toBeVisible();
     await renamed.getByRole('button', { name: 'Delete' }).click();
     await expect(page.locator('.cursor-pointer', { hasText: 'Purse' })).toHaveCount(0);
-    await expect(page.locator('.glass-card', { hasText: 'Transactions in Selected Account' })).toContainText('0');
+    await expect(page.getByTestId('spent-this-month')).toContainText('CHF 0.00');
     expect(await call(request, parent, 'GET', '/accounts')).toEqual([]);
     expect(errors).toEqual([]);
 });

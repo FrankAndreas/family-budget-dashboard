@@ -8,8 +8,6 @@ import type { FamilyUser } from '../family';
 
 interface Props {
     accounts: Account[];
-    // Shown in the summary; the transactions themselves are listed by Transactions
-    transactionCount: number;
     selectedAccount: string | null;
     onSelect: (accountId: string) => void;
     ownerOf: (account: Account) => FamilyUser | undefined;
@@ -22,9 +20,9 @@ interface Props {
 
 const field = 'w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
 
-// Summary cards and the account cards, with adding, renaming and deleting accounts
+// The account cards, with adding, renaming and deleting accounts
 export default function AccountCards({
-    accounts, transactionCount, selectedAccount, onSelect, ownerOf, canEdit, onChanged, onDeleted, onError
+    accounts, selectedAccount, onSelect, ownerOf, canEdit, onChanged, onDeleted, onError
 }: Props) {
     const { t } = useTranslation();
     const { user } = useAuth();
@@ -36,9 +34,6 @@ export default function AccountCards({
     const [editingAccount, setEditingAccount] = useState<{ id: string; name: string; type: string; iban: string } | null>(null);
     // Only parents enter IBANs (the bank import finds accounts by them)
     const isParent = user?.role === 'PARENT';
-
-    // Your own money; accounts others shared with you are listed but not added up
-    const totalBalance = accounts.filter(a => a.user_id === user?.id).reduce((sum, acc) => sum + acc.balance, 0);
 
     const handleAddAccount = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -84,28 +79,11 @@ export default function AccountCards({
 
     return (
         <>
-            {/* Summary Cards */}
-            {/* On a phone the balance spans the row and the two counts sit side by side below it */}
-            <div data-testid="summary-cards" className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                <div className="glass-card p-3 md:p-6 col-span-2 md:col-span-1">
-                    <h3 className="text-emerald-400 text-sm md:text-lg font-semibold md:mb-2">{t('accounts.myBalance')}</h3>
-                    <p className="text-2xl md:text-3xl font-bold">{money(totalBalance)}</p>
-                </div>
-                <div className="glass-card p-3 md:p-6">
-                    <h3 className="text-sky-400 text-sm md:text-lg font-semibold md:mb-2">{t('accounts.title')}</h3>
-                    <p className="text-xl md:text-3xl font-bold">{accounts.length}</p>
-                </div>
-                <div className="glass-card p-3 md:p-6">
-                    <h3 className="text-indigo-400 text-sm md:text-lg font-semibold md:mb-2">{t('accounts.transactionsInSelected')}</h3>
-                    <p className="text-xl md:text-3xl font-bold">{transactionCount}</p>
-                </div>
-            </div>
-
             {/* Accounts Section */}
             <div className="glass-card p-6">
                 <div className="flex justify-between items-center mb-4">
                     <h2 className="text-xl font-bold">{t('accounts.title')}</h2>
-                    <button onClick={() => setShowAddAccount(!showAddAccount)} className="btn-primary text-sm">
+                    <button onClick={() => setShowAddAccount(!showAddAccount)} className="btn-secondary text-sm">
                         {t('accounts.add')}
                     </button>
                 </div>
