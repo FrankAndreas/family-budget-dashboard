@@ -251,7 +251,8 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
         errors.append(messages.text("direction_required"))
     elif direction and direction not in DIRECTIONS:
         errors.append(messages.text("direction_format", direction=row["direction"]))
-    elif direction and category is not None and not is_transfer:
+    # An expense row may say "in": money back in that category (a refund)
+    elif direction and category is not None and not is_transfer and category.type != models.CategoryType.EXPENSE:
         errors.append(messages.text("direction_transfers_only"))
     if is_transfer and (row["for"] or row["shared"] or row["item"]):
         errors.append(messages.text("transfer_plain_only"))
@@ -290,7 +291,8 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
 
     if is_transfer:
         amount = amount * DIRECTIONS[direction]
-    signed = crud.signed_amount(amount, category)
+    refund = category.type == models.CategoryType.EXPENSE and direction == "in"
+    signed = crud.signed_amount(amount, category, refund)
     reference = row["reference"] or None
     if reference and reference in lookups.references:
         twin = lookups.references[reference]
@@ -320,6 +322,7 @@ def check_row(db: Session, user: models.User, lookups: Lookups, raw: dict, seen:
             split_id=split.id if split else None,
             asset_id=asset.id if asset else None,
             reference=reference,
+            refund=refund,
         ),
         category,
         split_shares,
@@ -408,7 +411,7 @@ def check_file(
 
 def signed(row: dict) -> float:
     transaction, category, _ = row["_create"]
-    return crud.signed_amount(transaction.amount, category)
+    return crud.signed_amount(transaction.amount, category, transaction.refund)
 
 
 def match_bookings(db: Session, rows: list[dict], matches: dict) -> None:
@@ -640,7 +643,10 @@ def import_schema(
         "direction": {
             "type": "string",
             "enum": ["in", "out"],
-            "description": "Only for the category Transfer: out = money leaves this account, in = it arrives",
+            "description": (
+                "For the category Transfer: out = money leaves this account, in = it arrives. "
+                "For an expense category, in = money back (a refund), which lowers that category's spending"
+            ),
         },
         "description": {"type": "string", "maxLength": MAX_TEXT, "description": "Shop or what was bought"},
         "for": {

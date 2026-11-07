@@ -68,7 +68,8 @@ class TestImport:
         [
             ("2026-09-01,Bank,Transfer,5,,,,", "direction is required for a transfer (in or out)"),
             ("2026-09-01,Bank,Transfer,5,sideways,,,", "direction 'sideways': use in or out"),
-            ("2026-09-01,Bank,Groceries,5,out,,,", "direction is only for transfers"),
+            # An expense row may say "in" (a refund) or "out"; income rows take their sign from the category
+            ("2026-09-01,Bank,Salary,5,out,,,", "direction is only for transfers, and in for a refund in an expense category"),
             ("2026-09-01,Bank,Settle up,5,out,,,", "Settle up can't be imported; use the Common tab"),
         ],
     )

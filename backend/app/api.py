@@ -302,6 +302,9 @@ def mark_purchase(
     if wanted:
         if not transaction.asset_id:
             raise messages.api_error(400, "purchase_needs_investment")
+        # Money back can't be what bought it
+        if transaction.amount > 0:
+            raise messages.api_error(400, "refund_no_purchase")
         asset = db.query(models.Asset).filter(models.Asset.id == transaction.asset_id).one()
         if not visible_owner(db, user, asset.owner_id, asset.split_id, write=True):
             raise messages.api_error(403, "cant_manage_items")

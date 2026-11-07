@@ -171,20 +171,31 @@ def get_category(db: Session, category_id: str):
     return db.query(models.Category).filter(models.Category.id == category_id).first()
 
 
-def signed_amount(amount: float, category: models.Category) -> float:
-    # The category decides the sign: income is positive, expenses are negative; transfers keep their sign
+def signed_amount(amount: float, category: models.Category, refund: bool = False) -> float:
+    # The category decides the sign: income is positive, expenses are negative; transfers keep their sign. A refund is
+    # money back in an expense category (the jacket returned): positive, and it lowers that category's spending
     if category.type == models.CategoryType.TRANSFER:
         return to_cents(amount)
-    if category.type == models.CategoryType.INCOME:
+    if category.type == models.CategoryType.INCOME or refund:
         return to_cents(abs(amount))
     return to_cents(-abs(amount))
+
+
+def is_refund(amount: float, category: Optional[models.Category]) -> bool:
+    return category is not None and category.type == models.CategoryType.EXPENSE and amount > 0
+
+
+def cost(amount: float) -> float:
+    """What a booking in an expense category costs: positive for an expense, negative for a refund (stored the other
+    way round). Every sum of spending uses this, never abs(), so a refund lowers it."""
+    return -amount
 
 
 def create_transaction(
     db: Session, transaction: schemas.TransactionCreate, category: models.Category, split_shares=None, commit=True
 ):
     assert transaction.amount is not None, "a plain booking has an amount (items go through items.apply)"
-    amount = signed_amount(transaction.amount, category)
+    amount = signed_amount(transaction.amount, category, transaction.refund)
     db_transaction = models.Transaction(
         account_id=transaction.account_id,
         category_id=transaction.category_id,
@@ -216,13 +227,15 @@ def update_transaction(
     split_shares=None,
 ):
     old_amount = db_transaction.amount
+    # A refund stays one unless the update says otherwise (or the new category isn't an expense)
+    refund = update.refund if update.refund is not None else is_refund(old_amount, db_transaction.category)
     # Items are set by items.apply, never as a plain attribute
-    update_data = update.model_dump(exclude_unset=True, exclude={"items", "asset_purchase"})
+    update_data = update.model_dump(exclude_unset=True, exclude={"items", "asset_purchase", "refund"})
 
     if update_data.get("date"):
         update_data["date"] = to_naive_utc(update_data["date"])
     # Re-derive the sign: either the amount or the category may have changed
-    update_data["amount"] = signed_amount(update_data.get("amount", old_amount), category)
+    update_data["amount"] = signed_amount(update_data.get("amount", old_amount), category, refund)
 
     for key, value in update_data.items():
         setattr(db_transaction, key, value)

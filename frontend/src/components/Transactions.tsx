@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { money, type Asset, type Split } from '../finance';
-import { formatDate, formatMonth } from '../format';
+import { formatDate, formatMonth, localDay } from '../format';
 import type { Account, BankRow, Category, Transaction } from '../accounts';
 import type { FamilyUser } from '../family';
 import { openAttachment, useReceiptReading, useTags } from '../receipts';
@@ -32,7 +32,11 @@ interface Props {
     onError: (message: string) => void;
 }
 
-const emptyForm = { amount: '', description: '', category_id: '', member_id: '', split_id: '', asset_id: '', asset_purchase: false };
+const emptyForm = () => ({
+    amount: '', description: '', category_id: '', member_id: '', split_id: '', asset_id: '', asset_purchase: false,
+    // The day it happened (today unless changed) and money back in an expense category
+    date: localDay(), refund: false,
+});
 const field = 'w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
 
 // The selected account's transactions, with the form to add or edit one
@@ -110,6 +114,8 @@ export default function Transactions({
     };
     const [showForm, setShowForm] = useState(false);
     const [form, setForm] = useState(emptyForm);
+    // The day the edited booking had: only a changed day is sent, so the booking keeps its time
+    const [originalDay, setOriginalDay] = useState<string | null>(null);
     // Set while the form is editing an existing transaction instead of adding one
     const [editingId, setEditingId] = useState<string | null>(null);
     const formRef = useScrollIntoView<HTMLFormElement>(editingId);
@@ -198,8 +204,9 @@ export default function Transactions({
     };
 
     const closeForm = () => {
-        setForm(emptyForm);
+        setForm(emptyForm());
         setEditingId(null);
+        setOriginalDay(null);
         setShowForm(false);
     };
 
@@ -211,8 +218,11 @@ export default function Transactions({
             member_id: transaction.member_id || '',
             split_id: transaction.split_id || '',
             asset_id: transaction.asset_id || '',
-            asset_purchase: !!transaction.asset_purchase
+            asset_purchase: !!transaction.asset_purchase,
+            date: localDay(transaction.date),
+            refund: isExpense(transaction.category_id) && transaction.amount > 0,
         });
+        setOriginalDay(localDay(transaction.date));
         setEditingId(transaction.id);
         setShowForm(true);
     };
@@ -227,7 +237,10 @@ export default function Transactions({
             member_id: form.member_id || null,
             split_id: form.split_id || null,
             asset_id: form.asset_id || null,
-            asset_purchase: !!form.asset_id && form.asset_purchase
+            asset_purchase: !!form.asset_id && form.asset_purchase && !form.refund,
+            refund: isExpense(form.category_id) && form.refund,
+            // Noon UTC is that day in Switzerland all year (as a date-only import); today unchanged: now, with its time
+            ...(form.date && form.date !== (editingId ? originalDay : localDay()) ? { date: `${form.date}T12:00:00Z` } : {}),
         };
         try {
             if (editingId) {
@@ -314,6 +327,15 @@ export default function Transactions({
                         required
                     />
                     <input
+                        type="date"
+                        aria-label={t('transactions.date')}
+                        value={form.date}
+                        max={localDay()}
+                        onChange={(e) => setForm({ ...form, date: e.target.value })}
+                        className={field}
+                        required
+                    />
+                    <input
                         type="text"
                         placeholder={t('transactions.descriptionPlaceholder')}
                         value={form.description}
@@ -341,6 +363,12 @@ export default function Transactions({
                             {expenseCategories.map(cat => <option key={cat.id} value={cat.id}>{cat.name}</option>)}
                         </optgroup>
                     </select>
+                    {isExpense(form.category_id) && (
+                        <label className="flex items-center gap-2 mb-2 text-sm text-slate-300">
+                            <input type="checkbox" checked={form.refund} onChange={e => setForm({ ...form, refund: e.target.checked })} />
+                            {t('transactions.refund')}
+                        </label>
+                    )}
                     {canTagChild && (
                         <select
                             value={form.member_id}
@@ -457,6 +485,11 @@ export default function Transactions({
                                                 {assetName(transaction.asset_id) && (
                                                     <span className="ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
                                                         {assetName(transaction.asset_id)}
+                                                    </span>
+                                                )}
+                                                {isExpense(transaction.category_id) && transaction.amount > 0 && (
+                                                    <span className="ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300">
+                                                        {t('transactions.refundBadge')}
                                                     </span>
                                                 )}
                                                 {(transaction.split_id || transaction.split_shares) && (

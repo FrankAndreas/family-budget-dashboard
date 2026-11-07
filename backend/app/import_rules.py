@@ -56,7 +56,16 @@ def with_category(raw: dict, category: models.Category, kind) -> dict:
     if category.type == TRANSFER:
         # The sign stays: an expense row is money out, an income row money in
         row["direction"] = "out" if kind == models.CategoryType.EXPENSE else "in"
+    elif category.type == models.CategoryType.EXPENSE and kind == models.CategoryType.INCOME:
+        # Money that came in, put into an expense category: a refund there
+        row["direction"] = "in"
     return row
+
+
+def refund_fits(category: models.Category, kind) -> bool:
+    """Money that came in may be put into an expense category by hand (a refund); rules never do that on their own:
+    a "TWINT → Groceries" rule must not turn money from friends into a Groceries refund."""
+    return kind == models.CategoryType.INCOME and category.type == models.CategoryType.EXPENSE
 
 
 def adjust(raw: dict, change: Optional[dict], lookups, rules: list) -> tuple[dict, Optional[str], Optional[str]]:
@@ -69,7 +78,7 @@ def adjust(raw: dict, change: Optional[dict], lookups, rules: list) -> tuple[dic
             kind in (models.CategoryType.INCOME, models.CategoryType.EXPENSE)
             and target is not None
             and target.system_key != SETTLE_UP
-            and fits(target, kind)
+            and (fits(target, kind) or refund_fits(target, kind))
         )
         if not allowed:
             return raw, f"Can't change {raw['category']} to {change['category']}", None

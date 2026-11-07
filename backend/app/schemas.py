@@ -213,6 +213,8 @@ class TransactionCreate(TransactionBase):
     amount: Optional[float] = None  # type: ignore[assignment]
     category_id: Optional[str] = None
     items: Optional[list[ItemIn]] = Field(default=None, max_length=MAX_ITEMS)
+    # Money back in an expense category (a refund); ignored for income and transfers
+    refund: bool = False
 
     _amount_not_zero = field_validator("amount")(_reject_zero)
 
@@ -239,6 +241,8 @@ class TransactionUpdate(BaseModel):
     asset_purchase: Optional[bool] = None
     # Replaces the items; [] turns a receipt back into a plain booking (then amount and category_id are needed)
     items: Optional[list[ItemIn]] = Field(default=None, max_length=MAX_ITEMS)
+    # Money back in an expense category; unset keeps what the booking is
+    refund: Optional[bool] = None
     # More of the person's pending uploads to keep with the booking
     attachment_ids: list[str] = []
 

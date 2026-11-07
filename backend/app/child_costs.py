@@ -13,7 +13,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
-from . import auth, database, i18n, messages, models
+from . import auth, crud, database, i18n, messages, models
 from .reports import EXPENSE, cents, swiss_day, today, utc_start
 
 router = APIRouter()
@@ -57,7 +57,7 @@ def year_costs(db: Session, child_id: str, year: int) -> list[dict]:
         day = swiss_day(booking.date)
         if not booking.items:
             if booking.category and booking.category.type == EXPENSE:
-                result.append((day, _child_text(booking), booking.category, abs(booking.amount)))
+                result.append((day, _child_text(booking), booking.category, crud.cost(booking.amount)))
             continue
         for item in booking.items:
             if item.person_id == child_id and item.category.type == EXPENSE:

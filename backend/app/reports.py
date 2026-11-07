@@ -13,7 +13,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, selectinload
 
-from . import auth, database, finance, i18n, models, privacy
+from . import auth, crud, database, finance, i18n, models, privacy
 
 router = APIRouter()
 
@@ -44,6 +44,14 @@ def range_start(period: str, day: date) -> Optional[date]:
     return {"month": month_start(day), "3months": month_start(day, 2), "year": date(day.year, 1, 1)}.get(period)
 
 
+def range_end(period: str, day: date) -> Optional[date]:
+    """The first day after a range: a booking dated later (typed in ahead, imported with a future date) counts when its
+    month comes, not now. "all" has no end."""
+    return {"month": month_start(day, -1), "3months": month_start(day, -1), "year": date(day.year + 1, 1, 1)}.get(
+        period
+    )
+
+
 def cents(value: float) -> float:
     return round(value + 0.0, 2)
 
@@ -62,8 +70,9 @@ class Line:
     member_id: Optional[str] = None
 
 
-def lines(db: Session, owner_id: str, since: Optional[date]) -> list[Line]:
-    """The owner's income and expenses (no transfers) from a Swiss day on: one line per plain booking, one per item."""
+def lines(db: Session, owner_id: str, since: Optional[date], until: Optional[date] = None) -> list[Line]:
+    """The owner's income and expenses (no transfers) from a Swiss day on and before another (`until`, not included):
+    one line per plain booking, one per item."""
     query = (
         db.query(models.Transaction, models.Category)
         .join(models.Account, models.Transaction.account_id == models.Account.id)
@@ -76,6 +85,8 @@ def lines(db: Session, owner_id: str, since: Optional[date]) -> list[Line]:
     )
     if since:
         query = query.filter(models.Transaction.date >= utc_start(since))
+    if until:
+        query = query.filter(models.Transaction.date < utc_start(until))
     # A booking linked to an investment counts under each of its tags (the purchase and its follow-up costs)
     asset_tags: dict[str, set[str]] = defaultdict(set)
     for asset_id, tag_id in db.query(models.AssetTag.asset_id, models.AssetTag.tag_id):
@@ -87,7 +98,8 @@ def lines(db: Session, owner_id: str, since: Optional[date]) -> list[Line]:
             result.append(
                 Line(
                     transaction.date,
-                    abs(transaction.amount),
+                    # An expense costs -amount (a refund is negative and lowers it); income is positive as stored
+                    crud.cost(transaction.amount) if category.type == EXPENSE else transaction.amount,
                     category.type,
                     category,
                     member_id=transaction.member_id,
@@ -111,12 +123,13 @@ def lines(db: Session, owner_id: str, since: Optional[date]) -> list[Line]:
 
 def budget_out(db: Session, budget: models.Budget) -> dict:
     day = today()
-    since = month_start(day) if budget.period == "MONTHLY" else date(day.year, 1, 1)
+    period = "month" if budget.period == "MONTHLY" else "year"
+    since, until = range_start(period, day), range_end(period, day)
     # A tag budget counts every line carrying the tag (an item with several tags counts in each of their budgets)
     spent = cents(
         sum(
             line.amount
-            for line in lines(db, budget.user_id, since)
+            for line in lines(db, budget.user_id, since, until)
             if line.type == EXPENSE
             and (line.category.id == budget.category_id if budget.tag_id is None else budget.tag_id in line.tag_ids)
         )
@@ -154,9 +167,11 @@ def set_aside_by_tag(db: Session, owner_id: str) -> dict[str, float]:
 
 
 def summary(db: Session, owner: models.User, period: str, day: date) -> dict:
-    start = range_start(period, day)
+    start, end = range_start(period, day), range_end(period, day)
     six_months = month_start(day, 5)
-    rows = lines(db, owner.id, None if start is None else min(start, six_months))
+    # The charts end with this month; the totals with the range ("year": the whole year, "all": no end)
+    until = None if end is None else max(end, month_start(day, -1))
+    rows = lines(db, owner.id, None if start is None else min(start, six_months), until)
     totals = {INCOME: 0.0, EXPENSE: 0.0}
     by_category: dict[str, list] = {}
     by_child: dict[str, float] = defaultdict(float)
@@ -175,7 +190,7 @@ def summary(db: Session, owner: models.User, period: str, day: date) -> dict:
     }
     for line in rows:
         local = swiss_day(line.date)
-        if start is None or local >= start:
+        if (start is None or local >= start) and (end is None or local < end):
             totals[line.type] += line.amount
             if line.type == EXPENSE:
                 by_category.setdefault(line.category.id, [i18n.category_name(line.category), 0.0])[1] += line.amount

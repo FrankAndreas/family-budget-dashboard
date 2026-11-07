@@ -29,3 +29,10 @@ export const formatMonthShort = (value: string | Date) =>
 // January … December (Januar … Dezember)
 export const monthNames = () =>
     Array.from({ length: 12 }, (_, i) => new Date(2026, i, 15).toLocaleDateString(locale(), { month: 'long' }));
+
+// A day as YYYY-MM-DD in local time (the date fields): toISOString() would give the UTC day, which is yesterday's
+// between midnight and 1 or 2 o'clock in Switzerland
+export const localDay = (value: string | Date = new Date()) => {
+    const d = toDate(value);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+};
