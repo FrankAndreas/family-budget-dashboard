@@ -106,7 +106,9 @@ export async function login(page: Page, parent: Parent): Promise<string[]> {
 // A tab by its name; on a phone the ones not in the bottom bar are behind "More"
 export async function tab(page: Page, name: string): Promise<void> {
     const button = page.getByRole('button', { name, exact: false }).first();
-    if (!await button.isVisible()) {
+    // Some tabs appear once the family has loaded (Common needs a second parent): wait a moment before "More"
+    const shown = await button.waitFor({ state: 'visible', timeout: 3000 }).then(() => true, () => false);
+    if (!shown) {
         await page.getByRole('navigation', { name: 'Tabs' }).getByRole('button', { name: 'More tabs' }).click();
     }
     await button.click();

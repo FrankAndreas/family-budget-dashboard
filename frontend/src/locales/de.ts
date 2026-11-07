@@ -230,7 +230,7 @@ const de = {
     },
     commonBudget: {
         title: 'Gemeinsames Budget',
-        needsSecondParent: 'Gemeinsame Kosten brauchen einen zweiten Elternteil. Füge ihn unter Einstellungen → Familie hinzu.',
+        needsSecondParent: 'Gemeinsame Kosten brauchen einen zweiten Elternteil: Füge ihn im Familien-Hub hinzu und gib ihm diese App.',
         balance: 'Saldo',
         allSettled: 'Alles ausgeglichen',
         youSettled: 'Bei dir ist alles ausgeglichen',
@@ -602,6 +602,9 @@ const de = {
             failed: 'Die KI konnte diesmal nicht helfen: unbekannte Artikel sind Lebensmittel.',
         },
     },
+    ruleSettings: {
+        title: 'Kategorie-Regeln',
+    },
     articleRules: {
         title: 'Artikelregeln (Migros-Belege)',
         intro: 'Als was ein Artikel auf dem Beleg (sein ganzer Name, Gross-/Kleinschreibung egal) gebucht wird. Der Migros-Import lernt sie aus dem, was du buchst; so kennt er die Artikel nächsten Monat ohne KI.',
@@ -746,15 +749,13 @@ const de = {
         privacyEnabled: 'Privatsphäre-Modus eingeschaltet.',
         privacyDisabled: 'Privatsphäre-Modus ausgeschaltet.',
         privacyFailed: 'Privatsphäre-Einstellung konnte nicht gespeichert werden',
-        retentionTitle: 'Datenspeicherung',
-        retention: 'Alle Daten liegen lokal in deiner Datenbank. Du kannst sie jederzeit exportieren und sichern.',
         rulesTitle: '🔒 Regeln zur Privatsphäre',
         rules: {
             parents: 'Konten und Budgets jedes Elternteils sind privat, ausser sie werden unter Einstellungen → Teilen freigegeben (ansehen oder verwalten)',
-            common: 'Den Tab «Gemeinsam» (gemeinsame Kosten, Anschaffungen, Jahresrechnungen) sehen beide Eltern',
+            common: 'Den Tab «Gemeinsam» (geteilte Kosten und Ausgleich) sehen beide Eltern',
             children: 'Eltern sehen die Jugendlohn-Daten der Kinder (wenn die Privatsphäre aus ist); ein Kind kann einen Elternteil verwalten lassen',
             own: 'Kinder sehen nur ihre eigenen Daten',
-            privacy: 'Der Privatsphäre-Modus verbirgt alle Konto- und Buchungsdaten vor den Eltern',
+            privacy: 'Ein Kind mit Jugendlohn kann den Privatsphäre-Modus einschalten: Dann sehen die Eltern keine seiner Konten und Buchungen',
         },
     },
     tags: {

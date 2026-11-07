@@ -232,7 +232,7 @@ const en: Messages = {
     },
     commonBudget: {
         title: 'Common budget',
-        needsSecondParent: 'Sharing costs needs a second parent. Add one in Settings → Family.',
+        needsSecondParent: 'Sharing costs needs a second parent: add them in the family hub and give them this app.',
         balance: 'Balance',
         allSettled: 'All settled',
         youSettled: 'You are settled',
@@ -604,6 +604,9 @@ const en: Messages = {
             failed: "The AI couldn't help this time: unknown articles are Groceries.",
         },
     },
+    ruleSettings: {
+        title: 'Category rules',
+    },
     articleRules: {
         title: 'Article rules (Migros receipts)',
         intro: 'What a receipt article (its whole name, ignoring case) is booked as. The Migros import learns them from what you book, so next month the articles are known without the AI.',
@@ -748,15 +751,13 @@ const en: Messages = {
         privacyEnabled: 'Privacy mode enabled.',
         privacyDisabled: 'Privacy mode disabled.',
         privacyFailed: 'Failed to update privacy settings',
-        retentionTitle: 'Data Retention',
-        retention: 'All data is stored locally in your database. You can export and backup your data at any time.',
         rulesTitle: '🔒 Privacy Rules',
         rules: {
             parents: "Each parent's accounts and budgets are private unless shared in Settings → Sharing (view or manage)",
-            common: 'The Common tab (shared costs, investments, yearly bills) is visible to both parents',
+            common: 'The Common tab (shared costs and settling up) is visible to both parents',
             children: "Parents can view children's own-allowance data (if privacy is off); a child can let a parent manage it",
             own: 'Children can only view their own data',
-            privacy: 'Privacy mode hides all account and transaction data from parents',
+            privacy: 'A child with own allowance can turn on privacy mode: parents then see none of their accounts and bookings',
         },
     },
     tags: {

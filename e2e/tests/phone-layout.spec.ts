@@ -77,7 +77,8 @@ test('settings fit a phone', async ({ page, request }) => {
     expect(await page.evaluate(() => document.documentElement.scrollHeight)).toBeLessThan(2000);
 
     // A tap opens a section; the rules show their count, and a search finds one
-    await page.getByRole('heading', { name: 'Data Management' }).click();
+    // The import rules are in their own section, next to the categories
+    await page.getByRole('heading', { name: 'Category rules' }).click();
     await expect(page.getByText(`${shop} → Groceries`)).toBeHidden();
     await expect(page.getByRole('button', { name: /^Show all \d+ rules$/ })).toBeVisible();
     const rules = page.getByRole('list', { name: 'Import rules' }).getByRole('listitem');
