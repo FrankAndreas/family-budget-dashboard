@@ -21,7 +21,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy.orm import Session
 
-from . import attachments, auth, database, emails_api, messages, models, privacy, receipt_ai
+from . import attachments, auth, database, emails, messages, models, privacy, receipt_ai
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ def summary(raw: bytes) -> MailSummary:
 def receive(db: Session, raw: bytes) -> Optional[models.InboxMail]:
     """Put the mail in the inbox for the person who forwarded it; None if it is there (or was booked) already."""
     mail = summary(raw)
-    person = emails_api.person_for(db, mail.from_addrs[0]) if len(mail.from_addrs) == 1 else None
+    person = emails.person_for(db, mail.from_addrs[0]) if len(mail.from_addrs) == 1 else None
     if person is None:
         raise messages.api_error(403, "inbound_sender_unknown")
     if db.query(models.InboxMail).filter(models.InboxMail.message_id == mail.message_id).first():

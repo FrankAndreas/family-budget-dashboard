@@ -24,7 +24,9 @@ Bookings come in by hand, or in bulk from bank and Migros exports through small 
 ## Stack
 
 - **Backend:** Python 3.14, FastAPI, SQLAlchemy, SQLite; Alembic migrations applied on start-up
-  (`backend/app/migrations`). Money is stored in integer cents; the API uses francs.
+  (`backend/app/migrations`). Money is stored in integer cents; the API uses francs. The `*_api.py` modules only hold
+  routes; the rules live in plain modules (`privacy.py` who sees what, `bookings.py`, `ownership.py`, `assets.py`, …),
+  and no module imports a router (checked by `tests/test_architecture.py`).
 - **Frontend:** React 19, TypeScript, Vite, Tailwind 4.
 - **Deployment:** two Docker images (GitHub Container Registry), a nightly update script for the NAS.
 

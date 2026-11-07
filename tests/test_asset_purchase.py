@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from app import common_api, reports
+from app import assets, reports
 from helpers import (
     BASE_URL,
     add_transaction,
@@ -21,7 +21,7 @@ WHEN = "2026-10-10T12:00:00Z"
 
 @pytest.fixture
 def family(client, monkeypatch):
-    monkeypatch.setattr(common_api, "today", lambda: date(2026, 10, 15))
+    monkeypatch.setattr(assets, "today", lambda: date(2026, 10, 15))
     monkeypatch.setattr(reports, "today", lambda: date(2026, 10, 15))
     mum = register(client, "mum")
     dad = register(client, "dad")

@@ -4,13 +4,13 @@ from datetime import date
 
 import pytest
 
-from app import common_api
+from app import planned_costs
 from helpers import add_member, BASE_URL, category_id, create_split, register, user_id, remove_from_hub
 
 
 @pytest.fixture
 def parents(client, monkeypatch):
-    monkeypatch.setattr(common_api, "today", lambda: date(2026, 11, 20))
+    monkeypatch.setattr(planned_costs, "today", lambda: date(2026, 11, 20))
     mum = register(client, "mum")
     dad = register(client, "dad")
     remove_from_hub("Admin")

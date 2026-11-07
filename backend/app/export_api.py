@@ -12,8 +12,11 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
 from . import article_rules, auth, crud, database, finance, i18n, models, privacy, reports
-from .common_api import asset_out, planned_cost_out, shared_transactions, visible_owner
-from .wishes_api import visible_wishes, wish_out
+from .assets import asset_out
+from .common_budget import shared_transactions
+from .ownership import visible_owner
+from .planned_costs import planned_cost_out
+from .wishes import visible_wishes, wish_out
 from .money import cents
 
 router = APIRouter()

@@ -4,12 +4,12 @@ Parents manage them in Settings → Family; a person can have several, an addres
 """
 
 import re
-from typing import List, Optional
+from typing import List
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from . import auth, database, messages, models, privacy, schemas
+from . import auth, database, emails, messages, models, privacy, schemas
 
 router = APIRouter()
 
@@ -17,19 +17,6 @@ ADDRESS = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
 require_parent = privacy.parents_only("only_parents_emails")
-
-
-def normalize(address: str) -> str:
-    return address.strip().lower()
-
-
-def person_for(db: Session, address: str) -> Optional[models.User]:
-    """The active person the address is registered for, if any."""
-    row = db.query(models.UserEmail).filter(models.UserEmail.address == normalize(address)).first()
-    if not row:
-        return None
-    person = db.query(models.User).filter(models.User.id == row.user_id).first()
-    return person if person and person.is_active is not False else None
 
 
 @router.get("/emails", response_model=List[schemas.Email])
@@ -50,7 +37,7 @@ def add_email(
     require_parent(current_user)
     if not db.query(models.User).filter(models.User.id == user_id).first():
         raise messages.api_error(404, "user_not_found")
-    address = normalize(email.address)
+    address = emails.normalize(email.address)
     if not ADDRESS.match(address):
         raise messages.api_error(400, "email_invalid")
     if db.query(models.UserEmail).filter(models.UserEmail.address == address).first():
