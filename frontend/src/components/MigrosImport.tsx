@@ -5,8 +5,7 @@ import { money } from '../finance';
 import { formatDate } from '../format';
 import { useTags } from '../receipts';
 import { migrosForm, receiptDay, type Article, type MigrosPreview, type MigrosReceipt, type ReceiptChoice } from '../migros';
-
-interface Category { id: string; name: string; type: string; system_key?: string | null }
+import type { Category } from '../accounts';
 
 interface Props {
     file: File;

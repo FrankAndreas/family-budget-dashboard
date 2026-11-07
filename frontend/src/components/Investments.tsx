@@ -4,7 +4,7 @@ import api, { errorMessage } from '../api';
 import { useAuth } from '../AuthContext';
 import { useFamily } from '../useFamily';
 import { accessTo, canWrite } from '../family';
-import { assetTotals, money, useAssets, useSplits, type Asset } from '../finance';
+import { assetTotals, money, useAssets, useSplits, type Asset, type AssetExpense as Expense } from '../finance';
 import { ownerFields, ownerValue } from '../ownership';
 import { useTags } from '../receipts';
 import OwnerSelect from './OwnerSelect';
@@ -13,7 +13,6 @@ import AssetGroup, { ArchivedGroup } from './AssetGroup';
 import { useScrollIntoView } from '../useScrollIntoView';
 import { ask } from '../confirm';
 
-interface Expense { id: string; amount: number; date: string; description: string | null }
 type Filter = 'all' | 'mine' | 'common' | 'others';
 const FILTERS: Filter[] = ['all', 'mine', 'common', 'others'];
 

@@ -3,8 +3,8 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { money } from '../finance';
 import { formatMonth } from '../format';
+import type { Account } from '../accounts';
 
-interface Account { id: string; name: string }
 interface Month { month: string; money_in: number; money_out: number; difference: number; booked: boolean }
 
 // Clearing accounts (Migros, ...) should add up to 0 every month: money in by transfer, out by receipts.

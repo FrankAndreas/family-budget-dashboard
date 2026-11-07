@@ -1,10 +1,8 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { leaseEndsSoon, money, type Asset } from '../finance';
+import { leaseEndsSoon, money, type Asset, type AssetExpense as Expense } from '../finance';
 import { formatDate, localDay } from '../format';
 import { openAttachment } from '../receipts';
-
-interface Expense { id: string; amount: number; date: string; description: string | null }
 
 interface Props {
     asset: Asset;

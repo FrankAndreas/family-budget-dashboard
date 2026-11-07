@@ -2,12 +2,12 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { ask } from '../confirm';
+import type { Category } from '../accounts';
 
 interface Rule {
     id: string; text: string; category: string; category_id: string; category_type: string;
     receipt_expected: boolean; toml: string;
 }
-interface Category { id: string; name: string; type: string; system_key?: string | null }
 interface Form { text: string; category_id: string; receipt_expected: boolean }
 
 const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';

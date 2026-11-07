@@ -1,15 +1,10 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
 import api, { errorCode, goToHubLogout, renewsAtHub } from './api';
 import { applyLanguage, type Language } from './i18n';
+import type { FamilyUser } from './family';
 
-interface User {
-    id: string;
-    username: string;
-    role: 'PARENT' | 'CHILD';
-    privacy_enabled?: boolean;
-    has_allowance: boolean;
-    language: Language;
-}
+// The logged-in person: a family member, with the language they picked in the hub
+type User = FamilyUser & { language: Language };
 
 // Where the login stands: still asking, logged in, logged in at the hub without access here, or the hub can't be reached
 export type AuthState = 'loading' | 'in' | 'no_access' | 'hub_down';

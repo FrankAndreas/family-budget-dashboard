@@ -1,30 +1,13 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
-import { money } from '../finance';
+import { money, type Budget } from '../finance';
 import { useFamily } from '../useFamily';
 import type { Scope } from '../family';
 import ScopeSelector from './ScopeSelector';
 import { useTags } from '../receipts';
 import { ask } from '../confirm';
-
-interface Budget {
-    id: string;
-    // A budget is for a category or for a tag (issue #56)
-    category_id: string | null;
-    tag_id?: string | null;
-    limit: number;
-    period: string;
-    // Spent in the current month (MONTHLY) or year (YEARLY), and as a percentage of the limit
-    spent: number;
-    percentage: number;
-}
-
-interface Category {
-    id: string;
-    name: string;
-    type: string;
-}
+import type { Category } from '../accounts';
 
 interface BudgetWithCategory extends Budget {
     category: Category;

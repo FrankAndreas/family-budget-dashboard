@@ -8,6 +8,7 @@ import { money } from '../finance';
 import { formatDate } from '../format';
 import { isMigrosFile } from '../migros';
 import MigrosImport from './MigrosImport';
+import type { Category } from '../accounts';
 
 interface PreviewRow {
     line: number;
@@ -41,8 +42,6 @@ interface AiResult {
     message: string | null;
     suggestions: Record<string, { category: string; source: 'ai' }>;
 }
-
-interface Category { id: string; name: string; type: string }
 
 // A category picked in the preview (or suggested by the AI), and whether to remember it as a rule (parents only)
 interface Change { category: string; remember: boolean; text: string; source?: 'ai' }
