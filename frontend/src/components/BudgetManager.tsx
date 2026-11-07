@@ -6,6 +6,7 @@ import { useFamily } from '../useFamily';
 import type { Scope } from '../family';
 import ScopeSelector from './ScopeSelector';
 import { useTags } from '../receipts';
+import { ask } from '../confirm';
 
 interface Budget {
     id: string;
@@ -128,7 +129,7 @@ export default function BudgetManager() {
     };
 
     const handleDeleteBudget = async (budget: BudgetWithCategory) => {
-        if (!confirm(t('budgets.confirmDelete', { category: budgetName(budget) ?? t('budgets.thisCategory') }))) return;
+        if (!await ask(t('budgets.confirmDelete', { category: budgetName(budget) ?? t('budgets.thisCategory') }))) return;
 
         try {
             await api.delete(`/api/v1/budgets/${budget.id}`);
@@ -244,14 +245,14 @@ export default function BudgetManager() {
                                         {budget.percentage.toFixed(1)}%
                                         {canManage && <button
                                             onClick={() => setEditingBudget({ id: budget.id, limit: budget.limit.toString(), period: budget.period })}
-                                            className="ml-3 text-slate-500 hover:text-blue-400 transition-colors"
+                                            className="link-edit ml-2"
                                             title={t('budgets.editTitle')}
                                         >
                                             {t('common.edit')}
                                         </button>}
                                         {canManage && <button
                                             onClick={() => handleDeleteBudget(budget)}
-                                            className="ml-3 text-slate-500 hover:text-red-400 transition-colors"
+                                            className="link-delete ml-1"
                                             title={t('budgets.deleteTitle')}
                                         >
                                             {t('common.delete')}

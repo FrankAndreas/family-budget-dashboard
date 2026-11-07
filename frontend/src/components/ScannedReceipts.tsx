@@ -9,6 +9,7 @@ import { formatDate, formatTime } from '../format';
 import { type InboxPhoto, type Release, deletePhoto, openPhoto } from '../inbox';
 import type { AttachmentInfo } from '../receipts';
 import ReceiptForm from './ReceiptForm';
+import { ask } from '../confirm';
 
 interface Props {
     photos: InboxPhoto[];
@@ -121,7 +122,7 @@ export default function ScannedReceipts({ photos: loaded, reload, accounts, cate
     };
 
     const remove = async (photo: InboxPhoto) => {
-        if (!window.confirm(t('scan.confirmDelete'))) return;
+        if (!await ask(t('scan.confirmDelete'), { confirmLabel: t('common.remove') })) return;
         try {
             await deletePhoto(photo);
             reload();

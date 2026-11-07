@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { money, type PlannedCost, type Split } from '../finance';
+import { ask } from '../confirm';
 
 interface Category { id: string; name: string; type: string }
 
@@ -51,7 +52,7 @@ export default function MonthlyCosts({ splits, onChange }: { splits: Split[]; on
     };
 
     const remove = async (cost: PlannedCost) => {
-        if (!confirm(t('monthlyCosts.confirmDelete', { name: cost.name }))) return;
+        if (!await ask(t('monthlyCosts.confirmDelete', { name: cost.name }))) return;
         try {
             await api.delete(`/api/v1/planned-costs/${cost.id}`);
             changed();

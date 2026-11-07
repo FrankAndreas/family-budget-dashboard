@@ -26,6 +26,10 @@ interface ExportBudget {
     period: string;
 }
 
+// The same booking in a backup and in the database: account, category, day and time, amount and text
+const bookingKey = (accountId: string, categoryId: string, b: { date: string; amount: number; description?: string | null }) =>
+    [accountId, categoryId, new Date(b.date).toISOString(), Math.round(b.amount * 100), (b.description ?? '').trim()].join('|');
+
 interface ExportTransaction {
     account_id: string;
     category_id: string;
@@ -160,25 +164,47 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
 
             let imported = 0;
             let skipped = 0;
+            // Already there (restored before, or never lost): not created a second time
+            let existing = 0;
 
-            // Import accounts
+            // Accounts: your own one with the same name and type is used again, otherwise a new one
+            const ownAccounts = ((await api.get('/api/v1/accounts')).data as ExportAccount[]).filter(a => a.user_id === user?.id);
             const accountMap = new Map<string, string>();
+            // What each reused account already holds, per booking (see bookingKey), counted: two equal coffees stay two
+            const alreadyBooked = new Map<string, number>();
             for (const account of (data.accounts || []) as ExportAccount[]) {
+                const found = ownAccounts.find(a => a.id === account.id)
+                    ?? ownAccounts.find(a => a.name === account.name && a.type === account.type && ![...accountMap.values()].includes(a.id));
                 try {
-                    const res = await api.post('/api/v1/accounts', { name: account.name, type: account.type });
-                    accountMap.set(account.id, res.data.id);
+                    if (found) {
+                        accountMap.set(account.id, found.id);
+                        for (const booking of await fetchAllTransactions<ExportTransaction>(found.id)) {
+                            const key = bookingKey(found.id, booking.category_id, booking);
+                            alreadyBooked.set(key, (alreadyBooked.get(key) ?? 0) + 1);
+                        }
+                    } else {
+                        const res = await api.post('/api/v1/accounts', { name: account.name, type: account.type });
+                        accountMap.set(account.id, res.data.id);
+                    }
                 } catch {
                     console.error('Failed to import account', account.name);
                 }
             }
 
-            // Import budgets
+            // Budgets: one per category and period
+            const ownBudgets: ExportBudget[] = (await api.get('/api/v1/budgets')).data;
+            const budgetKeys = new Set(ownBudgets.map(b => `${b.category_id}|${b.period}`));
             for (const budget of (data.budgets || []) as ExportBudget[]) {
                 const newCategoryId = categoryMap.get(budget.category_id);
                 if (!newCategoryId) {
                     skipped++;
                     continue;
                 }
+                if (budgetKeys.has(`${newCategoryId}|${budget.period}`)) {
+                    existing++;
+                    continue;
+                }
+                budgetKeys.add(`${newCategoryId}|${budget.period}`);
 
                 try {
                     await api.post('/api/v1/budgets', {
@@ -201,6 +227,13 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
                     skipped++;
                     continue;
                 }
+                const key = bookingKey(newAccountId, newCategoryId, transaction);
+                const left = alreadyBooked.get(key) ?? 0;
+                if (left > 0) {
+                    alreadyBooked.set(key, left - 1);
+                    existing++;
+                    continue;
+                }
 
                 try {
                     await api.post('/api/v1/transactions', {
@@ -221,12 +254,11 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
             }
 
             onDataChanged?.();
-            setStatus({
-                kind: skipped > 0 ? 'error' : 'success',
-                text: skipped > 0
-                    ? t('data.restoredSkipped', { count: imported, skipped })
-                    : t('data.restored', { count: imported })
-            });
+            const text = [
+                skipped > 0 ? t('data.restoredSkipped', { count: imported, skipped }) : t('data.restored', { count: imported }),
+                ...(existing > 0 ? [t('data.restoredExisting', { count: existing })] : []),
+            ].join(' ');
+            setStatus({ kind: skipped > 0 ? 'error' : 'success', text });
         } catch (error) {
             console.error('Failed to import data', error);
             setStatus({ kind: 'error', text: t('data.restoreFailed') });
@@ -292,12 +324,11 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
             <div className="mb-8">
                 <h3 className="text-lg font-semibold mb-4">{t('data.restoreTitle')}</h3>
                 <p className="text-slate-400 mb-4">{t('data.restoreIntro')}</p>
-                <div className="p-4 bg-yellow-500/10 border border-yellow-500/30 rounded-lg mb-4">
-                    <p className="text-yellow-400 text-sm">{t('data.restoreWarning')}</p>
-                </div>
+                <p className="text-sm text-slate-400 mb-4">{t('data.restoreAgain')}</p>
                 <input
                     type="file"
                     accept=".json"
+                    aria-label={t('data.restoreFile')}
                     onChange={handleImport}
                     disabled={importing}
                     className="block w-full text-sm text-slate-400

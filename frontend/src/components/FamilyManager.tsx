@@ -8,6 +8,7 @@ import EmailAddresses from './EmailAddresses';
 import RemovedPeople from './RemovedPeople';
 import type { PersonEmail } from '../inbox';
 import Section from './Section';
+import { ask } from '../confirm';
 
 // Parents only: the family as the family hub lists it for this app, with what only this app knows about each person
 // (Jugendlohn or dependent, receipt-mail addresses). People, names and PINs are added and changed in the hub.
@@ -43,7 +44,7 @@ export default function FamilyManager() {
     };
 
     const setAllowance = async (member: FamilyUser, hasAllowance: boolean) => {
-        if (!hasAllowance && !confirm(t('family.confirmRemoveAllowance', { name: member.username }))) return;
+        if (!hasAllowance && !await ask(t('family.confirmRemoveAllowance', { name: member.username }), { confirmLabel: t('common.continue'), danger: false })) return;
         try {
             await api.put(`/api/v1/users/${member.id}`, { has_allowance: hasAllowance });
             showResult(t(hasAllowance ? 'family.allowanceGiven' : 'family.allowanceRemoved', { name: member.username }));

@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { expect, test } from '@playwright/test';
-import { call, login, newParent, PYTHON } from './helpers';
+import { appConfirm, call, login, newParent, PYTHON } from './helpers';
 
 const REPO = path.resolve(__dirname, '..', '..');
 // An example IBAN (invented data only: the repository is public)
@@ -51,6 +51,8 @@ test('converted bank export with a transfer to the Migros account', async ({ pag
     await expect(page.getByRole('button', { name: 'Delete transaction' })).toHaveCount(1);
     await expect(page.getByRole('button', { name: 'Edit transaction' })).toHaveCount(0);
     await page.getByRole('button', { name: 'Delete transaction' }).click();
+    // A page check lets login()'s handler confirm the app's question (the poll below only asks the API)
+    await expect(appConfirm(page)).toHaveCount(0);
     await expect.poll(() => balance(migros.id)).toBe(0);
     expect(await balance(household.id)).toBe(65.75);
     expect(errors).toEqual([]);

@@ -8,6 +8,7 @@ import { money, useSplits } from '../finance';
 import { ownerFields, ownerValue } from '../ownership';
 import OwnerSelect from './OwnerSelect';
 import { useScrollIntoView } from '../useScrollIntoView';
+import { ask } from '../confirm';
 
 interface Wish {
     id: string;
@@ -146,8 +147,8 @@ export default function Wishes() {
 
     const move = (wish: Wish, direction: 'up' | 'down', list: 'own' | 'family') =>
         change(api.post(`/api/v1/wishes/${wish.id}/move`, { list, direction }), t('wishes.moveFailed'));
-    const remove = (wish: Wish) => {
-        if (!confirm(t('wishes.confirmDelete', { name: wish.name }))) return;
+    const remove = async (wish: Wish) => {
+        if (!await ask(t('wishes.confirmDelete', { name: wish.name }))) return;
         change(api.delete(`/api/v1/wishes/${wish.id}`), t('wishes.deleteFailed'));
     };
 

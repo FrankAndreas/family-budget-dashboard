@@ -9,6 +9,7 @@ import { openAttachment, useReceiptReading, useTags } from '../receipts';
 import ReceiptForm from './ReceiptForm';
 import AssetLink from './AssetLink';
 import { useScrollIntoView } from '../useScrollIntoView';
+import { ask } from '../confirm';
 
 interface Props {
     account: Account;
@@ -243,7 +244,7 @@ export default function Transactions({
     };
 
     const handleDelete = async (transaction: Transaction) => {
-        if (!confirm(t('transactions.confirmDelete', {
+        if (!await ask(t('transactions.confirmDelete', {
             description: transaction.description || t('transactions.noDescription'), amount: money(transaction.amount),
         }))) return;
         try {

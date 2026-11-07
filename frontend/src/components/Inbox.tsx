@@ -7,6 +7,7 @@ import { type InboxMail, type Release, release, useInbox, usePhotos } from '../i
 import ReceiptForm from './ReceiptForm';
 import ScanReceipts from './ScanReceipts';
 import ScannedReceipts from './ScannedReceipts';
+import { ask } from '../confirm';
 
 interface Props {
     // Accounts the parent may book on
@@ -55,7 +56,7 @@ export default function Inbox({ accounts, categories, people, aiEnabled, version
     };
 
     const remove = async (mail: InboxMail) => {
-        if (!window.confirm(t('inbox.confirmDelete'))) return;
+        if (!await ask(t('inbox.confirmDelete'))) return;
         try {
             await api.delete(`/api/v1/inbox/${mail.id}`);
             reload();

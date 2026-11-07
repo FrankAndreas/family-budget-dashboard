@@ -97,3 +97,28 @@ h3 {
   letter-spacing: -0.025em;
   font-weight: 700;
 }
+/* Edit and Delete next to an entry: told apart by colour, with room to tap */
+.link-edit,
+.link-delete {
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  transition: background-color 0.2s, color 0.2s;
+}
+
+.link-edit {
+  color: #7dd3fc;
+}
+
+.link-edit:hover {
+  background: rgba(56, 189, 248, 0.12);
+}
+
+.link-delete {
+  color: #fca5a5;
+}
+
+.link-delete:hover {
+  background: rgba(248, 113, 113, 0.15);
+  color: #fecaca;
+}

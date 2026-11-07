@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { deletePhoto, type InboxPhoto } from '../inbox';
 import { shrink, uploadPhoto } from '../scan';
+import { ask } from '../confirm';
 
 interface Props {
     // Reading with the AI is set up on the server
@@ -60,7 +61,7 @@ export default function ScanReceipts({ aiEnabled, onDone }: Props) {
     // Taken by mistake: out of the inbox again; a failed one never got there
     const remove = async (shot: Shot) => {
         if (shot.photo) {
-            if (!window.confirm(t('scan.confirmRemove'))) return;
+            if (!await ask(t('scan.confirmRemove'), { confirmLabel: t('common.remove') })) return;
             try {
                 await deletePhoto(shot.photo);
             } catch {
@@ -74,8 +75,8 @@ export default function ScanReceipts({ aiEnabled, onDone }: Props) {
     const uploading = shots.some(shot => shot.state === 'uploading');
     const failed = shots.some(shot => shot.state === 'failed');
     const done = shots.filter(shot => shot.state === 'done').length;
-    const finish = () => {
-        if (failed && !window.confirm(t('scan.confirmFailed'))) return;
+    const finish = async () => {
+        if (failed && !await ask(t('scan.confirmFailed'), { confirmLabel: t('scan.finishAnyway'), danger: false })) return;
         onDone();
     };
 

@@ -11,6 +11,7 @@ import OwnerSelect from './OwnerSelect';
 import AssetCard from './AssetCard';
 import AssetGroup, { ArchivedGroup } from './AssetGroup';
 import { useScrollIntoView } from '../useScrollIntoView';
+import { ask } from '../confirm';
 
 interface Expense { id: string; amount: number; date: string; description: string | null }
 type Filter = 'all' | 'mine' | 'common' | 'others';
@@ -145,8 +146,8 @@ export default function Investments() {
         }
     };
 
-    const remove = (asset: Asset) => {
-        if (!confirm(t('investments.confirmDelete', { name: asset.name }))) return;
+    const remove = async (asset: Asset) => {
+        if (!await ask(t('investments.confirmDelete', { name: asset.name }))) return;
         call(() => api.delete(`/api/v1/assets/${asset.id}`), t('investments.deleteFailed'));
     };
 

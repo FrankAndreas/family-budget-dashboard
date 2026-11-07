@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import type { Tag } from '../receipts';
 import Section from './Section';
+import { ask } from '../confirm';
 
 type Usage = Record<string, { items: number; budgets: number; assets: number; article_rules: number }>;
 
@@ -53,8 +54,8 @@ export default function TagManager() {
         if (await change(api.put(`/api/v1/tags/${editing.id}`, body), t('tags.saveFailed'))) setEditing(null);
     };
 
-    const remove = (tag: Tag) => {
-        if (!confirm(t('tags.confirmDelete', { name: tag.name }))) return;
+    const remove = async (tag: Tag) => {
+        if (!await ask(t('tags.confirmDelete', { name: tag.name }))) return;
         change(api.delete(`/api/v1/tags/${tag.id}`), t('tags.deleteFailed'));
     };
 
@@ -101,9 +102,9 @@ export default function TagManager() {
                             <span className="flex-1">{tag.name}</span>
                             {describe(tag) && <span className="text-slate-500">{describe(tag)}</span>}
                             <button onClick={() => setEditing({ id: tag.id, name: tag.name, icon: tag.icon ?? '' })}
-                                className="text-slate-500 hover:text-blue-400">{t('common.edit')}</button>
+                                className="link-edit">{t('common.edit')}</button>
                             {!usage[tag.id]?.budgets && (
-                                <button onClick={() => remove(tag)} className="text-slate-500 hover:text-red-400">{t('common.delete')}</button>
+                                <button onClick={() => remove(tag)} className="link-delete">{t('common.delete')}</button>
                             )}
                         </>)}
                     </li>

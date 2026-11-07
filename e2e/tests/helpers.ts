@@ -90,6 +90,13 @@ export async function call<T = any>(
     return response.json();
 }
 
+// The app's confirm dialog (components/ConfirmDialog.tsx)
+export const appConfirm = (page: Page) => page.getByRole('alertdialog');
+
+export async function answerConfirmsYourself(page: Page): Promise<void> {
+    await page.removeLocatorHandler(appConfirm(page));
+}
+
 // Logged in as at home: the hub's cookie in the browser (the hub's own login page is family-hub's to test). Fails the
 // test on any error in the browser console
 export async function login(page: Page, parent: Parent): Promise<string[]> {
@@ -97,6 +104,11 @@ export async function login(page: Page, parent: Parent): Promise<string[]> {
     page.on('pageerror', e => errors.push(String(e)));
     page.on('console', m => { if (m.type() === 'error') errors.push(m.text()); });
     page.on('dialog', d => d.accept());
+    // The app's own confirm dialog (instead of the browser's): confirmed like the browser's above. A test that
+    // answers it itself calls answerConfirmsYourself(page) first
+    await page.addLocatorHandler(appConfirm(page), async dialog => {
+        await dialog.getByTestId('confirm-yes').click();
+    });
     await page.context().addCookies([{ name: 'hub_session', value: parent.token, url: 'http://localhost:3100' }]);
     await page.goto('/');
     await expect(page.getByRole('button', { name: /^(Logout|Abmelden)$/ })).toBeVisible();
