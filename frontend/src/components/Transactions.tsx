@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { money, type Asset, type Split } from '../finance';
-import { formatDate } from '../format';
+import { formatDate, formatMonth } from '../format';
 import type { Account, BankRow, Category, Transaction } from '../accounts';
 import type { FamilyUser } from '../family';
 import { openAttachment, useReceiptReading, useTags } from '../receipts';
@@ -74,6 +74,9 @@ export default function Transactions({
         }
     }, [account.id, transactions, openOnly]);
     const shown = openOnly ? openBookings : transactions;
+    // Finding a booking: words in the text, category, items, child or item; and one category
+    const [query, setQuery] = useState('');
+    const [categoryFilter, setCategoryFilter] = useState('');
     const act = async (call: () => Promise<unknown>) => {
         try {
             await call();
@@ -124,6 +127,53 @@ export default function Transactions({
     const canShare = isParent && isParentAccount && splits.length > 0 && isExpense(form.category_id);
     // Repairs, service, tyres... can be linked to an investment
     const canLinkItem = isParent && assets.length > 0 && isExpense(form.category_id);
+
+    const categoryLabel = (id: string) => {
+        const category = categories.find(c => c.id === id);
+        return category ? `${category.icon ? `${category.icon} ` : ''}${category.name}` : '';
+    };
+    // A receipt split into items of several categories shows that instead of the booking's one
+    const rowCategory = (transaction: Transaction) => {
+        const ids = new Set((transaction.items ?? []).map(item => item.category_id));
+        return ids.size > 1 ? t('transactions.severalCategories') : categoryLabel(ids.size === 1 ? [...ids][0] : transaction.category_id);
+    };
+    const categoriesOf = (transaction: Transaction) =>
+        [transaction.category_id, ...(transaction.items ?? []).map(item => item.category_id)];
+    const matches = (transaction: Transaction) => {
+        if (categoryFilter && !categoriesOf(transaction).includes(categoryFilter)) return false;
+        const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
+        if (words.length === 0) return true;
+        const text = [
+            transaction.description, money(transaction.amount), Math.abs(transaction.amount).toFixed(2),
+            memberName(transaction.member_id), assetName(transaction.asset_id),
+            ...categoriesOf(transaction).map(categoryName),
+            ...(transaction.items ?? []).map(item => item.name),
+        ].filter(Boolean).join(' ').toLowerCase();
+        return words.every(word => text.includes(word));
+    };
+    const filtering = !!query.trim() || !!categoryFilter;
+    const found = shown.filter(matches);
+    // Newest first, one group per month (local time, as the dates are shown)
+    const monthKey = (date: string) => {
+        const d = new Date(date);
+        return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+    };
+    const months: { key: string; bookings: Transaction[]; income: number; expenses: number }[] = [];
+    for (const transaction of found) {
+        const key = monthKey(transaction.date);
+        let month = months.find(m => m.key === key);
+        if (!month) months.push(month = { key, bookings: [], income: 0, expenses: 0 });
+        month.bookings.push(transaction);
+        // Transfers move money between accounts: not income or expenses
+        if (isTransfer(transaction)) continue;
+        if (transaction.amount >= 0) month.income += transaction.amount;
+        else month.expenses += transaction.amount;
+    }
+    months.sort((a, b) => b.key.localeCompare(a.key));
+    // The categories of the bookings in the list, for the filter
+    const usedCategories = categories
+        .filter(c => shown.some(tr => categoriesOf(tr).includes(c.id)))
+        .sort((a, b) => a.name.localeCompare(b.name));
 
     const closeForm = () => {
         setForm(emptyForm);
@@ -333,149 +383,187 @@ export default function Transactions({
                 </div>
             )}
 
-            <div className="space-y-2">
+            {shown.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                    <input type="search" value={query} onChange={e => setQuery(e.target.value)}
+                        aria-label={t('transactions.search')} placeholder={t('transactions.search')}
+                        className="flex-1 min-w-48 p-2 rounded bg-slate-800/50 border border-slate-600 text-white" />
+                    <select value={categoryFilter} onChange={e => setCategoryFilter(e.target.value)}
+                        aria-label={t('transactions.filterCategory')}
+                        className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white">
+                        <option value="">{t('transactions.allCategories')}</option>
+                        {usedCategories.map(c => <option key={c.id} value={c.id}>{categoryLabel(c.id)}</option>)}
+                    </select>
+                    {filtering && (
+                        <button type="button" onClick={() => { setQuery(''); setCategoryFilter(''); }}
+                            className="px-3 text-sm text-slate-400 hover:text-white">
+                            {t('transactions.clearFilter')}
+                        </button>
+                    )}
+                </div>
+            )}
+
+            <div className="space-y-6">
                 {shown.length === 0 ? (
                     <p className="text-slate-400 text-center py-8">{t('transactions.none')}</p>
+                ) : found.length === 0 ? (
+                    <p className="text-slate-400 text-center py-8">{t('transactions.noneFound')}</p>
                 ) : (
-                    shown.map(transaction => (
-                        <div key={transaction.id} className="p-3 bg-slate-800/30 rounded-lg">
-                        <div className="flex justify-between items-start sm:items-center gap-2">
-                            <div className="min-w-0 flex-1">
-                                <p className="font-semibold break-words">
-                                    {transaction.description || t('transactions.noDescription')}
-                                    {memberName(transaction.member_id) && (
-                                        <span className="ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300">
-                                            {t('transactions.forBadge', { name: memberName(transaction.member_id) })}
-                                        </span>
-                                    )}
-                                    {assetName(transaction.asset_id) && (
-                                        <span className="ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
-                                            {assetName(transaction.asset_id)}
-                                        </span>
-                                    )}
-                                    {(transaction.split_id || transaction.split_shares) && (
-                                        <span className="ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300">
-                                            {t('transactions.sharedBadge')}
-                                        </span>
-                                    )}
-                                    {badges(transaction).map(badge => (
-                                        <span key={badge.text} className={`ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full ${badge.warn
-                                            ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-500/20 text-slate-300'}`}>
-                                            {badge.text}
-                                        </span>
-                                    ))}
-                                </p>
-                                <p className="text-sm text-slate-400">
-                                    {formatDate(transaction.date)}
-                                    {(transaction.items?.length || transaction.attachments?.length || transaction.bank_rows?.length || transaction.state) ? (
-                                        <button onClick={() => toggleExpanded(transaction.id)} className="ml-3 text-sky-400 hover:underline">
-                                            {transaction.items?.length ? t('receipt.items', { count: transaction.items.length }) : ''}
-                                            {transaction.attachments?.length ? ` ${t('receipt.attachmentsCount', { count: transaction.attachments.length })}` : ''}
-                                            {transaction.bank_rows?.length ? ` ${t('reconcile.bankLines', { count: transaction.bank_rows.length })}` : ''}
-                                            {!transaction.items?.length && !transaction.attachments?.length && !transaction.bank_rows?.length ? t('reconcile.more') : ''}
-                                        </button>
-                                    ) : null}
+                    months.map(month => (
+                        <section key={month.key} aria-label={formatMonth(month.key)}>
+                            <div className="flex flex-wrap justify-between items-baseline gap-x-3 mb-2 px-1">
+                                <h3 className="font-semibold text-slate-200">{formatMonth(month.key)}</h3>
+                                <p className="text-sm text-slate-400" data-testid="month-totals">
+                                    {month.income > 0 && <span className="text-emerald-400">+ {money(month.income)}</span>}
+                                    {month.income > 0 && month.expenses < 0 && ' · '}
+                                    {month.expenses < 0 && <span className="text-red-400">{money(month.expenses)}</span>}
+                                    {filtering && ` · ${t('transactions.foundCount', { count: month.bookings.length })}`}
                                 </p>
                             </div>
-                            <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2 shrink-0">
-                                <p className={`text-lg sm:text-xl font-bold whitespace-nowrap ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                                    {transaction.amount >= 0 ? '+ ' : ''}{money(transaction.amount)}
-                                </p>
-                                <div className="flex items-center gap-1">
-                                {canEdit && !transaction.items?.length && isExpense(transaction.category_id) && (
-                                    <button
-                                        onClick={() => { closeForm(); setReceiptFor(transaction); }}
-                                        className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 hover:text-blue-400 transition-colors"
-                                        title={t('receipt.split')}
-                                        aria-label={t('receipt.split')}
-                                    >
-                                        🧾
-                                    </button>
-                                )}
-                                {canEdit && !isTransfer(transaction) && (
-                                    <button
-                                        onClick={() => transaction.items?.length
-                                            ? (closeForm(), setReceiptFor(transaction))
-                                            : handleEdit(transaction)}
-                                        className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 hover:text-blue-400 transition-colors"
-                                        title={t('transactions.edit')}
-                                        aria-label={t('transactions.edit')}
-                                    >
-                                        ✎
-                                    </button>
-                                )}
-                                {/* Settle up is undone in the Common tab; imported transfers can be deleted here */}
-                                {canEdit && !isSettleUp(transaction) && (
-                                    <button
-                                        onClick={() => handleDelete(transaction)}
-                                        className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 ml-2 hover:text-red-400 transition-colors"
-                                        title={t('transactions.delete')}
-                                        aria-label={t('transactions.delete')}
-                                    >
-                                        ✕
-                                    </button>
-                                )}
-                                </div>
-                            </div>
-                        </div>
-                        {expanded.has(transaction.id) && (
-                            <div className="mt-2 pt-2 border-t border-slate-700 text-sm space-y-1">
-                                {transaction.items?.map(item => (
-                                    <div key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                                        <span className="flex-1 min-w-32">{item.name}</span>
-                                        <span className="text-slate-400">{categoryName(item.category_id)}</span>
-                                        {item.tag_ids.map(id => (
-                                            <span key={id} className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200">{tagLabel(id)}</span>
-                                        ))}
-                                        {personName(item.person_id) && (
-                                            <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300">{personName(item.person_id)}</span>
-                                        )}
-                                        <span className="w-24 text-right">{money(item.amount)}</span>
-                                    </div>
-                                ))}
-                                {transaction.attachments?.map(a => (
-                                    <button key={a.id} onClick={() => openAttachment(a)} className="block text-sky-400 hover:underline">
-                                        📎 {a.filename}
-                                    </button>
-                                ))}
-                                {transaction.bank_rows?.map(row => (
-                                    <div key={row.id} className="flex flex-wrap items-center gap-x-3 text-slate-300">
-                                        <span className="flex-1 min-w-32">🏦 {formatDate(row.booked_on)} · {row.text}</span>
-                                        <span className="w-24 text-right">{money(row.amount)}</span>
-                                        {canEdit && (
-                                            <button onClick={() => unlinkRow(transaction.id, row.id)} className="text-slate-500 hover:text-red-400">
-                                                {t('reconcile.unlink')}
-                                            </button>
-                                        )}
-                                    </div>
-                                ))}
-                                {canEdit && transaction.state && (
-                                    <div className="flex flex-wrap items-center gap-3 pt-1">
-                                        {unlinked.length > 0 && (
-                                            <select value="" onChange={e => e.target.value && linkRow(transaction.id, e.target.value)}
-                                                aria-label={t('reconcile.linkLine')}
-                                                className="p-1 rounded bg-slate-800/50 border border-slate-600 text-white">
-                                                <option value="">{t('reconcile.linkLine')}</option>
-                                                {unlinked.map(row => (
-                                                    <option key={row.id} value={row.id}>{formatDate(row.booked_on)} · {row.text} · {money(row.amount)}</option>
+                            <div className="space-y-2">
+                                {month.bookings.map(transaction => (
+                                    <div key={transaction.id} className="p-3 bg-slate-800/30 rounded-lg">
+                                    <div className="flex justify-between items-start sm:items-center gap-2">
+                                        <div className="min-w-0 flex-1">
+                                            <p className="font-semibold break-words">
+                                                {transaction.description || t('transactions.noDescription')}
+                                                {memberName(transaction.member_id) && (
+                                                    <span className="ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300">
+                                                        {t('transactions.forBadge', { name: memberName(transaction.member_id) })}
+                                                    </span>
+                                                )}
+                                                {assetName(transaction.asset_id) && (
+                                                    <span className="ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
+                                                        {assetName(transaction.asset_id)}
+                                                    </span>
+                                                )}
+                                                {(transaction.split_id || transaction.split_shares) && (
+                                                    <span className="ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300">
+                                                        {t('transactions.sharedBadge')}
+                                                    </span>
+                                                )}
+                                                {badges(transaction).map(badge => (
+                                                    <span key={badge.text} className={`ml-2 inline-block whitespace-nowrap text-xs font-normal px-2 py-0.5 rounded-full ${badge.warn
+                                                        ? 'bg-amber-500/20 text-amber-300' : 'bg-slate-500/20 text-slate-300'}`}>
+                                                        {badge.text}
+                                                    </span>
                                                 ))}
-                                            </select>
-                                        )}
-                                        <label className="flex items-center gap-1">
-                                            <input type="checkbox" checked={!!transaction.receipt_expected}
-                                                onChange={e => setFlag(transaction, 'receipt_expected', e.target.checked)} />
-                                            {t('reconcile.receiptExpected')}
-                                        </label>
-                                        {transaction.state.differs && (
-                                            <button onClick={() => setFlag(transaction, 'difference_accepted', true)} className="text-sky-400 hover:underline">
-                                                {t('reconcile.acceptDifference')}
-                                            </button>
-                                        )}
+                                            </p>
+                                            <p className="text-sm text-slate-400">
+                                                {formatDate(transaction.date)}
+                                                {rowCategory(transaction) && <span className="ml-2">· {rowCategory(transaction)}</span>}
+                                                {(transaction.items?.length || transaction.attachments?.length || transaction.bank_rows?.length || transaction.state) ? (
+                                                    <button onClick={() => toggleExpanded(transaction.id)} className="ml-3 text-sky-400 hover:underline">
+                                                        {transaction.items?.length ? t('receipt.items', { count: transaction.items.length }) : ''}
+                                                        {transaction.attachments?.length ? ` ${t('receipt.attachmentsCount', { count: transaction.attachments.length })}` : ''}
+                                                        {transaction.bank_rows?.length ? ` ${t('reconcile.bankLines', { count: transaction.bank_rows.length })}` : ''}
+                                                        {!transaction.items?.length && !transaction.attachments?.length && !transaction.bank_rows?.length ? t('reconcile.more') : ''}
+                                                    </button>
+                                                ) : null}
+                                            </p>
+                                        </div>
+                                        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2 shrink-0">
+                                            <p className={`text-lg sm:text-xl font-bold whitespace-nowrap ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                                {transaction.amount >= 0 ? '+ ' : ''}{money(transaction.amount)}
+                                            </p>
+                                            <div className="flex items-center gap-1">
+                                            {canEdit && !transaction.items?.length && isExpense(transaction.category_id) && (
+                                                <button
+                                                    onClick={() => { closeForm(); setReceiptFor(transaction); }}
+                                                    className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 hover:text-blue-400 transition-colors"
+                                                    title={t('receipt.split')}
+                                                    aria-label={t('receipt.split')}
+                                                >
+                                                    🧾
+                                                </button>
+                                            )}
+                                            {canEdit && !isTransfer(transaction) && (
+                                                <button
+                                                    onClick={() => transaction.items?.length
+                                                        ? (closeForm(), setReceiptFor(transaction))
+                                                        : handleEdit(transaction)}
+                                                    className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 hover:text-blue-400 transition-colors"
+                                                    title={t('transactions.edit')}
+                                                    aria-label={t('transactions.edit')}
+                                                >
+                                                    ✎
+                                                </button>
+                                            )}
+                                            {/* Settle up is undone in the Common tab; imported transfers can be deleted here */}
+                                            {canEdit && !isSettleUp(transaction) && (
+                                                <button
+                                                    onClick={() => handleDelete(transaction)}
+                                                    className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 ml-2 hover:text-red-400 transition-colors"
+                                                    title={t('transactions.delete')}
+                                                    aria-label={t('transactions.delete')}
+                                                >
+                                                    ✕
+                                                </button>
+                                            )}
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
+                                    {expanded.has(transaction.id) && (
+                                        <div className="mt-2 pt-2 border-t border-slate-700 text-sm space-y-1">
+                                            {transaction.items?.map(item => (
+                                                <div key={item.id} className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                                                    <span className="flex-1 min-w-32">{item.name}</span>
+                                                    <span className="text-slate-400">{categoryName(item.category_id)}</span>
+                                                    {item.tag_ids.map(id => (
+                                                        <span key={id} className="text-xs px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200">{tagLabel(id)}</span>
+                                                    ))}
+                                                    {personName(item.person_id) && (
+                                                        <span className="text-xs px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300">{personName(item.person_id)}</span>
+                                                    )}
+                                                    <span className="w-24 text-right">{money(item.amount)}</span>
+                                                </div>
+                                            ))}
+                                            {transaction.attachments?.map(a => (
+                                                <button key={a.id} onClick={() => openAttachment(a)} className="block text-sky-400 hover:underline">
+                                                    📎 {a.filename}
+                                                </button>
+                                            ))}
+                                            {transaction.bank_rows?.map(row => (
+                                                <div key={row.id} className="flex flex-wrap items-center gap-x-3 text-slate-300">
+                                                    <span className="flex-1 min-w-32">🏦 {formatDate(row.booked_on)} · {row.text}</span>
+                                                    <span className="w-24 text-right">{money(row.amount)}</span>
+                                                    {canEdit && (
+                                                        <button onClick={() => unlinkRow(transaction.id, row.id)} className="text-slate-500 hover:text-red-400">
+                                                            {t('reconcile.unlink')}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            ))}
+                                            {canEdit && transaction.state && (
+                                                <div className="flex flex-wrap items-center gap-3 pt-1">
+                                                    {unlinked.length > 0 && (
+                                                        <select value="" onChange={e => e.target.value && linkRow(transaction.id, e.target.value)}
+                                                            aria-label={t('reconcile.linkLine')}
+                                                            className="p-1 rounded bg-slate-800/50 border border-slate-600 text-white">
+                                                            <option value="">{t('reconcile.linkLine')}</option>
+                                                            {unlinked.map(row => (
+                                                                <option key={row.id} value={row.id}>{formatDate(row.booked_on)} · {row.text} · {money(row.amount)}</option>
+                                                            ))}
+                                                        </select>
+                                                    )}
+                                                    <label className="flex items-center gap-1">
+                                                        <input type="checkbox" checked={!!transaction.receipt_expected}
+                                                            onChange={e => setFlag(transaction, 'receipt_expected', e.target.checked)} />
+                                                        {t('reconcile.receiptExpected')}
+                                                    </label>
+                                                    {transaction.state.differs && (
+                                                        <button onClick={() => setFlag(transaction, 'difference_accepted', true)} className="text-sky-400 hover:underline">
+                                                            {t('reconcile.acceptDifference')}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                    </div>
+                                ))}
                             </div>
-                        )}
-                        </div>
+                        </section>
                     ))
                 )}
             </div>
