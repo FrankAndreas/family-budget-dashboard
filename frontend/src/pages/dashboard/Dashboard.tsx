@@ -8,6 +8,7 @@ import DataManager from '../../components/DataManager';
 import FamilyManager from '../../components/FamilyManager';
 import CategoryManager from '../../components/CategoryManager';
 import TagManager from '../../components/TagManager';
+import RuleSettings from '../../components/RuleSettings';
 import ShareSettings from '../../components/ShareSettings';
 import HubSettings from '../../components/HubSettings';
 import CommonBudget from '../../components/CommonBudget';
@@ -97,9 +98,11 @@ export default function Dashboard() {
     // A deleted account's transactions stay loaded until another one is selected; don't show them
     const shownTransactions = selectedAccountObj ? transactions : [];
     const isParent = user?.role === 'PARENT';
+    // Sharing costs needs a second parent; until the hub gives one this app, the Common tab would be empty
+    const hasOtherParent = users.some(u => u.role === 'PARENT' && u.id !== user?.id && u.is_active !== false);
 
     const tabs = [
-        'overview', 'budgets', ...(isParent ? ['common', 'investments', 'bills'] as const : []), 'wishes', 'analytics', 'settings',
+        'overview', 'budgets', ...(isParent && hasOtherParent ? ['common'] as const : []), ...(isParent ? ['investments', 'bills'] as const : []), 'wishes', 'analytics', 'settings',
     ] as const;
     type Tab = typeof tabs[number];
     const selectTab = (tab: Tab) => {
@@ -251,6 +254,8 @@ export default function Dashboard() {
                     {user?.role === 'PARENT' && <FamilyManager />}
                     {user?.role === 'PARENT' && <CategoryManager />}
                     {user?.role === 'PARENT' && <TagManager />}
+                    {/* Which category an imported booking or receipt article gets: next to the categories */}
+                    {user?.role === 'PARENT' && <RuleSettings version={dataVersion} />}
                     <ShareSettings />
                     <HubSettings />
                     <DataManager onDataChanged={refresh} />

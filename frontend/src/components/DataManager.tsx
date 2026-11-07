@@ -3,10 +3,9 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage, fetchAllTransactions } from '../api';
 import { useAuth } from '../AuthContext';
 import type { FamilyUser } from '../family';
+import { useFamily } from '../useFamily';
 import { downloadBlob } from '../download';
 import ImportTransactions from './ImportTransactions';
-import ImportRules from './ImportRules';
-import ArticleRules from './ArticleRules';
 import Section from './Section';
 
 interface ExportAccount {
@@ -50,7 +49,15 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
     const { t } = useTranslation();
     const { user, refreshUser } = useAuth();
     // Bumped after an import, which may have saved new import rules
-    const [rulesVersion, setRulesVersion] = useState(0);
+    const { users } = useFamily();
+    // Only the rules that apply to this family: another parent, children with their own money
+    const otherParent = users.some(u => u.role === 'PARENT' && u.id !== user?.id && u.is_active !== false);
+    const allowanceChildren = users.some(u => u.role === 'CHILD' && u.has_allowance && u.is_active !== false);
+    const privacyRules = [
+        ...(otherParent ? ['parents', 'common'] as const : []),
+        ...(allowanceChildren || user?.role === 'CHILD' ? ['children', 'own', 'privacy'] as const : []),
+    ];
+    const showChildPrivacy = user?.role === 'CHILD' || allowanceChildren;
     const [importing, setImporting] = useState(false);
     const [privacyEnabled, setPrivacyEnabled] = useState(user?.privacy_enabled || false);
     const [savingPrivacy, setSavingPrivacy] = useState(false);
@@ -278,9 +285,8 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
                 </div>
             </div>
 
-            <ImportTransactions onImported={() => { onDataChanged?.(); setRulesVersion(v => v + 1); }} />
-            {user?.role === 'PARENT' && <ImportRules version={rulesVersion} />}
-            {user?.role === 'PARENT' && <ArticleRules version={rulesVersion} />}
+            {/* The rules it learns are in their own Settings section (reloaded through onDataChanged) */}
+            <ImportTransactions onImported={() => onDataChanged?.()} />
 
             {/* Restore Section */}
             <div className="mb-8">
@@ -307,47 +313,45 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
                 )}
             </div>
 
-            {/* Privacy Settings */}
-            <div className="pt-8 border-t border-slate-700">
-                <h3 className="text-lg font-semibold mb-4">{t('data.privacyTitle')}</h3>
-                <div className="space-y-4">
-                    <div className="p-4 bg-slate-800/30 rounded-lg">
-                        <h4 className="font-semibold mb-2">{t('data.childPrivacy')}</h4>
-                        <p className="text-sm text-slate-400 mb-3">
-                            {user?.role === 'CHILD' ? t('data.childPrivacyChild') : t('data.childPrivacyParent')}
-                        </p>
-                        {user?.role === 'CHILD' && (
-                            <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                    type="checkbox"
-                                    className="w-4 h-4"
-                                    checked={privacyEnabled}
-                                    onChange={handlePrivacyToggle}
-                                    disabled={savingPrivacy}
-                                />
-                                <span>{t('data.enablePrivacy')}{savingPrivacy && t('data.saving')}</span>
-                            </label>
+            {/* Privacy: only what applies to this family (nothing for a parent on their own) */}
+            {(showChildPrivacy || privacyRules.length > 0) && (
+                <div className="pt-8 border-t border-slate-700">
+                    <h3 className="text-lg font-semibold mb-4">{t('data.privacyTitle')}</h3>
+                    <div className="space-y-4">
+                        {showChildPrivacy && (
+                            <div className="p-4 bg-slate-800/30 rounded-lg">
+                                <h4 className="font-semibold mb-2">{t('data.childPrivacy')}</h4>
+                                <p className="text-sm text-slate-400 mb-3">
+                                    {user?.role === 'CHILD' ? t('data.childPrivacyChild') : t('data.childPrivacyParent')}
+                                </p>
+                                {user?.role === 'CHILD' && (
+                                    <label className="flex items-center gap-2 cursor-pointer">
+                                        <input
+                                            type="checkbox"
+                                            className="w-4 h-4"
+                                            checked={privacyEnabled}
+                                            onChange={handlePrivacyToggle}
+                                            disabled={savingPrivacy}
+                                        />
+                                        <span>{t('data.enablePrivacy')}{savingPrivacy && t('data.saving')}</span>
+                                    </label>
+                                )}
+                                {user?.role === 'PARENT' && (
+                                    <p className="text-sm text-slate-500 italic">{t('data.parentPrivacy')}</p>
+                                )}
+                            </div>
                         )}
-                        {user?.role === 'PARENT' && (
-                            <p className="text-sm text-slate-500 italic">{t('data.parentPrivacy')}</p>
+                        {privacyRules.length > 0 && (
+                            <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
+                                <h4 className="font-semibold mb-2 text-blue-400">{t('data.rulesTitle')}</h4>
+                                <ul className="text-sm text-slate-400 space-y-1">
+                                    {privacyRules.map(rule => <li key={rule}>• {t(`data.rules.${rule}`)}</li>)}
+                                </ul>
+                            </div>
                         )}
-                    </div>
-
-                    <div className="p-4 bg-slate-800/30 rounded-lg">
-                        <h4 className="font-semibold mb-2">{t('data.retentionTitle')}</h4>
-                        <p className="text-sm text-slate-400">{t('data.retention')}</p>
-                    </div>
-
-                    <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-                        <h4 className="font-semibold mb-2 text-blue-400">{t('data.rulesTitle')}</h4>
-                        <ul className="text-sm text-slate-400 space-y-1">
-                            {(['parents', 'common', 'children', 'own', 'privacy'] as const).map(rule => (
-                                <li key={rule}>• {t(`data.rules.${rule}`)}</li>
-                            ))}
-                        </ul>
                     </div>
                 </div>
-            </div>
+            )}
         </Section>
     );
 }
