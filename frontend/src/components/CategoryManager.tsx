@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import type { Category } from '../accounts';
 import Section from './Section';
+import { ask } from '../confirm';
 
 type Usage = Record<string, { transactions: number; budgets: number; planned_costs: number; import_rules: number; article_rules: number; items: number }>;
 
@@ -71,8 +72,8 @@ export default function CategoryManager() {
         }
     };
 
-    const remove = (category: Category) => {
-        if (!confirm(t('categories.confirmDelete', { name: category.name }))) return;
+    const remove = async (category: Category) => {
+        if (!await ask(t('categories.confirmDelete', { name: category.name }))) return;
         change(api.delete(`/api/v1/categories/${category.id}`), t('categories.deleteFailed'));
     };
 
@@ -128,9 +129,9 @@ export default function CategoryManager() {
                                         <span className="flex-1">{category.name}{category.system_key && <span title={t('categories.locked')}> 🔒</span>}</span>
                                         {used && <span className="text-slate-500">{used}</span>}
                                         <button onClick={() => setEditing({ id: category.id, name: category.name, type: category.type, icon: category.icon ?? '' })}
-                                            className="text-slate-500 hover:text-blue-400">{t('common.edit')}</button>
+                                            className="link-edit">{t('common.edit')}</button>
                                         {!category.system_key && !used && (
-                                            <button onClick={() => remove(category)} className="text-slate-500 hover:text-red-400">{t('common.delete')}</button>
+                                            <button onClick={() => remove(category)} className="link-delete">{t('common.delete')}</button>
                                         )}
                                     </>)}
                                 </li>

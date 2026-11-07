@@ -4,6 +4,7 @@ import { AuthProvider, useAuth } from './AuthContext';
 import Dashboard from './pages/dashboard/Dashboard';
 import ChildCosts from './pages/ChildCosts';
 import NoAccess from './pages/NoAccess';
+import ConfirmHost from './components/ConfirmDialog';
 import './index.css';
 
 // What the logged-in person sees: the app, or for a child without Jugendlohn only their own costs
@@ -27,6 +28,8 @@ function App() {
           {/* The login is the family hub's now; old links to /login land here */}
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
+        {/* The app's own confirm dialog (ask() in components/ConfirmDialog) */}
+        <ConfirmHost />
       </BrowserRouter>
     </AuthProvider>
   );

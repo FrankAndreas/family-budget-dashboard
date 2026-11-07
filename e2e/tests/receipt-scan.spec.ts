@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { API, call, login, newParent } from './helpers';
+import { API, answerConfirmsYourself, appConfirm, call, login, newParent } from './helpers';
 
 // Two different 1×1 PNGs (black, red): the fake AI ignores the picture and answers with a fixed Migros receipt
 // (2026-10-20, CHF 83.40); different pictures, so the two photos are two receipts
@@ -133,13 +133,15 @@ test('a photo is removed on the scan screen', async ({ page, request }) => {
         ((await call(request, parent, 'GET', '/inbox/photos')) as Photo[]).filter(p => p.person_name === parent.name);
     const [, second] = await mine();
 
-    // Cancelled: the photo stays (login accepts every dialog; here each one is answered on its own)
-    page.removeAllListeners('dialog');
-    page.once('dialog', dialog => dialog.dismiss());
+    // Cancelled: the photo stays (login confirms every question; here each one is answered on its own)
+    await answerConfirmsYourself(page);
     await page.getByRole('button', { name: 'Remove photo 1' }).click();
+    await expect(appConfirm(page)).toContainText('Remove this photo from the inbox?');
+    await appConfirm(page).getByRole('button', { name: 'Cancel' }).click();
+    await expect(appConfirm(page)).toHaveCount(0);
     await expect(page.getByRole('img', { name: 'Photo 2' })).toBeVisible();
-    page.once('dialog', dialog => dialog.accept());
     await page.getByRole('button', { name: 'Remove photo 1' }).click();
+    await appConfirm(page).getByRole('button', { name: 'Remove' }).click();
     await expect(page.getByText('✓ in the inbox')).toHaveCount(1);
     await expect(page.getByRole('img', { name: 'Photo 2' })).toHaveCount(0);
     await expect.poll(async () => (await mine()).map(p => p.id)).toEqual([second.id]);

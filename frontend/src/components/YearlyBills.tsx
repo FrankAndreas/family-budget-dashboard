@@ -9,6 +9,7 @@ import { formatMonth, monthNames } from '../format';
 import { ownerFields, ownerValue } from '../ownership';
 import OwnerSelect from './OwnerSelect';
 import { useScrollIntoView } from '../useScrollIntoView';
+import { ask } from '../confirm';
 
 interface Category { id: string; name: string; type: string }
 
@@ -78,7 +79,7 @@ export default function YearlyBills() {
     };
 
     const remove = async (bill: PlannedCost) => {
-        if (!confirm(t('bills.confirmDelete', { name: bill.name }))) return;
+        if (!await ask(t('bills.confirmDelete', { name: bill.name }))) return;
         try {
             await api.delete(`/api/v1/planned-costs/${bill.id}`);
             setVersion(v => v + 1);

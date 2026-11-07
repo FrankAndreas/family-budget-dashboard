@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { describeSplit, type Split } from '../finance';
 import type { FamilyUser } from '../family';
+import { ask } from '../confirm';
 
 interface Props {
     splits: Split[];
@@ -52,7 +53,7 @@ export default function SplitManager({ splits, parents, onChange }: Props) {
     };
 
     const remove = async (split: Split) => {
-        if (!confirm(t('splits.confirmDelete', { name: split.name }))) return;
+        if (!await ask(t('splits.confirmDelete', { name: split.name }))) return;
         try {
             await api.delete(`/api/v1/splits/${split.id}`);
             onChange();

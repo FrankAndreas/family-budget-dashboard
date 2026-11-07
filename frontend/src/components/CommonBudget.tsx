@@ -7,6 +7,7 @@ import { money, useSplits, type Overview } from '../finance';
 import { formatDate } from '../format';
 import SplitManager from './SplitManager';
 import MonthlyCosts from './MonthlyCosts';
+import { ask } from '../confirm';
 
 interface Balance { user_id: string; amount: number }
 interface SharedExpense {
@@ -135,7 +136,7 @@ export default function CommonBudget() {
     };
 
     const undoSettlement = async (settlement: Settlement) => {
-        if (!confirm(t('commonBudget.confirmUndo', { amount: money(settlement.amount) }))) return;
+        if (!await ask(t('commonBudget.confirmUndo', { amount: money(settlement.amount) }), { confirmLabel: t('commonBudget.undo') })) return;
         try {
             await api.delete(`/api/v1/settlements/${settlement.id}`);
             refresh();

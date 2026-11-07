@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import api, { errorMessage } from '../api';
+import api, { errorMessage, fetchAllTransactions } from '../api';
 import { useAuth } from '../AuthContext';
 import { money } from '../finance';
 import { ACCOUNT_TYPES, groupedIban, type Account } from '../accounts';
 import type { FamilyUser } from '../family';
+import { ask } from '../confirm';
 
 interface Props {
     accounts: Account[];
@@ -67,7 +68,17 @@ export default function AccountCards({
     };
 
     const handleDeleteAccount = async (account: Account) => {
-        if (!confirm(t('accounts.confirmDelete', { name: account.name }))) return;
+        // Say what goes with it: the account's bookings are deleted too
+        let count: number;
+        try {
+            count = (await fetchAllTransactions(account.id)).length;
+        } catch {
+            count = -1;
+        }
+        const message = count < 0 ? t('accounts.confirmDelete', { name: account.name })
+            : count === 0 ? t('accounts.confirmDeleteEmpty', { name: account.name })
+                : t('accounts.confirmDeleteWithBookings', { name: account.name, count });
+        if (!await ask(message)) return;
         try {
             await api.delete(`/api/v1/accounts/${account.id}`);
             onDeleted(account.id);
@@ -184,7 +195,7 @@ export default function AccountCards({
                                                     e.stopPropagation();
                                                     setEditingAccount({ id: account.id, name: account.name, type: account.type, iban: account.iban ? groupedIban(account.iban) : '' });
                                                 }}
-                                                className="text-sm text-slate-500 hover:text-blue-400 transition-colors"
+                                                className="link-edit"
                                                 title={t('accounts.editTitle')}
                                             >
                                                 {t('common.edit')}
@@ -194,7 +205,7 @@ export default function AccountCards({
                                                     e.stopPropagation();
                                                     handleDeleteAccount(account);
                                                 }}
-                                                className="text-sm text-slate-500 hover:text-red-400 transition-colors"
+                                                className="link-delete"
                                                 title={t('accounts.deleteTitle')}
                                             >
                                                 {t('common.delete')}

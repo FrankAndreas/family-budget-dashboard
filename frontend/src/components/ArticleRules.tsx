@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { useTags } from '../receipts';
+import { ask } from '../confirm';
 
 interface Rule { id: string; name: string; category_id: string; category: string; tag_ids: string[] }
 // What a booking proposed; rule: the rule it would change
@@ -48,7 +49,7 @@ export default function ArticleRules({ version }: { version: number }) {
     };
 
     const remove = async (rule: Rule) => {
-        if (!confirm(t('articleRules.confirmDelete', { name: rule.name }))) return;
+        if (!await ask(t('articleRules.confirmDelete', { name: rule.name }))) return;
         try {
             await api.delete(`/api/v1/article-rules/${rule.id}`);
             setReload(r => r + 1);

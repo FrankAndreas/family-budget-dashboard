@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
+import { ask } from '../confirm';
 
 interface Rule {
     id: string; text: string; category: string; category_id: string; category_type: string;
@@ -90,7 +91,7 @@ export default function ImportRules({ version }: { version: number }) {
     };
 
     const remove = async (rule: Rule) => {
-        if (!confirm(t('importRules.confirmDelete', { text: rule.text, category: rule.category }))) return;
+        if (!await ask(t('importRules.confirmDelete', { text: rule.text, category: rule.category }))) return;
         try {
             await api.delete(`/api/v1/import/rules/${rule.id}`);
             setMessage('');
