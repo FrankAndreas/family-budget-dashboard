@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 
 from . import auth, crud, database, i18n, models, privacy, schemas, messages
 from .seed import OTHER_INCOME, UNKNOWN_EXPENSE, system_category
+from .money import cents
 
 router = APIRouter()
 
@@ -47,10 +48,10 @@ def months(db: Session, account: models.Account) -> dict:
     return {
         month: {
             "month": month,
-            "money_in": crud.to_cents(money_in),
-            "money_out": crud.to_cents(money_out),
+            "money_in": cents(money_in),
+            "money_out": cents(money_out),
             # Rounded to cents, so float noise counts as 0
-            "difference": crud.to_cents(money_in - money_out) + 0.0,
+            "difference": cents(money_in - money_out),
             "booked": reference(month) in references,
         }
         for month, (money_in, money_out) in sums.items()

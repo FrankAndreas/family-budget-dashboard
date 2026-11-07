@@ -14,15 +14,13 @@ from sqlalchemy import or_
 from sqlalchemy.orm import Session, selectinload
 
 from . import auth, crud, database, i18n, messages, models
-from .reports import EXPENSE, cents, swiss_day, today, utc_start
+from .privacy import is_dependent
+from .reports import EXPENSE, swiss_day, today, utc_start
+from .money import cents
 
 router = APIRouter()
 
 MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
-
-
-def is_dependent(user: models.User) -> bool:
-    return user.role == models.UserRole.CHILD and not user.has_allowance
 
 
 def _child_text(booking: models.Transaction) -> str:

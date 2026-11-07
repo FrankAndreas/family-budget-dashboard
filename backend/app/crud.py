@@ -3,6 +3,7 @@ from typing import Optional
 from sqlalchemy.orm import Session, selectinload
 from . import ibans, messages, models, schemas
 from datetime import datetime, timezone
+from .money import cents
 
 
 # User CRUD
@@ -155,11 +156,6 @@ def get_transactions(db: Session, account_id: str, skip: int = 0, limit: Optiona
     )
 
 
-def to_cents(value: float) -> float:
-    # Money is stored as float; rounding every stored value keeps sums from drifting
-    return round(value, 2)
-
-
 def to_naive_utc(value: datetime) -> datetime:
     # Stored dates are naive UTC; naive input is assumed to already be UTC
     if value.tzinfo is None:
@@ -175,10 +171,10 @@ def signed_amount(amount: float, category: models.Category, refund: bool = False
     # The category decides the sign: income is positive, expenses are negative; transfers keep their sign. A refund is
     # money back in an expense category (the jacket returned): positive, and it lowers that category's spending
     if category.type == models.CategoryType.TRANSFER:
-        return to_cents(amount)
+        return cents(amount)
     if category.type == models.CategoryType.INCOME or refund:
-        return to_cents(abs(amount))
-    return to_cents(-abs(amount))
+        return cents(abs(amount))
+    return cents(-abs(amount))
 
 
 def is_refund(amount: float, category: Optional[models.Category]) -> bool:
@@ -225,6 +221,7 @@ def update_transaction(
     update: schemas.TransactionUpdate,
     category: models.Category,
     split_shares=None,
+    commit=True,
 ):
     old_amount = db_transaction.amount
     # A refund stays one unless the update says otherwise (or the new category isn't an expense)
@@ -241,6 +238,10 @@ def update_transaction(
         setattr(db_transaction, key, value)
     db_transaction.split_shares = split_shares
 
+    # Without commit the caller saves once, after its remaining checks
+    if not commit:
+        db.flush()
+        return db_transaction
     db.commit()
     db.refresh(db_transaction)
     return db_transaction
@@ -268,7 +269,7 @@ def create_budget(db: Session, budget: schemas.BudgetCreate, user_id: str):
         user_id=user_id,
         category_id=budget.category_id,
         tag_id=budget.tag_id,
-        limit=to_cents(budget.limit),
+        limit=cents(budget.limit),
         period=budget.period,
     )
     db.add(db_budget)
@@ -284,7 +285,7 @@ def get_budget(db: Session, budget_id: str):
 def update_budget(db: Session, db_budget: models.Budget, update: schemas.BudgetUpdate):
     update_data = update.model_dump(exclude_unset=True)
     if "limit" in update_data:
-        update_data["limit"] = to_cents(update_data["limit"])
+        update_data["limit"] = cents(update_data["limit"])
     for key, value in update_data.items():
         setattr(db_budget, key, value)
     db.commit()

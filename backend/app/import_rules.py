@@ -9,7 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from . import auth, database, i18n, models, messages
+from . import auth, database, i18n, messages, models, privacy
+from .names import key
 from .seed import OTHER_INCOME, SETTLE_UP, TRANSFER as TRANSFER_KEY, UNSORTED
 
 router = APIRouter()
@@ -20,13 +21,7 @@ MIN_TEXT, MAX_TEXT = 2, 120
 TRANSFER = models.CategoryType.TRANSFER
 
 
-def key(name: str) -> str:
-    return (name or "").strip().casefold()
-
-
-def require_parent(user: models.User) -> None:
-    if user.role != models.UserRole.PARENT:
-        raise messages.api_error(403, "only_parents_import_rules")
+require_parent = privacy.parents_only("only_parents_import_rules")
 
 
 def parse_changes(text: str) -> dict[int, dict]:

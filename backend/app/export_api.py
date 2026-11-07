@@ -11,9 +11,10 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from . import article_rules, auth, crud, database, finance, i18n, models, privacy
+from . import article_rules, auth, crud, database, finance, i18n, models, privacy, reports
 from .common_api import asset_out, planned_cost_out, shared_transactions, visible_owner
 from .wishes_api import visible_wishes, wish_out
+from .money import cents
 
 router = APIRouter()
 
@@ -247,7 +248,7 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
                 out["age_years"],
                 out["replacement_due"],
                 out["monthly_set_aside"],
-                finance.cents(out["total_cost"] - asset.price),
+                cents(out["total_cost"] - asset.price),
                 out["total_cost"],
                 out["cost_per_year"],
                 asset.notes,
@@ -325,7 +326,7 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
         wish_rows,
     )
 
-    files["README.md"] = README.read_text(encoding="utf-8").format(user=user.username, date=date.today().isoformat())
+    files["README.md"] = README.read_text(encoding="utf-8").format(user=user.username, date=reports.today().isoformat())
     return files
 
 
@@ -337,7 +338,7 @@ def export_analysis(
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as archive:
         for name, content in build_files(db, current_user).items():
             archive.writestr(name, content)
-    filename = f"budget-analysis-{date.today().isoformat()}.zip"
+    filename = f"budget-analysis-{reports.today().isoformat()}.zip"
     return Response(
         buffer.getvalue(),
         media_type="application/zip",

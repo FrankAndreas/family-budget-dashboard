@@ -6,6 +6,11 @@ from sqlalchemy import Integer
 from sqlalchemy.types import TypeDecorator
 
 
+def cents(value: float) -> float:
+    """Francs rounded to the cent (and never -0.0): what is stored, compared and shown."""
+    return round(value + 0.0, 2)
+
+
 class Money(TypeDecorator):
     impl = Integer
     cache_ok = True

@@ -14,6 +14,25 @@ from . import models, messages
 # The family list itself (names, roles) is visible to all parents, and children see the parents.
 
 
+def is_parent(user: models.User) -> bool:
+    return user.role == models.UserRole.PARENT
+
+
+def is_dependent(user: models.User) -> bool:
+    """A child without own allowance: no own accounts or budgets; their costs are tagged household expenses."""
+    return user.role == models.UserRole.CHILD and not user.has_allowance
+
+
+def parents_only(message: str):
+    """The check a module runs before parent-only actions, with its own error text."""
+
+    def require_parent(user: models.User) -> None:
+        if not is_parent(user):
+            raise messages.api_error(403, message)
+
+    return require_parent
+
+
 def share_level(db: Session, owner_id: str, grantee_id: str) -> Optional[str]:
     share = (
         db.query(models.Share).filter(models.Share.owner_id == owner_id, models.Share.grantee_id == grantee_id).first()

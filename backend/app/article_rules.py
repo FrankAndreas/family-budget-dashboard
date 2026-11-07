@@ -11,11 +11,12 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, selectinload
 
-from . import auth, database, i18n, messages, models
-from .import_rules import require_parent
+from . import auth, database, i18n, messages, models, privacy
 from .migros_csv import norm
 
 router = APIRouter()
+# Article rules belong with the import rules: the same people manage them, the same message
+require_parent = privacy.parents_only("only_parents_import_rules")
 
 
 def load(db: Session) -> dict[str, models.ArticleRule]:

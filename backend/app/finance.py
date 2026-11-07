@@ -3,10 +3,7 @@
 import calendar
 from datetime import date
 from typing import Optional
-
-
-def cents(value: float) -> float:
-    return round(value, 2)
+from .money import cents
 
 
 def monthly_equivalent(amount: float, frequency: str) -> float:

@@ -9,16 +9,14 @@ from typing import List, Optional
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from . import auth, database, messages, models, schemas
+from . import auth, database, messages, models, privacy, schemas
 
 router = APIRouter()
 
 ADDRESS = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 
-def require_parent(user: models.User) -> None:
-    if user.role != models.UserRole.PARENT:
-        raise messages.api_error(403, "only_parents_emails")
+require_parent = privacy.parents_only("only_parents_emails")
 
 
 def normalize(address: str) -> str:

@@ -9,7 +9,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import auth, database, i18n, messages, models, schemas
+from . import auth, database, i18n, messages, models, privacy, schemas
 
 router = APIRouter()
 
@@ -24,9 +24,7 @@ USERS = (
 )
 
 
-def require_parent(user: models.User) -> None:
-    if user.role != models.UserRole.PARENT:
-        raise messages.api_error(403, "only_parents_categories")
+require_parent = privacy.parents_only("only_parents_categories")
 
 
 def usage_counts(db: Session) -> dict[str, dict[str, int]]:
