@@ -166,7 +166,9 @@ const de = {
         netSavings: 'Erspartes ({{range}})',
         netDeficit: 'Defizit ({{range}})',
         comparison: 'Vergleich der letzten 6 Monate',
-        dailyTrend: 'Tagesverlauf (dieser Monat)',
+        dailyTrend: 'Ausgaben pro Tag (dieser Monat)',
+        spentSoFar: 'bisher {{amount}}',
+        showing: 'Anzeigen',
         incomeSeries: 'Einnahmen',
         expensesSeries: 'Ausgaben',
         savingsSeries: 'Erspartes',
@@ -310,6 +312,7 @@ const de = {
         deleteFailed: 'Kosten konnten nicht gelöscht werden',
     },
     bills: {
+        emptyHint: 'Rechnungen, die einmal im Jahr kommen (Versicherungen, Steuern, Abos): Sie werden aufs Jahr verteilt, so siehst du, was du jeden Monat zurücklegen solltest.',
         perYear: 'Pro Jahr',
         putAside: 'Pro Monat zurücklegen',
         title: 'Jahresrechnungen',
@@ -338,6 +341,7 @@ const de = {
         deleteFailed: 'Rechnung konnte nicht gelöscht werden',
     },
     investments: {
+        emptyHint: 'Dinge, die halten und Unterhalt kosten (Auto, Velo, Geräte): Ihr Preis wird über die Lebensdauer verteilt, so siehst du, was du jeden Monat zurücklegen solltest.',
         title: 'Anschaffungen',
         show: 'Anzeigen',
         filters: { all: 'Alle', mine: 'Meine', common: 'Gemeinsame', others: 'Von anderen' },

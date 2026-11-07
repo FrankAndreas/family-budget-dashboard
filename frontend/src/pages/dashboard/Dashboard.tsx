@@ -125,20 +125,25 @@ export default function Dashboard() {
 
     return (
         <div className="min-h-screen p-3 pb-24 sm:p-6">
-            {/* Header */}
-            <div className="glass-card p-4 sm:p-6 mb-4 sm:mb-6">
+            {/* Header: on a phone one line (name, who you are, Logout); from tablet width the greeting below the name */}
+            <div className="glass-card px-4 py-3 sm:p-6 mb-4 sm:mb-6">
                 <div className="flex justify-between items-center gap-3">
-                    <div className="min-w-0">
-                        <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-transparent">
+                    <div className="shrink-0 sm:shrink sm:min-w-0">
+                        <h1 className="text-xl sm:text-3xl font-bold whitespace-nowrap bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-transparent">
                             {t('common.appName')}
                         </h1>
-                        <p className="text-slate-400 mt-1">
+                        <p className="hidden sm:block text-slate-400 mt-1">
                             {t('dashboard.welcome', { name: user?.username, role: user ? t(`common.roles.${user.role}`) : '' })}
                         </p>
                     </div>
-                    <button onClick={() => void logout()} className="btn-secondary">
-                        {t('dashboard.logout')}
-                    </button>
+                    <div className="flex items-center justify-end gap-3 min-w-0">
+                        <span className="sm:hidden text-sm text-slate-400 truncate" data-testid="who">
+                            {user?.username} ({user ? t(`common.roles.${user.role}`) : ''})
+                        </span>
+                        <button onClick={() => void logout()} className="btn-secondary shrink-0 py-1.5 sm:py-[0.6em]">
+                            {t('dashboard.logout')}
+                        </button>
+                    </div>
                 </div>
             </div>
 

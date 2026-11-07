@@ -17,7 +17,11 @@ test('the overview fits a phone', async ({ page, request }) => {
 
     // No sideways scrolling of the whole page
     expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(390);
-    await expect(page.getByText(/Welcome back, .* \(Parent\)/)).toBeVisible();
+    // The header is one line: name, who you are, Logout (the greeting is for wider screens)
+    await expect(page.getByTestId('who')).toHaveText(`${parent.name} (Parent)`);
+    await expect(page.getByText(/Welcome back/)).toBeHidden();
+    const header = page.locator('.glass-card', { has: page.getByRole('heading', { name: 'Family Budget' }) });
+    expect((await header.boundingBox())!.height).toBeLessThan(80);
 
     // The summary cards take a small part of the screen, not a whole one
     const summary = await page.getByTestId('summary-cards').boundingBox();

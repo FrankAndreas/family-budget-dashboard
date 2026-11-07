@@ -168,7 +168,9 @@ const en: Messages = {
         netSavings: 'Net Savings ({{range}})',
         netDeficit: 'Net Deficit ({{range}})',
         comparison: '6-Month Comparison',
-        dailyTrend: 'Daily Trend (This Month)',
+        dailyTrend: 'Spending per day (this month)',
+        spentSoFar: '{{amount}} so far',
+        showing: 'Showing',
         incomeSeries: 'Income',
         expensesSeries: 'Expenses',
         savingsSeries: 'Savings',
@@ -312,6 +314,7 @@ const en: Messages = {
         deleteFailed: 'Failed to delete the cost',
     },
     bills: {
+        emptyHint: 'Bills that come once a year (insurance, taxes, subscriptions): they are spread over the year, so you see what to put aside each month.',
         perYear: 'Per year',
         putAside: 'Put aside per month',
         title: 'Yearly bills',
@@ -340,6 +343,7 @@ const en: Messages = {
         deleteFailed: 'Failed to delete the bill',
     },
     investments: {
+        emptyHint: 'Things that last and cost to keep (a car, a bike, appliances): their price is spread over their lifespan, so you see what to set aside each month.',
         title: 'Investments',
         show: 'Show',
         filters: { all: 'All', mine: 'Mine', common: 'Common', others: "Others'" },
