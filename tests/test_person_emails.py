@@ -2,7 +2,7 @@
 
 from helpers import remove_id_from_hub, BASE_URL, admin_headers, register, user_id
 
-from app import database, emails_api, models
+from app import database, emails, models
 
 EMAILS = f"{BASE_URL}/emails"
 
@@ -88,8 +88,8 @@ def test_person_for(client):
     mum = register(client, "mum")
     add(client, mum, user_id(client, mum, "mum"), "mum@example.ch")
     with database.SessionLocal() as db:
-        assert emails_api.person_for(db, "MUM@example.ch").username == "mum"
-        assert emails_api.person_for(db, "other@example.ch") is None
+        assert emails.person_for(db, "MUM@example.ch").username == "mum"
+        assert emails.person_for(db, "other@example.ch") is None
         db.query(models.User).filter(models.User.username == "mum").one().is_active = False
         db.commit()
-        assert emails_api.person_for(db, "mum@example.ch") is None
+        assert emails.person_for(db, "mum@example.ch") is None

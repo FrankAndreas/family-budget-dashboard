@@ -11,8 +11,14 @@ from sqlalchemy.orm import Session
 from . import (
     database,
     database_setup,
-    api,
+    users_api,
+    accounts_api,
+    transactions_api,
+    budgets_api,
     child_costs,
+    splits_api,
+    planned_costs_api,
+    assets_api,
     common_api,
     export_api,
     import_api,
@@ -93,8 +99,14 @@ app = FastAPI(
     dependencies=[Depends(i18n.language_from_header)],
 )
 
-app.include_router(api.router, prefix="/api/v1")
+app.include_router(users_api.router, prefix="/api/v1")
+app.include_router(accounts_api.router, prefix="/api/v1")
+app.include_router(transactions_api.router, prefix="/api/v1")
+app.include_router(budgets_api.router, prefix="/api/v1")
 app.include_router(child_costs.router, prefix="/api/v1")
+app.include_router(splits_api.router, prefix="/api/v1")
+app.include_router(planned_costs_api.router, prefix="/api/v1")
+app.include_router(assets_api.router, prefix="/api/v1")
 app.include_router(common_api.router, prefix="/api/v1")
 app.include_router(export_api.router, prefix="/api/v1")
 app.include_router(import_api.router, prefix="/api/v1")

@@ -11,7 +11,7 @@ from fastapi import Depends, Request, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
-from . import database, hub, hub_people, i18n, messages, models
+from . import database, hub, hub_people, i18n, messages, models, privacy
 
 logger = logging.getLogger(__name__)
 
@@ -97,3 +97,9 @@ async def get_optional_user(request: Request, db: Session = Depends(database.get
         return await get_current_user_from_token(request, db)
     except messages.CodedError:
         return None
+
+
+def require_parent(current_user: models.User = Depends(get_current_user_from_token)) -> models.User:
+    """The logged-in parent, for routes only parents use (common budget, investments, planned costs)."""
+    privacy.parents_only("common_parents_only")(current_user)
+    return current_user

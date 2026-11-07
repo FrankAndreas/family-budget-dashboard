@@ -4,7 +4,7 @@ from datetime import date
 
 import pytest
 
-from app import common_api
+from app import assets
 from helpers import (
     remove_id_from_hub,
     add_member,
@@ -21,7 +21,7 @@ from helpers import (
 
 @pytest.fixture
 def parents(client, monkeypatch):
-    monkeypatch.setattr(common_api, "today", lambda: date(2026, 10, 14))
+    monkeypatch.setattr(assets, "today", lambda: date(2026, 10, 14))
     mum = register(client, "mum")
     dad = register(client, "dad")
     remove_from_hub("Admin")
@@ -256,7 +256,7 @@ def test_lease_during_the_term(client, parents):
 
 def test_lease_after_the_buy_out(client, parents, monkeypatch):
     car = add_asset(client, parents["mum"], owner_id=parents["mum_id"], **LEASE).json()
-    monkeypatch.setattr(common_api, "today", lambda: date(2030, 1, 1))
+    monkeypatch.setattr(assets, "today", lambda: date(2030, 1, 1))
     car = client.get(f"{BASE_URL}/assets/{car['id']}", headers=parents["mum"]).json()
     # Down payment + 48 rates + buy-out = 35'720, set aside over the remaining 72 months for the next car
     assert (car["monthly_set_aside"], car["monthly_rate"], car["monthly_load"]) == (496.11, 0, 496.11)

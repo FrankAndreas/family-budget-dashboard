@@ -7,7 +7,7 @@ from datetime import date
 
 import pytest
 
-from app import common_api
+from app import assets, planned_costs
 from helpers import (
     BASE_URL,
     add_transaction,
@@ -55,7 +55,8 @@ def rows(archive, name):
 
 @pytest.fixture
 def family(client, monkeypatch):
-    monkeypatch.setattr(common_api, "today", lambda: date(2026, 10, 14))
+    for module in (assets, planned_costs):
+        monkeypatch.setattr(module, "today", lambda: date(2026, 10, 14))
     mum = register(client, "mum")
     dad = register(client, "dad")
     remove_from_hub("Admin")
