@@ -45,9 +45,10 @@ test('booking date and refund in the form', async ({ page, request }) => {
     await page.getByLabel('Date').fill(twoDaysAgo);
     await page.getByRole('button', { name: 'Save Changes' }).click();
     await expect(row).toContainText('+ CHF 80.00');
-    const refund = (await bookings()).find((b: { description: string }) => b.description === 'Retoure Jacke');
-    expect(refund.amount).toBe(80);
-    expect(new Date(refund.date).getDate()).toBe(day.getDate());
+    // The save may still be on its way: wait for the booking to have its new day
+    const refund = async () => (await bookings()).find((b: { description: string }) => b.description === 'Retoure Jacke');
+    await expect.poll(async () => new Date((await refund()).date).getDate()).toBe(day.getDate());
+    expect((await refund()).amount).toBe(80);
     expect(errors).toEqual([]);
 });
 
