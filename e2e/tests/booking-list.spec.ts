@@ -26,7 +26,7 @@ test('bookings grouped by month, with category, search and filter', async ({ pag
     expect(headings.indexOf('October 2026')).toBeLessThan(headings.indexOf('September 2026'));
 
     // The category is on the row
-    await expect(october.getByText('Coop Pronto').locator('xpath=../..')).toContainText('Groceries');
+    await expect(october.locator('.rounded-lg', { hasText: 'Coop Pronto' })).toContainText('Groceries');
 
     // Search: words in any order, across text and category; the amount works too
     const search = page.getByRole('searchbox', { name: /Search bookings/ });

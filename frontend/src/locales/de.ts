@@ -1,6 +1,7 @@
 // German texts (Swiss spelling: ss, never ß; informal du). en.ts must have the same keys (tsc checks it).
 const de = {
     common: {
+        close: 'Schliessen',
         appName: 'Familienbudget',
         loading: 'Laden…',
         save: 'Speichern',
@@ -15,6 +16,8 @@ const de = {
         noDescription: 'Ohne Beschreibung',
     },
     dashboard: {
+        moreTabsShort: 'Mehr',
+        tabsLabel: 'Tabs',
         moreTabs: 'Weitere Tabs',
         welcome: 'Willkommen zurück, {{name}} ({{role}})',
         logout: 'Abmelden',
@@ -117,6 +120,10 @@ const de = {
         foundCount_one: '{{count}} gefunden',
         foundCount_other: '{{count}} gefunden',
         severalCategories: 'mehrere Kategorien',
+        actions: 'Aktionen',
+        splitShort: 'In Artikel aufteilen',
+        editShort: 'Bearbeiten',
+        deleteShort: 'Löschen',
         deleteFailed: 'Buchung konnte nicht gelöscht werden',
     },
     budgets: {

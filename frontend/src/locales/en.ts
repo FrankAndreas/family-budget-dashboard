@@ -3,6 +3,7 @@ import type { Messages } from './de';
 // English texts: the same keys as de.ts
 const en: Messages = {
     common: {
+        close: 'Close',
         appName: 'Family Budget',
         loading: 'Loading...',
         save: 'Save',
@@ -17,6 +18,8 @@ const en: Messages = {
         noDescription: 'No description',
     },
     dashboard: {
+        moreTabsShort: 'More',
+        tabsLabel: 'Tabs',
         moreTabs: 'More tabs',
         welcome: 'Welcome back, {{name}} ({{role}})',
         logout: 'Logout',
@@ -119,6 +122,10 @@ const en: Messages = {
         foundCount_one: '{{count}} found',
         foundCount_other: '{{count}} found',
         severalCategories: 'several categories',
+        actions: 'Actions',
+        splitShort: 'Split into items',
+        editShort: 'Edit',
+        deleteShort: 'Delete',
         deleteFailed: 'Failed to delete transaction',
     },
     budgets: {

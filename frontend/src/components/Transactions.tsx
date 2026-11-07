@@ -175,6 +175,27 @@ export default function Transactions({
         .filter(c => shown.some(tr => categoriesOf(tr).includes(c.id)))
         .sort((a, b) => a.name.localeCompare(b.name));
 
+    // A booking's actions: icons on a desktop, named buttons behind "⋯" on a phone
+    const [menuFor, setMenuFor] = useState<string | null>(null);
+    const rowActions = (transaction: Transaction) => {
+        if (!canEdit) return [];
+        const actions: { key: string; icon: string; name: string; label: string; danger?: boolean; run: () => void }[] = [];
+        if (!transaction.items?.length && isExpense(transaction.category_id)) {
+            actions.push({ key: 'split', icon: '🧾', name: t('transactions.splitShort'), label: t('receipt.split'),
+                run: () => { closeForm(); setReceiptFor(transaction); } });
+        }
+        if (!isTransfer(transaction)) {
+            actions.push({ key: 'edit', icon: '✎', name: t('transactions.editShort'), label: t('transactions.edit'),
+                run: () => transaction.items?.length ? (closeForm(), setReceiptFor(transaction)) : handleEdit(transaction) });
+        }
+        // Settle up is undone in the Common tab; imported transfers can be deleted here
+        if (!isSettleUp(transaction)) {
+            actions.push({ key: 'delete', icon: '✕', name: t('transactions.deleteShort'), label: t('transactions.delete'),
+                danger: true, run: () => void handleDelete(transaction) });
+        }
+        return actions;
+    };
+
     const closeForm = () => {
         setForm(emptyForm);
         setEditingId(null);
@@ -235,7 +256,7 @@ export default function Transactions({
     };
 
     return (
-        <div className="glass-card p-6">
+        <div className="glass-card p-4 sm:p-6">
             <div className="flex flex-wrap justify-between items-center gap-2 mb-4">
                 <h2 className="text-xl font-bold">
                     {t('transactions.title')}
@@ -422,8 +443,8 @@ export default function Transactions({
                             </div>
                             <div className="space-y-2">
                                 {month.bookings.map(transaction => (
-                                    <div key={transaction.id} className="p-3 bg-slate-800/30 rounded-lg">
-                                    <div className="flex justify-between items-start sm:items-center gap-2">
+                                    <div key={transaction.id} className="px-3 py-2 sm:p-3 bg-slate-800/30 rounded-lg">
+                                    <div className="flex justify-between items-center gap-2">
                                         <div className="min-w-0 flex-1">
                                             <p className="font-semibold break-words">
                                                 {transaction.description || t('transactions.noDescription')}
@@ -449,60 +470,53 @@ export default function Transactions({
                                                     </span>
                                                 ))}
                                             </p>
-                                            <p className="text-sm text-slate-400">
-                                                {formatDate(transaction.date)}
-                                                {rowCategory(transaction) && <span className="ml-2">· {rowCategory(transaction)}</span>}
-                                                {(transaction.items?.length || transaction.attachments?.length || transaction.bank_rows?.length || transaction.state) ? (
-                                                    <button onClick={() => toggleExpanded(transaction.id)} className="ml-3 text-sky-400 hover:underline">
-                                                        {transaction.items?.length ? t('receipt.items', { count: transaction.items.length }) : ''}
-                                                        {transaction.attachments?.length ? ` ${t('receipt.attachmentsCount', { count: transaction.attachments.length })}` : ''}
-                                                        {transaction.bank_rows?.length ? ` ${t('reconcile.bankLines', { count: transaction.bank_rows.length })}` : ''}
-                                                        {!transaction.items?.length && !transaction.attachments?.length && !transaction.bank_rows?.length ? t('reconcile.more') : ''}
-                                                    </button>
-                                                ) : null}
-                                            </p>
                                         </div>
-                                        <div className="flex flex-col sm:flex-row items-end sm:items-center gap-1 sm:gap-2 shrink-0">
+                                        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
                                             <p className={`text-lg sm:text-xl font-bold whitespace-nowrap ${transaction.amount >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
                                                 {transaction.amount >= 0 ? '+ ' : ''}{money(transaction.amount)}
                                             </p>
-                                            <div className="flex items-center gap-1">
-                                            {canEdit && !transaction.items?.length && isExpense(transaction.category_id) && (
-                                                <button
-                                                    onClick={() => { closeForm(); setReceiptFor(transaction); }}
-                                                    className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 hover:text-blue-400 transition-colors"
-                                                    title={t('receipt.split')}
-                                                    aria-label={t('receipt.split')}
-                                                >
-                                                    🧾
-                                                </button>
-                                            )}
-                                            {canEdit && !isTransfer(transaction) && (
-                                                <button
-                                                    onClick={() => transaction.items?.length
-                                                        ? (closeForm(), setReceiptFor(transaction))
-                                                        : handleEdit(transaction)}
-                                                    className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 hover:text-blue-400 transition-colors"
-                                                    title={t('transactions.edit')}
-                                                    aria-label={t('transactions.edit')}
-                                                >
-                                                    ✎
-                                                </button>
-                                            )}
-                                            {/* Settle up is undone in the Common tab; imported transfers can be deleted here */}
-                                            {canEdit && !isSettleUp(transaction) && (
-                                                <button
-                                                    onClick={() => handleDelete(transaction)}
-                                                    className="w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 ml-2 hover:text-red-400 transition-colors"
-                                                    title={t('transactions.delete')}
-                                                    aria-label={t('transactions.delete')}
-                                                >
-                                                    ✕
-                                                </button>
-                                            )}
+                                            {/* Desktop: the actions as icons */}
+                                            <div className="hidden sm:flex items-center gap-1">
+                                                {rowActions(transaction).map(action => (
+                                                    <button key={action.key} onClick={action.run} title={action.label} aria-label={action.label}
+                                                        className={`w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 transition-colors ${action.danger ? 'ml-2 hover:text-red-400' : 'hover:text-blue-400'}`}>
+                                                        {action.icon}
+                                                    </button>
+                                                ))}
                                             </div>
+                                            {/* Phone: one button keeps the row on one line; the actions open below it with their names */}
+                                            {rowActions(transaction).length > 0 && (
+                                                <button onClick={() => setMenuFor(menuFor === transaction.id ? null : transaction.id)}
+                                                    aria-label={t('transactions.actions')} aria-expanded={menuFor === transaction.id}
+                                                    className="sm:hidden w-10 h-10 flex items-center justify-center rounded-lg text-xl text-slate-400 hover:bg-slate-700/40">
+                                                    ⋯
+                                                </button>
+                                            )}
                                         </div>
                                     </div>
+                                    {/* Under the description and amount, across the whole row: on a phone it has room there */}
+                                    <p className="text-sm text-slate-400 -mt-1">
+                                        {formatDate(transaction.date)}
+                                        {rowCategory(transaction) && <span className="ml-2">· {rowCategory(transaction)}</span>}
+                                        {(transaction.items?.length || transaction.attachments?.length || transaction.bank_rows?.length || transaction.state) ? (
+                                            <button onClick={() => toggleExpanded(transaction.id)} className="ml-3 text-sky-400 hover:underline">
+                                                {transaction.items?.length ? t('receipt.items', { count: transaction.items.length }) : ''}
+                                                {transaction.attachments?.length ? ` ${t('receipt.attachmentsCount', { count: transaction.attachments.length })}` : ''}
+                                                {transaction.bank_rows?.length ? ` ${t('reconcile.bankLines', { count: transaction.bank_rows.length })}` : ''}
+                                                {!transaction.items?.length && !transaction.attachments?.length && !transaction.bank_rows?.length ? t('reconcile.more') : ''}
+                                            </button>
+                                        ) : null}
+                                    </p>
+                                    {menuFor === transaction.id && (
+                                        <div className="sm:hidden mt-2 flex flex-wrap gap-2">
+                                            {rowActions(transaction).map(action => (
+                                                <button key={action.key} onClick={() => { setMenuFor(null); action.run(); }} aria-label={action.label}
+                                                    className={`h-10 px-3 rounded-lg border text-sm ${action.danger ? 'border-red-500/40 text-red-300' : 'border-slate-600 text-slate-200'}`}>
+                                                    {action.icon} {action.name}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
                                     {expanded.has(transaction.id) && (
                                         <div className="mt-2 pt-2 border-t border-slate-700 text-sm space-y-1">
                                             {transaction.items?.map(item => (

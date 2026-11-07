@@ -101,9 +101,27 @@ export default function Dashboard() {
     const tabs = [
         'overview', 'budgets', ...(isParent ? ['common', 'investments', 'bills'] as const : []), 'wishes', 'analytics', 'settings',
     ] as const;
+    type Tab = typeof tabs[number];
+    const selectTab = (tab: Tab) => {
+        setActiveTab(tab);
+        setMoreOpen(false);
+        // Other tabs may have changed the family, splits or investments the forms here offer
+        reloadFamily();
+        reloadSplits();
+        reloadAssets();
+    };
+    // Phone: a bar at the bottom with the main tabs; with more than five, the rest behind "More"
+    const [moreOpen, setMoreOpen] = useState(false);
+    const main: Tab[] = tabs.length <= 5 ? [...tabs] : tabs.filter(tab => ['overview', 'budgets', 'analytics', 'wishes'].includes(tab));
+    const rest = tabs.filter(tab => !main.includes(tab));
+    // "🏦 Accounts" → the icon above, the name below
+    const split = (tab: Tab) => {
+        const [icon, ...name] = t(`dashboard.tabs.${tab}`).split(' ');
+        return { icon, name: name.join(' ') };
+    };
 
     return (
-        <div className="min-h-screen p-3 sm:p-6">
+        <div className="min-h-screen p-3 pb-24 sm:p-6">
             {/* Header */}
             <div className="glass-card p-4 sm:p-6 mb-4 sm:mb-6">
                 <div className="flex justify-between items-center gap-3">
@@ -129,18 +147,15 @@ export default function Dashboard() {
             )}
 
             {/* Tab Navigation */}
-            <div className="glass-card p-2 mb-4 sm:mb-6 relative">
+            {/* From tablet width up: the tab row at the top */}
+            <div className="hidden sm:block glass-card p-2 mb-4 sm:mb-6 relative">
                 <div ref={tabRow} onScroll={updateMoreTabs} className="flex gap-2 overflow-x-auto">
                     {tabs.map(tab => (
                         <button
                             key={tab}
                             onClick={event => {
                                 event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
-                                setActiveTab(tab);
-                                // Other tabs may have changed the family, splits or investments the forms here offer
-                                reloadFamily();
-                                reloadSplits();
-                                reloadAssets();
+                                selectTab(tab);
                             }}
                             className={`flex-1 whitespace-nowrap py-2 px-3 sm:py-3 sm:px-4 rounded-lg font-semibold transition-all ${activeTab === tab
                                 ? 'bg-blue-500/20 text-blue-400 border-2 border-blue-400'
@@ -241,6 +256,43 @@ export default function Dashboard() {
                     <DataManager onDataChanged={refresh} />
                 </div>
             )}
+
+            {/* Phone: the tabs at the bottom, in reach of the thumb */}
+            <nav aria-label={t('dashboard.tabsLabel')}
+                className="sm:hidden fixed bottom-0 inset-x-0 z-40 bg-slate-900/95 backdrop-blur border-t border-slate-700 pb-[env(safe-area-inset-bottom)]">
+                {moreOpen && (
+                    <>
+                        <button type="button" aria-label={t('common.close')} onClick={() => setMoreOpen(false)}
+                            className="fixed inset-0 -z-10 bg-black/40 cursor-default" />
+                        <div className="absolute bottom-full inset-x-0 p-2 bg-slate-900 border-t border-slate-700 grid gap-1">
+                            {rest.map(tab => (
+                                <button key={tab} type="button" onClick={() => selectTab(tab)}
+                                    className={`text-left px-4 py-3 rounded-lg font-semibold ${activeTab === tab ? 'bg-blue-500/20 text-blue-400' : 'text-slate-200 hover:bg-slate-800'}`}>
+                                    {t(`dashboard.tabs.${tab}`)}
+                                </button>
+                            ))}
+                        </div>
+                    </>
+                )}
+                <div className="flex">
+                    {main.map(tab => (
+                        <button key={tab} type="button" onClick={() => selectTab(tab)} aria-label={t(`dashboard.tabs.${tab}`)}
+                            aria-current={activeTab === tab ? 'page' : undefined}
+                            className={`flex-1 flex flex-col items-center py-2 min-h-14 ${activeTab === tab ? 'text-blue-400' : 'text-slate-400'}`}>
+                            <span className="text-xl leading-none" aria-hidden>{split(tab).icon}</span>
+                            <span className="text-[11px] mt-1 font-semibold" aria-hidden>{split(tab).name}</span>
+                        </button>
+                    ))}
+                    {rest.length > 0 && (
+                        <button type="button" onClick={() => setMoreOpen(!moreOpen)} aria-label={t('dashboard.moreTabs')}
+                            aria-expanded={moreOpen}
+                            className={`flex-1 flex flex-col items-center py-2 min-h-14 ${rest.includes(activeTab as Tab) || moreOpen ? 'text-blue-400' : 'text-slate-400'}`}>
+                            <span className="text-xl leading-none" aria-hidden>☰</span>
+                            <span className="text-[11px] mt-1 font-semibold" aria-hidden>{t('dashboard.moreTabsShort')}</span>
+                        </button>
+                    )}
+                </div>
+            </nav>
         </div>
     );
 }

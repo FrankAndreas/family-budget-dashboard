@@ -103,4 +103,11 @@ export async function login(page: Page, parent: Parent): Promise<string[]> {
     return errors;
 }
 
-export const tab = (page: Page, name: string) => page.getByRole('button', { name, exact: false }).first().click();
+// A tab by its name; on a phone the ones not in the bottom bar are behind "More"
+export async function tab(page: Page, name: string): Promise<void> {
+    const button = page.getByRole('button', { name, exact: false }).first();
+    if (!await button.isVisible()) {
+        await page.getByRole('navigation', { name: 'Tabs' }).getByRole('button', { name: 'More tabs' }).click();
+    }
+    await button.click();
+}

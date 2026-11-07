@@ -23,26 +23,37 @@ test('the overview fits a phone', async ({ page, request }) => {
     const summary = await page.getByTestId('summary-cards').boundingBox();
     expect(summary!.height).toBeLessThan(220);
 
-    // The tab row doesn't fit: a button shows there is more and scrolls to it
-    const more = page.getByRole('button', { name: 'More tabs' });
-    await expect(more).toBeVisible();
-    // Each tap scrolls further; at the end of the row the arrow goes away
-    for (let i = 0; i < 5 && await more.isVisible(); i++) {
-        await more.click();
-        await page.waitForTimeout(400);
+    // The tabs are a bar at the bottom of the screen (UX review 2026-11-07): the main four, the rest behind "More"
+    const bar = page.getByRole('navigation', { name: 'Tabs' });
+    await expect(bar).toBeInViewport();
+    const barBox = (await bar.boundingBox())!;
+    expect(barBox.y + barBox.height).toBeGreaterThan(830);
+    for (const name of ['🏦 Accounts', '💰 Budgets', '📈 Analytics', '🎁 Wishes']) {
+        await expect(bar.getByRole('button', { name, exact: true })).toBeVisible();
     }
-    await expect(more).toHaveCount(0);
-    await expect(page.getByRole('button', { name: '⚙️ Settings' })).toBeInViewport();
+    await expect(bar.getByRole('button', { name: '⚙️ Settings' })).toHaveCount(0);
+    await bar.getByRole('button', { name: 'More tabs' }).click();
+    await expect(bar.getByRole('button', { name: '⚙️ Settings' })).toBeInViewport();
+    await expect(bar.getByRole('button', { name: '🧾 Yearly bills' })).toBeInViewport();
+    await bar.getByRole('button', { name: 'More tabs' }).click();
+    await expect(bar.getByRole('button', { name: '⚙️ Settings' })).toHaveCount(0);
 
     // Scan receipts once on the page (in the inbox), not again above the bookings
     await expect(page.getByRole('button', { name: '📷 Scan receipts' })).toHaveCount(1);
 
-    // The amount stays on one line; edit and delete are big enough to tap
+    // The amount and one "⋯" button stay on one line, so a row is short; the named actions open below it
     const amount = page.getByText("CHF -1'850.00").last();
     expect((await amount.boundingBox())!.height).toBeLessThan(36);
-    for (const name of ['Edit transaction', 'Delete transaction']) {
-        const box = (await page.getByRole('button', { name }).boundingBox())!;
-        expect(Math.min(box.width, box.height)).toBeGreaterThanOrEqual(40);
+    const row = page.locator('.rounded-lg', { hasText: 'Miete Musterweg' }).last();
+    expect((await row.boundingBox())!.height).toBeLessThan(90);
+    await expect(row.getByRole('button', { name: 'Edit transaction' })).toHaveCount(0);
+    const actions = row.getByRole('button', { name: 'Actions' });
+    expect(Math.min(...Object.values((await actions.boundingBox())!).slice(2))).toBeGreaterThanOrEqual(40);
+    await actions.click();
+    for (const [name, text] of [['🧾 Split into items', 'Split into items'], ['Edit transaction', 'Edit'], ['Delete transaction', 'Delete']]) {
+        const button = row.getByRole('button', { name, exact: true });
+        await expect(button).toContainText(text);
+        expect((await button.boundingBox())!.height).toBeGreaterThanOrEqual(40);
     }
     expect(errors).toEqual([]);
 });
