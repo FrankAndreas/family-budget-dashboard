@@ -9,18 +9,18 @@ from app import hub
 # 131. A made-up login is asked about once, not on every request
 def test_invalid_login_asked_once(client, family_hub):
     calls = []
-    real = hub.fetch_session
+    real = hub.client.fetch_session
 
-    def counted(tok):
-        calls.append(tok)
-        return real(tok)
+    def counted(login):
+        calls.append(login.token)
+        return real(login)
 
-    hub.fetch_session = counted
+    hub.client.fetch_session = counted
     try:
         for _ in range(3):
             assert client.get(f"{BASE_URL}/me", headers=bearer("tok-made-up")).status_code == 401
     finally:
-        hub.fetch_session = real
+        del hub.client.fetch_session
     assert calls == ["tok-made-up"]
 
 

@@ -58,7 +58,9 @@ with database.SessionLocal() as db:
 logger.info(
     "Receipt mails: %s", "configured" if os.getenv("INBOUND_SECRET") else "not configured (INBOUND_SECRET empty)"
 )
-logger.info("Family hub: %s (logins at %s, app key %s)", hub.hub_url(), hub.public_url(), hub.app_key())
+logger.info(
+    "Family hub: %s (logins at %s, app key %s)", hub.client.hub_url(), hub.client.public_url(), hub.client.app_key()
+)
 
 
 async def sweep_daily() -> None:

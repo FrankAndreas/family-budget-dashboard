@@ -41,7 +41,7 @@ def refresh(db: Session, token: str, force: bool = False) -> None:
         _running = True
     try:
         try:
-            people = hub.fetch_people(token)
+            people = hub.client.fetch_people(hub.Login(token))
         except hub.HubUnavailable:
             with _lock:
                 _last = time.monotonic() - REFRESH_SECONDS + BACKOFF_SECONDS

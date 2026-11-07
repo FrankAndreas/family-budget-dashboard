@@ -131,7 +131,7 @@ def update_user(
 @router.get("/hub")
 def hub_login():
     """Where the browser logs in (the family hub), for a visitor without a login."""
-    return {"login_url": hub.public_url()}
+    return {"login_url": hub.client.public_url()}
 
 
 @router.get("/users/removed", response_model=List[schemas.RemovedUser])
