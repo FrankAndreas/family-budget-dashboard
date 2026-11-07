@@ -7,7 +7,7 @@ use this app; the app's people come from the hub too (hub_people.py). No PINs he
 import logging
 from typing import Optional
 
-from fastapi import Depends, Request, status
+from fastapi import Depends, Request, Response, status
 from fastapi.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,8 @@ CSRF_VALUE = "budget"
 SAFE_METHODS = {"GET", "HEAD", "OPTIONS"}
 TUNNEL_HEADER = "Cf-Connecting-Ip"
 # All a dependent child (no Jugendlohn) may ask: who they are, and their own costs (read-only, spec 2026-10-30)
+# The hub login is in its last week (app integration review 2026-11-07)
+RENEW_HEADER = "X-Hub-Renew"
 CHILD_PATHS = {("GET", "/api/v1/me"), ("GET", "/api/v1/my-costs")}
 
 
@@ -43,8 +45,9 @@ def _active(db: Session, hub_id: int) -> Optional[models.User]:
     return db.query(models.User).filter(models.User.hub_id == hub_id, models.User.is_active.is_(True)).first()
 
 
-def _resolve(request: Request, db: Session) -> tuple[models.User, hub.HubPerson]:
-    """The person behind the request's login. Blocking (the hub, the database): runs in a worker thread."""
+def _resolve(request: Request, db: Session) -> tuple[models.User, hub.HubPerson, bool]:
+    """The person behind the request's login, as here and in the hub, and whether the hub login asks to be renewed.
+    Blocking (the hub, the database): runs in a worker thread."""
     # Home-only: Cloudflare sets this on everything through its tunnel (only the receipt mails come that way, with their
     # own secret); a hub login arriving from outside can only be a stolen home cookie (family-hub README, "For apps")
     if TUNNEL_HEADER in request.headers:
@@ -55,10 +58,11 @@ def _resolve(request: Request, db: Session) -> tuple[models.User, hub.HubPerson]
     if from_cookie and request.method not in SAFE_METHODS and request.headers.get(CSRF_HEADER) != CSRF_VALUE:
         raise messages.CodedError(status.HTTP_403_FORBIDDEN, "csrf")
     try:
-        person, access = hub.session(token)
+        session = hub.client.session(hub.Login(token))
+        person = session.person
         if person is None:
             raise _not_logged_in()
-        if not access:
+        if not session.access:
             raise messages.CodedError(status.HTTP_403_FORBIDDEN, "no_access")
         hub_people.refresh(db, token)
         user = _active(db, person.id)
@@ -78,23 +82,30 @@ def _resolve(request: Request, db: Session) -> tuple[models.User, hub.HubPerson]
     if user.role == models.UserRole.CHILD and not user.has_allowance:
         if (request.method, request.url.path) not in CHILD_PATHS:
             raise messages.CodedError(status.HTTP_403_FORBIDDEN, "read_only_child")
-    return user, person
+    return user, person, session.renew
 
 
-async def get_current_user_from_token(request: Request, db: Session = Depends(database.get_db)) -> models.User:
-    user, person = await run_in_threadpool(_resolve, request, db)
+async def get_current_user_from_token(
+    request: Request, response: Response, db: Session = Depends(database.get_db)
+) -> models.User:
+    user, person, renew = await run_in_threadpool(_resolve, request, db)
+    if renew:
+        # The hub login is in its last week: the page sends the browser once through the hub, which renews it
+        response.headers[RENEW_HEADER] = "1"
     # From here on, the request speaks the person's language (the hub's, which may be newer than the row's). Set here,
     # in the request's own context: a worker thread's setting wouldn't reach the endpoint
     i18n.set_current(person.language if person.language in i18n.LANGUAGES else i18n.user_language(user))
     return user
 
 
-async def get_optional_user(request: Request, db: Session = Depends(database.get_db)) -> Optional[models.User]:
+async def get_optional_user(
+    request: Request, response: Response, db: Session = Depends(database.get_db)
+) -> Optional[models.User]:
     """The logged-in person if the request has a valid login, else None (for endpoints open to everyone)."""
     if request_token(request)[0] is None:
         return None
     try:
-        return await get_current_user_from_token(request, db)
+        return await get_current_user_from_token(request, response, db)
     except messages.CodedError:
         return None
 

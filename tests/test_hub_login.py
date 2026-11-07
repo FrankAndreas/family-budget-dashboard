@@ -5,7 +5,7 @@ import threading
 import fake_hub
 from helpers import BASE_URL, ADMIN, admin_headers, bearer, create_account, register, user_id
 
-from app import database, hub_people, models
+from app import database, hub, hub_people, models
 
 
 def me(client, headers=None, **kwargs):
@@ -147,3 +147,13 @@ def test_removed_endpoints(client):
     assert client.patch(f"{BASE_URL}/me/language", json={"language": "de"}, headers=admin).status_code in (404, 405)
     admin_id = user_id(client, admin, ADMIN)
     assert client.put(f"{BASE_URL}/users/{admin_id}", json={"username": "Boss"}, headers=admin).status_code == 422
+
+
+# App integration review 2026-11-07: someone who only opens this app never opens the hub, which renews a login. In its
+# last week the hub says so, and the page sends the browser through the hub once (frontend api.ts)
+def test_a_login_in_its_last_week_is_renewed_through_the_hub(client, family_hub):
+    headers = bearer(fake_hub.token(ADMIN))
+    assert "X-Hub-Renew" not in client.get(f"{BASE_URL}/me", headers=headers).headers
+    family_hub.renewing.add(ADMIN)
+    hub.client.forget()
+    assert client.get(f"{BASE_URL}/me", headers=headers).headers["X-Hub-Renew"] == "1"

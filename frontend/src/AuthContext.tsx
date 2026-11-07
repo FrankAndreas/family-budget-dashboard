@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import api, { errorCode, goToHubLogout } from './api';
+import api, { errorCode, goToHubLogout, renewsAtHub } from './api';
 import { applyLanguage, type Language } from './i18n';
 
 interface User {
@@ -31,6 +31,8 @@ interface Found { user: User | null; state: AuthState }
 async function whoIsLoggedIn(): Promise<Found> {
     try {
         const response = await api.get<User>('/api/v1/me');
+        // A login in its last week goes through the hub once, which renews it and sends the browser back
+        if (renewsAtHub(response.headers)) return { user: null, state: 'loading' };
         return { user: response.data, state: 'in' };
     } catch (err) {
         const code = errorCode(err);

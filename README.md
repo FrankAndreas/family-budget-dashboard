@@ -43,6 +43,8 @@ Bookings come in by hand, or in bulk from bank and Migros exports through small 
   Logins come from a family hub (`HUB_URL`, default `http://localhost:8086`; run family-hub's backend there, with
   `COOKIE_INSECURE=1` on plain http). Vite forwards `/api` to `API_PROXY` (default `http://localhost:8000`), so the
   hub's cookie reaches the backend. The database is `backend/data/budget.db` unless `DATABASE_URL` says otherwise.
+  Asking the hub, and the tests' fake hub, come from family-hub's client package (`family-hub-client`, pinned to a
+  commit in `backend/requirements.txt`; family-hub's `client/README.md`).
 
   The app speaks German and English: each person picks a language in the family hub. `DEFAULT_LANGUAGE`
   (`de` if unset, or `en`) is the language of messages before a login when the browser asks for neither, and of a

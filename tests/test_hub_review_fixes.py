@@ -79,7 +79,7 @@ def test_one_refresh_at_a_time(client, family_hub, monkeypatch):
         release.wait(5)
         return []
 
-    monkeypatch.setattr(hub, "fetch_people", slow)
+    monkeypatch.setattr(hub.client, "fetch_people", slow)
     hub_people.forget()
     with database.SessionLocal() as db1:
         first = threading.Thread(target=hub_people.refresh, args=(db1, "tok-Admin", True))
@@ -96,11 +96,11 @@ def test_one_refresh_at_a_time(client, family_hub, monkeypatch):
 def test_hub_down_backs_off(client, family_hub, monkeypatch):
     calls = []
 
-    def down(tok):
-        calls.append(tok)
+    def down(login):
+        calls.append(login.token)
         raise hub.HubUnavailable("down")
 
-    monkeypatch.setattr(hub, "fetch_people", down)
+    monkeypatch.setattr(hub.client, "fetch_people", down)
     hub_people.forget()
     with database.SessionLocal() as db:
         for _ in range(3):
@@ -114,7 +114,7 @@ def test_hub_down_backs_off(client, family_hub, monkeypatch):
 # A machine that started less than a minute ago (a fresh CI runner, the NAS after a restart) still refreshes at first
 def test_first_refresh_soon_after_boot(client, family_hub, monkeypatch):
     calls = []
-    monkeypatch.setattr(hub, "fetch_people", lambda tok: calls.append(tok) or [])
+    monkeypatch.setattr(hub.client, "fetch_people", lambda login: calls.append(login.token) or [])
     monkeypatch.setattr(hub_people.time, "monotonic", lambda: 5.0)
     hub_people.forget()
     with database.SessionLocal() as db:
@@ -127,16 +127,16 @@ def test_first_refresh_soon_after_boot(client, family_hub, monkeypatch):
 def test_new_person_waits_for_the_running_refresh(client, family_hub, monkeypatch):
     client.get(f"{BASE_URL}/me", headers=admin_headers(client))
     family_hub.add("nina", "PARENT")
-    fetch = hub.fetch_people
+    fetch = hub.client.fetch_people
     started, release = threading.Event(), threading.Event()
 
-    def slow(tok):
-        people = fetch(tok)
+    def slow(login):
+        people = fetch(login)
         started.set()
         release.wait(5)
         return people
 
-    monkeypatch.setattr(hub, "fetch_people", slow)
+    monkeypatch.setattr(hub.client, "fetch_people", slow)
     hub_people.forget()
     with database.SessionLocal() as db:
         first = threading.Thread(target=hub_people.refresh, args=(db, "tok-Admin", True))
