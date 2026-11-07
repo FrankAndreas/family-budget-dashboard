@@ -8,6 +8,7 @@ other family members share with them, and (for parents) the common budget, inves
 - One CSV file per kind of data: UTF-8, comma-separated, `.` as decimal point, a header row.
 - Timestamps are UTC in ISO 8601 (`2026-10-14T09:30:00Z`); plain dates are `YYYY-MM-DD`.
 - An empty field means "no value".
+- A text that starts with `=`, `+`, `-` or `@` has a `'` in front, so a spreadsheet doesn't run it as a formula.
 - Every row has its own ID (`*_id`) and the IDs it refers to, plus the names for reading. Join on IDs:
   names can change and are not unique (two parents may both have an account called "Bank").
 - All amounts are in CHF.

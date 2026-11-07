@@ -18,10 +18,14 @@ from .wishes_api import visible_wishes, wish_out
 router = APIRouter()
 
 README = Path(__file__).with_name("export_readme.md")
+# A text starting with one of these runs as a formula when the file is opened in Excel or LibreOffice
+FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
 
 
 def cell(value) -> str:
-    """One CSV field: UTC timestamps with Z, dates as YYYY-MM-DD, empty for no value."""
+    """One CSV field: UTC timestamps with Z, dates as YYYY-MM-DD, empty for no value. Texts come partly from outside
+    (bank statement texts, receipt items read by the AI, mail subjects): one that would start a formula gets a leading
+    ' so a spreadsheet shows it as text. Numbers stay as they are, so pandas still reads them as numbers."""
     if value is None:
         return ""
     if isinstance(value, datetime):
@@ -30,6 +34,8 @@ def cell(value) -> str:
         return value.isoformat()
     if isinstance(value, Enum):
         return str(value.value)
+    if isinstance(value, str) and value.startswith(FORMULA_START):
+        return "'" + value
     return str(value)
 
 
