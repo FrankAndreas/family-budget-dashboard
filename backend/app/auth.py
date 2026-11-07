@@ -66,6 +66,10 @@ def _resolve(request: Request, db: Session) -> tuple[models.User, hub.HubPerson]
             # Given access a moment ago: the people kept here are older than that
             hub_people.refresh(db, token, force=True)
             user = _active(db, person.id)
+        if user is None:
+            # Another request of theirs was refreshing at the same moment: wait for it, then look again
+            hub_people.wait_for_running(hub.TIMEOUT_SECONDS)
+            user = _active(db, person.id)
     except hub.HubUnavailable as error:
         logger.warning("The family hub can't be reached (%s)", error)
         raise messages.CodedError(status.HTTP_503_SERVICE_UNAVAILABLE, "hub_unavailable") from None

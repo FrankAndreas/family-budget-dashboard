@@ -16,7 +16,8 @@ REFRESH_SECONDS = 60
 # After the hub failed to answer, the next try waits this long (requests go on with the people kept here)
 BACKOFF_SECONDS = 10
 
-_lock = threading.Lock()
+# A condition, so a request can wait for a refresh that another one is running (wait_for_running)
+_lock = threading.Condition()
 # When the last refresh finished (time.monotonic()); None: not yet. Not 0.0: monotonic counts from the machine's start,
 # so on a machine up for less than a minute 0.0 would look like a refresh a moment ago
 _last: float | None = None
@@ -58,6 +59,15 @@ def refresh(db: Session, token: str, force: bool = False) -> None:
     finally:
         with _lock:
             _running = False
+            _lock.notify_all()
+
+
+def wait_for_running(timeout: float) -> None:
+    """Until a refresh another request is running has finished, at most `timeout` seconds. Only for a person the app
+    doesn't know yet: their first requests often come together, and the one that didn't refresh would answer "no
+    access" a moment before the other one adds them. Everyone else goes on without waiting (one refresh at a time)."""
+    with _lock:
+        _lock.wait_for(lambda: not _running, timeout)
 
 
 def _apply(db: Session, people: list[hub.HubPerson]) -> None:

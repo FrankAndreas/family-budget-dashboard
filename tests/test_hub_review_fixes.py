@@ -120,3 +120,31 @@ def test_first_refresh_soon_after_boot(client, family_hub, monkeypatch):
     with database.SessionLocal() as db:
         hub_people.refresh(db, "tok-Admin")
     assert calls == ["tok-Admin"]
+
+
+# A person given access a moment ago whose first two requests come together: the one that finds a refresh running
+# waits for it and is let in, instead of answering "no access" (seen in the browser tests: React asks for /me twice)
+def test_new_person_waits_for_the_running_refresh(client, family_hub, monkeypatch):
+    client.get(f"{BASE_URL}/me", headers=admin_headers(client))
+    family_hub.add("nina", "PARENT")
+    fetch = hub.fetch_people
+    started, release = threading.Event(), threading.Event()
+
+    def slow(tok):
+        people = fetch(tok)
+        started.set()
+        release.wait(5)
+        return people
+
+    monkeypatch.setattr(hub, "fetch_people", slow)
+    hub_people.forget()
+    with database.SessionLocal() as db:
+        first = threading.Thread(target=hub_people.refresh, args=(db, "tok-Admin", True))
+        first.start()
+        assert started.wait(5)
+        threading.Timer(0.3, release.set).start()
+        # Nina's request finds the refresh running; it lets her in once that refresh has added her
+        response = client.get(f"{BASE_URL}/me", headers=bearer("tok-nina"))
+        first.join()
+    assert response.status_code == 200, response.text
+    assert response.json()["username"] == "nina"
