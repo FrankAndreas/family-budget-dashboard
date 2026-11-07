@@ -19,7 +19,7 @@ test('the app in German', async ({ page, request }) => {
 
     // The booking's date in German
     await page.getByRole('button', { name: 'Konten' }).first().click();
-    const booking = page.locator('div', { hasText: 'Kiosk' }).last();
+    const booking = page.locator('.rounded-lg', { hasText: 'Kiosk' }).last();
     await expect(booking).toContainText('16.10.2026');
 
     // The 🔒 category by its German name, and a backend error in German

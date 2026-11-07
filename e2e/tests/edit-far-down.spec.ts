@@ -30,6 +30,10 @@ test('the form comes into view when editing an entry far down', async ({ page, r
     const errors = await login(page, parent);
 
     await expect(page.getByText('Buchung 30')).toBeVisible();
+    // On a phone a booking's actions are behind its "⋯" button
+    const actions = page.getByRole('button', { name: 'Actions' }).last();
+    await actions.scrollIntoViewIfNeeded();
+    await actions.click();
     await editLast(page, 'Edit transaction');
     await expect(page.getByPlaceholder('Description', { exact: true })).toBeInViewport();
     await expect(page.getByPlaceholder('Description', { exact: true })).toHaveValue('Buchung 1');
