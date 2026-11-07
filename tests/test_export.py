@@ -101,6 +101,19 @@ def test_only_what_the_user_can_see(client, family):
     assert len(rows(archive, "transactions.csv")) == 2
 
 
+def test_texts_that_would_start_a_formula_stay_text(client, family):
+    """Security review 2026-11-07: a booking text from outside (a bank statement, a receipt read by the AI) must not
+    run as a formula when the CSV is opened in a spreadsheet; amounts stay plain numbers for pandas."""
+    groceries = category_id(client, "Groceries")
+    for text in ('=HYPERLINK("http://example.invalid")', "+41 Coop", "-5% Rabatt", "@SUM(A1)", "Coop"):
+        add_transaction(client, family["mum"], family["mum_account"], groceries, 10, description=text)
+    transactions = rows(export(client, family["mum"]), "transactions.csv")
+    assert sorted(t["description"] for t in transactions) == sorted(
+        ['\'=HYPERLINK("http://example.invalid")', "'+41 Coop", "'-5% Rabatt", "'@SUM(A1)", "Coop"]
+    )
+    assert {t["amount"] for t in transactions} == {"-10.0"}
+
+
 def test_child_gets_own_data_and_empty_common_files(client, family):
     teen = register(client, "teen", role="CHILD", by=family["mum"])
     account = create_account(client, teen, "Teen bank")
