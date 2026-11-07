@@ -129,6 +129,9 @@ const de = {
         splitShort: 'In Artikel aufteilen',
         editShort: 'Bearbeiten',
         deleteShort: 'Löschen',
+        date: 'Datum',
+        refund: 'Geld zurück (Rückerstattung): senkt, was diese Kategorie gekostet hat',
+        refundBadge: 'Rückerstattung',
         deleteFailed: 'Buchung konnte nicht gelöscht werden',
     },
     budgets: {
@@ -692,6 +695,7 @@ const de = {
         },
         transferOut: 'Umbuchung (raus)',
         transferIn: 'Umbuchung (rein)',
+        refundIn: '{{name}} (Rückerstattung)',
         categoryOfLine: 'Kategorie von Zeile {{line}}',
         was: 'vorher ',
         byAi: 'Vorschlag der KI',

@@ -11,7 +11,7 @@ from fastapi import APIRouter, Depends
 from fastapi.responses import Response
 from sqlalchemy.orm import Session
 
-from . import article_rules, auth, database, finance, i18n, models, privacy
+from . import article_rules, auth, crud, database, finance, i18n, models, privacy
 from .common_api import asset_out, planned_cost_out, shared_transactions, visible_owner
 from .wishes_api import visible_wishes, wish_out
 
@@ -132,7 +132,7 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
     share_rows = []
     if is_parent:
         for t, payer in reversed(shared_transactions(db)):
-            amount = abs(t.amount)
+            amount = crud.cost(t.amount)
             percents = t.split_shares or {}
             amounts = finance.split_amount(amount, percents)
             for member_id, percent in percents.items():

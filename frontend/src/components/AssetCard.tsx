@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { leaseEndsSoon, money, type Asset } from '../finance';
-import { formatDate } from '../format';
+import { formatDate, localDay } from '../format';
 import { openAttachment } from '../receipts';
 
 interface Expense { id: string; amount: number; date: string; description: string | null }
@@ -27,7 +27,7 @@ export default function AssetCard({ asset, owner, alsoIn, canChange, expenses, o
     // The day it left, while asking for it
     const [leftOn, setLeftOn] = useState<string | null>(null);
     const used = Math.min(asset.age_years / asset.lifespan_years, 1);
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDay();
 
     return (
         <div className="p-4 rounded-lg bg-slate-800/30 border border-slate-700">

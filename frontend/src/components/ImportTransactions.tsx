@@ -130,13 +130,18 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
 
     const typeOf = (name: string) => categories.find(c => c.name.toLowerCase() === name.trim().toLowerCase())?.type;
 
-    // The sign stays: an expense row may become another expense or Transfer (out); income likewise
+    // The sign stays: an expense row may become another expense or Transfer (out); income likewise. Money that came in
+    // may also go into an expense category as a refund (the jacket returned), which lowers that category's spending
     const choicesFor = (row: PreviewRow) => {
         const type = typeOf(row.file_category);
         if (type !== 'EXPENSE' && type !== 'INCOME') return null;
         return [
             ...categories.filter(c => c.type === type).map(c => ({ value: c.name, label: c.name })),
-            { value: 'Transfer', label: type === 'EXPENSE' ? t('importing.transferOut') : t('importing.transferIn') }
+            { value: 'Transfer', label: type === 'EXPENSE' ? t('importing.transferOut') : t('importing.transferIn') },
+            ...(type === 'INCOME'
+                ? categories.filter(c => c.type === 'EXPENSE')
+                    .map(c => ({ value: c.name, label: t('importing.refundIn', { name: c.name }) }))
+                : []),
         ];
     };
 

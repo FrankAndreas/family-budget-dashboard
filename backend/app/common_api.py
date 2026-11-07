@@ -105,7 +105,8 @@ def shared_transactions(db: Session) -> list[tuple[models.Transaction, str]]:
 
 
 def shared_expense_rows(db: Session) -> list[tuple[str, float, dict[str, int]]]:
-    return [(payer, abs(t.amount), t.split_shares or {}) for t, payer in shared_transactions(db)]
+    # A shared refund (negative cost) lowers what the others owe
+    return [(payer, crud.cost(t.amount), t.split_shares or {}) for t, payer in shared_transactions(db)]
 
 
 def settlement_rows(db: Session) -> list[tuple[str, str, float]]:
@@ -128,10 +129,10 @@ def common_expenses(_: models.User = Depends(require_parent), db: Session = Depe
             "transaction_id": t.id,
             "date": t.date,
             "description": t.description,
-            "amount": abs(t.amount),
+            "amount": crud.cost(t.amount),
             "payer_id": payer,
             "split_name": split_names.get(t.split_id or ""),
-            "shares": finance.split_amount(abs(t.amount), t.split_shares or {}),
+            "shares": finance.split_amount(crud.cost(t.amount), t.split_shares or {}),
         }
         for t, payer in shared_transactions(db)
     ]
@@ -168,7 +169,11 @@ def create_settlement(
 
     paid, received = (
         models.Transaction(
-            account_id=account.id, category_id=category.id, amount=sign * amount, date=when, description="Settle up"
+            account_id=account.id,
+            category_id=category.id,
+            amount=sign * amount,
+            date=when,
+            description=messages.text("settle_up_description"),
         )
         for account, sign in ((from_account, -1), (to_account, 1))
     )
@@ -385,7 +390,7 @@ def asset_out(db: Session, asset: models.Asset) -> dict:
         asset.price,
         asset.purchase_date,
         asset.lifespan_years,
-        sum(abs(t.amount) for t in follow_ups),
+        sum(crud.cost(t.amount) for t in follow_ups),
         asset.archived_on or today(),
         asset.lease,
     )

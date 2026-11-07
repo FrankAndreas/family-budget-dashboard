@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { localDay } from '../format';
 import api, { errorMessage } from '../api';
 import type { Account, Category, Transaction } from '../accounts';
 import type { FamilyUser } from '../family';
@@ -37,7 +38,7 @@ interface Row extends Omit<Item, 'amount'> {
 }
 
 const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
-const today = () => new Date().toISOString().slice(0, 10);
+const today = () => localDay();
 
 const toRow = (item: Item): Row => ({ ...item, amount: item.amount.toFixed(2), person_id: item.person_id ?? null });
 
@@ -52,10 +53,12 @@ export default function ReceiptForm({
         existing?.map(toRow)
         ?? draft?.items.map(toRow)
         ?? (transaction ? [{ name: transaction.description || '', amount: Math.abs(transaction.amount).toFixed(2),
-            category_id: transaction.category_id, person_id: null, tag_ids: [] }] : [])
+            // A booking for a child stays the child's cost when it is split into items
+            category_id: transaction.category_id, person_id: transaction.member_id ?? null, tag_ids: [] }] : [])
     );
     const [description, setDescription] = useState(transaction?.description ?? draft?.shop ?? '');
-    const [date, setDate] = useState(transaction ? transaction.date.slice(0, 10)
+    // The booking's day where you are, not its UTC day (a booking made after midnight would move back a day)
+    const [date, setDate] = useState(transaction ? localDay(transaction.date)
         : draft && /^\d{4}-\d{2}-\d{2}$/.test(draft.date) ? draft.date : today());
     const [total, setTotal] = useState<number | null>(draft?.total ?? null);
     const [attachments, setAttachments] = useState<AttachmentInfo[]>(

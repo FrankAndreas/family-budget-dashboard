@@ -5,6 +5,7 @@ import { useAuth } from '../AuthContext';
 import type { FamilyUser } from '../family';
 import { useFamily } from '../useFamily';
 import { downloadBlob } from '../download';
+import { localDay } from '../format';
 import ImportTransactions from './ImportTransactions';
 import Section from './Section';
 
@@ -46,7 +47,7 @@ interface Status {
     text: string;
 }
 
-const today = () => new Date().toISOString().split('T')[0];
+const today = () => localDay();
 
 // onDataChanged: an import or restore added accounts and transactions the rest of the app should reload
 export default function DataManager({ onDataChanged }: { onDataChanged?: () => void }) {
@@ -244,6 +245,8 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
                         date: transaction.date,
                         // An unknown child just loses the tag; the expense itself is still imported
                         member_id: (transaction.member_id && memberMap.get(transaction.member_id)) || null,
+                        // Money back in an expense category stays a refund (the server ignores it for income)
+                        refund: transaction.amount > 0,
                         reference: transaction.reference ?? null
                     });
                     imported++;

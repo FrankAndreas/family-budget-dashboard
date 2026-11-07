@@ -12,7 +12,7 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from . import auth, crud, database, models, privacy, schemas, messages
+from . import auth, crud, database, i18n, models, privacy, schemas, messages
 from .seed import OTHER_INCOME, UNKNOWN_EXPENSE, system_category
 
 router = APIRouter()
@@ -57,6 +57,28 @@ def months(db: Session, account: models.Account) -> dict:
     }
 
 
+# Month names in German; English ones come from the calendar module (its names follow the C locale)
+GERMAN_MONTHS = (
+    "Januar",
+    "Februar",
+    "März",
+    "April",
+    "Mai",
+    "Juni",
+    "Juli",
+    "August",
+    "September",
+    "Oktober",
+    "November",
+    "Dezember",
+)
+
+
+def month_name(number: int, year: int) -> str:
+    """'November 2026' or 'November 2026' in German ('März 2026')."""
+    return f"{GERMAN_MONTHS[number - 1] if i18n.current() == 'de' else calendar.month_name[number]} {year}"
+
+
 def current_month() -> str:
     return datetime.now(ZURICH).strftime("%Y-%m")
 
@@ -95,7 +117,8 @@ def book_month_check(
         account_id=account.id,
         category_id=category.id,
         amount=abs(row["difference"]),
-        description=f"Month check {calendar.month_name[number]} {year}",
+        # In the language of the person who books it, like the rest of the app
+        description=messages.text("month_check_description", month=month_name(number, year)),
         reference=reference(month),
         # Noon UTC on the last day: that day in Switzerland too (same as a date-only import)
         date=datetime(year, number, calendar.monthrange(year, number)[1], 12, tzinfo=timezone.utc),

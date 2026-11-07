@@ -131,6 +131,9 @@ const en: Messages = {
         splitShort: 'Split into items',
         editShort: 'Edit',
         deleteShort: 'Delete',
+        date: 'Date',
+        refund: 'Money back (refund): lowers what this category cost',
+        refundBadge: 'refund',
         deleteFailed: 'Failed to delete transaction',
     },
     budgets: {
@@ -694,6 +697,7 @@ const en: Messages = {
         },
         transferOut: 'Transfer (out)',
         transferIn: 'Transfer (in)',
+        refundIn: '{{name}} (refund)',
         categoryOfLine: 'Category of line {{line}}',
         was: 'was ',
         byAi: 'AI suggestion',
