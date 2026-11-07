@@ -64,13 +64,21 @@ export default function Inbox({ accounts, categories, people, aiEnabled, version
         }
     };
 
+    // Nothing waiting: one line with the scan button instead of a whole card
+    const idle = !waiting && !scanning && !open && !failed && !error;
+
     return (
-        <div className="glass-card p-6">
-            <div className="flex flex-wrap justify-between items-center gap-2 mb-1">
-                <h2 className="text-xl font-bold">
+        <div className={idle ? 'glass-card px-4 py-3 sm:px-6' : 'glass-card p-6'}>
+            <div className={`flex flex-wrap justify-between items-center gap-2 ${idle ? '' : 'mb-1'}`}>
+                <h2 className={idle ? 'font-semibold' : 'text-xl font-bold'}>
                     {waiting ? t('inbox.title', { count: waiting }) : t('inbox.titleEmpty')}
+                    {idle && <span className="ml-2 text-sm font-normal text-slate-400">{t('inbox.nothingWaiting')}</span>}
                 </h2>
-                {!scanning && <button type="button" className="btn-primary text-sm" onClick={onScan}>{t('scan.open')}</button>}
+                {!scanning && (
+                    <button type="button" className={`${waiting ? 'btn-primary' : 'btn-secondary'} text-sm`} onClick={onScan}>
+                        {t('scan.open')}
+                    </button>
+                )}
             </div>
             {mails.length > 0 && <p className="text-sm text-slate-400 mb-4">{t('inbox.intro')}</p>}
             {failed && <p className="text-red-400 text-sm mb-3">{t('inbox.loadFailed')}</p>}

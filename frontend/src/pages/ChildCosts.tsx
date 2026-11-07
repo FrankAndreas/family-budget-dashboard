@@ -41,7 +41,7 @@ export default function ChildCosts() {
                     <h1 className="text-2xl font-bold">{t('childCosts.title')}</h1>
                     <p className="text-slate-400 mt-1">{t('childCosts.hello', { name: user?.username })}</p>
                 </div>
-                <button onClick={() => void logout()} className="btn-primary">{t('dashboard.logout')}</button>
+                <button onClick={() => void logout()} className="btn-secondary">{t('dashboard.logout')}</button>
             </div>
 
             <div className="glass-card p-4 sm:p-6 space-y-4">

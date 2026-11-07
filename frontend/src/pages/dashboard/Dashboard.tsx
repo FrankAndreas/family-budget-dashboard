@@ -18,6 +18,7 @@ import Wishes from '../../components/Wishes';
 import { useAssets, useSplits } from '../../finance';
 import type { Account, Category, Transaction } from '../../accounts';
 import AccountCards from '../../components/AccountCards';
+import MonthSummary from '../../components/MonthSummary';
 import Transactions from '../../components/Transactions';
 import Inbox from '../../components/Inbox';
 import { useReceiptReading } from '../../receipts';
@@ -114,7 +115,7 @@ export default function Dashboard() {
                             {t('dashboard.welcome', { name: user?.username, role: user ? t(`common.roles.${user.role}`) : '' })}
                         </p>
                     </div>
-                    <button onClick={() => void logout()} className="btn-primary">
+                    <button onClick={() => void logout()} className="btn-secondary">
                         {t('dashboard.logout')}
                     </button>
                 </div>
@@ -176,9 +177,13 @@ export default function Dashboard() {
                             onScanDone={() => { setScanning(false); refresh(); }}
                         />
                     )}
+                    {/* Your own money; accounts others shared with you are listed but not added up */}
+                    <MonthSummary
+                        balance={accounts.filter(a => a.user_id === user?.id).reduce((sum, a) => sum + a.balance, 0)}
+                        version={dataVersion}
+                    />
                     <AccountCards
                         accounts={accounts}
-                        transactionCount={shownTransactions.length}
                         selectedAccount={selectedAccount}
                         onSelect={setSelectedAccount}
                         ownerOf={ownerOf}

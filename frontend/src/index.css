@@ -74,6 +74,23 @@ body {
   opacity: 0.9;
 }
 
+/* Everything that isn't the screen's main action: Logout, Scan, Add Account, ... */
+.btn-secondary {
+  background: rgba(30, 41, 59, 0.6);
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 8px;
+  color: var(--text-primary);
+  padding: 0.6em 1.2em;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.2s, border-color 0.2s;
+}
+
+.btn-secondary:hover {
+  background: rgba(51, 65, 85, 0.7);
+  border-color: rgba(148, 163, 184, 0.6);
+}
+
 h1,
 h2,
 h3 {

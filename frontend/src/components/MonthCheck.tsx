@@ -41,8 +41,21 @@ export default function MonthCheck<A extends Account>({ accounts, canBook, versi
         }
     };
 
+    // Every clearing account adds up: one line instead of the explanation and a list
+    const allClear = !error && accounts.every(a => months[a.id] && months[a.id].length === 0);
+    if (allClear) {
+        return (
+            <div className="glass-card px-4 py-3 sm:px-6 flex flex-wrap items-baseline gap-x-3 gap-y-1" data-testid="month-check">
+                <h2 className="font-semibold">{t('monthCheck.title')}</h2>
+                <p className="text-sm text-emerald-400">
+                    ✓ {accounts.map(a => a.name).join(', ')}: {t('monthCheck.allAddUp')}
+                </p>
+            </div>
+        );
+    }
+
     return (
-        <div className="glass-card p-6">
+        <div className="glass-card p-6" data-testid="month-check">
             <h2 className="text-xl font-bold mb-1">{t('monthCheck.title')}</h2>
             <p className="text-sm text-slate-400 mb-4">{t('monthCheck.intro')}</p>
             {error && <p className="text-red-400 text-sm mb-2">{error}</p>}

@@ -48,10 +48,18 @@ const en: Messages = {
         common: 'Common: {{name}}',
         othersHint: 'Others appear here once they let you manage their money (Settings → Sharing).',
     },
+    overview: {
+        spent: 'Spent in {{month}}',
+        ofBudget: '{{spent}} of {{limit}} budgeted',
+        overBudget_one: '{{count}} budget over its limit',
+        overBudget_other: '{{count}} budgets over their limit',
+        left: 'Left in {{month}}',
+        short: 'Short in {{month}}',
+        income: 'Income {{amount}}',
+    },
     accounts: {
         myBalance: 'My Balance',
         title: 'Accounts',
-        transactionsInSelected: 'Transactions in Selected Account',
         add: '+ Add Account',
         iban: 'IBAN',
         ibanPlaceholder: 'IBAN (optional, for importing bank statements)',
@@ -829,6 +837,7 @@ const en: Messages = {
     },
     inbox: {
         titleEmpty: '📥 Inbox',
+        nothingWaiting: 'nothing waiting',
         title_one: '📥 {{count}} receipt waiting',
         title_other: '📥 {{count}} receipts waiting',
         intro: 'Forwarded receipt mails. Nothing in them has been opened yet: releasing one lets the AI read it.',

@@ -13,7 +13,7 @@ export default function NoAccess({ reason }: { reason: 'no_access' | 'hub_down' 
                 <div className="flex justify-center gap-3">
                     {reason === 'hub_down'
                         ? <button className="btn-primary" onClick={retry}>{t('hubLogin.retry')}</button>
-                        : <button className="btn-primary" onClick={() => void logout()}>{t('hubLogin.otherPerson')}</button>}
+                        : <button className="btn-secondary" onClick={() => void logout()}>{t('hubLogin.otherPerson')}</button>}
                 </div>
             </div>
         </div>
