@@ -15,8 +15,8 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
 from . import auth, crud, database, messages, models, privacy, schemas
-from .crud import to_cents
 from .seed import SETTLE_UP
+from .money import cents
 
 router = APIRouter()
 
@@ -43,9 +43,9 @@ def covered_until(db: Session, account_id: str) -> Optional[date]:
 def state(transaction: models.Transaction, account: models.Account, covered: Optional[date]) -> dict:
     confirmation = None
     if account.type in WITH_STATES and covered is not None:
-        paid = to_cents(sum(r.amount for r in transaction.bank_rows))
+        paid = cents(sum(r.amount for r in transaction.bank_rows))
         if transaction.bank_rows:
-            confirmation = "confirmed" if paid == to_cents(transaction.amount) else "partly_paid"
+            confirmation = "confirmed" if paid == cents(transaction.amount) else "partly_paid"
         elif covered >= swiss_day(transaction) + timedelta(days=NO_PAYMENT_DAYS):
             confirmation = "no_payment"
         else:
@@ -101,7 +101,7 @@ def summary(db: Session, account: models.Account) -> dict:
     unconfirmed = sum(t.amount for t, s in found if s["confirmation"] in ("not_confirmed", "no_payment"))
     return {
         "open_points": sum(is_open(s) for _, s in found) + unlinked_rows(db, account.id),
-        "not_confirmed": to_cents(unconfirmed) + 0.0,
+        "not_confirmed": cents(unconfirmed) + 0.0,
     }
 
 
@@ -111,7 +111,7 @@ def fit(db: Session, transaction: models.Transaction) -> None:
     commits."""
     if not transaction.bank_rows:
         return
-    target = to_cents(sum(r.amount for r in transaction.bank_rows))
+    target = cents(sum(r.amount for r in transaction.bank_rows))
     if not transaction.items:
         if abs(target - transaction.amount) <= TOLERANCE:
             transaction.amount = target
@@ -119,8 +119,8 @@ def fit(db: Session, transaction: models.Transaction) -> None:
     if target >= 0:
         # Items are costs: money coming in can't be a receipt's payment
         return
-    total = to_cents(sum(i.amount for i in transaction.items))
-    difference = to_cents(-target - total)
+    total = cents(sum(i.amount for i in transaction.items))
+    difference = cents(-target - total)
     if difference:
         transaction.items.append(
             models.TransactionItem(
@@ -155,7 +155,7 @@ def candidates_for_line(
         and abs(t.amount - amount) <= TOLERANCE
         and day - timedelta(days=30) <= swiss_day(t) <= day + timedelta(days=3)
     ]
-    return sorted(found, key=lambda t: (to_cents(t.amount) != to_cents(amount), abs((swiss_day(t) - day).days)))
+    return sorted(found, key=lambda t: (cents(t.amount) != cents(amount), abs((swiss_day(t) - day).days)))
 
 
 def payments_for_receipt(db: Session, account: models.Account, day: date, total: float) -> list[models.Transaction]:
@@ -171,7 +171,7 @@ def payments_for_receipt(db: Session, account: models.Account, day: date, total:
         paid = min(r.booked_on for r in t.bank_rows)
         if day - timedelta(days=3) <= paid <= day + timedelta(days=30):
             found.append((t, paid))
-    found.sort(key=lambda f: (to_cents(-f[0].amount) != to_cents(total), abs((f[1] - day).days)))
+    found.sort(key=lambda f: (cents(-f[0].amount) != cents(total), abs((f[1] - day).days)))
     return [t for t, _ in found]
 
 

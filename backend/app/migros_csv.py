@@ -12,7 +12,8 @@ from datetime import datetime
 from decimal import Decimal
 
 from . import bank_csv, messages
-from .crud import to_cents
+from .money import cents
+from .names import key as norm
 
 HEADER = "Datum;Zeit;Filiale;Kassennummer;Transaktionsnummer;Artikel;Menge;Aktion;Umsatz"
 
@@ -20,11 +21,6 @@ HEADER = "Datum;Zeit;Filiale;Kassennummer;Transaktionsnummer;Artikel;Menge;Aktio
 def is_migros(text: str) -> bool:
     first = text.lstrip("﻿").split("\n", 1)[0].strip()
     return first.casefold() == HEADER.casefold()
-
-
-def norm(name: str) -> str:
-    """An article's name as compared: spaces around it and case don't count."""
-    return name.strip().casefold()
 
 
 @dataclass
@@ -45,7 +41,7 @@ class Receipt:
 
     @property
     def total(self) -> float:
-        return to_cents(sum(line.amount for line in self.lines))
+        return cents(sum(line.amount for line in self.lines))
 
 
 def receipts(text: str) -> list[Receipt]:
@@ -80,5 +76,5 @@ def receipts(text: str) -> list[Receipt]:
         name, total = amounts[key].get(merge, (article.strip(), Decimal(0)))
         amounts[key][merge] = (name, total + amount)
     for key, receipt in found.items():
-        receipt.lines = [Line(name, to_cents(float(total))) for name, total in amounts[key].values() if total != 0]
+        receipt.lines = [Line(name, cents(float(total))) for name, total in amounts[key].values() if total != 0]
     return sorted(found.values(), key=lambda r: r.when, reverse=True)

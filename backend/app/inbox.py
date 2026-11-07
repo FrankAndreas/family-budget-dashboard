@@ -137,9 +137,7 @@ async def receive_mail(request: Request, db: Session = Depends(database.get_db))
     return {"status": "stored", "id": entry.id}
 
 
-def require_parent(user: models.User) -> None:
-    if user.role != models.UserRole.PARENT:
-        raise messages.api_error(403, "only_parents_inbox")
+require_parent = privacy.parents_only("only_parents_inbox")
 
 
 def get_entry(db: Session, entry_id: str) -> models.InboxMail:

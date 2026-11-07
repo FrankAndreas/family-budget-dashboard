@@ -8,7 +8,9 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import auth, crud, database, finance, models, privacy, reports, schemas, messages
+from .reports import today
 from .seed import SETTLE_UP, system_category
+from .money import cents
 
 router = APIRouter()
 
@@ -16,8 +18,7 @@ MAX_SPLITS = 4
 
 
 def require_parent(current_user: models.User = Depends(auth.get_current_user_from_token)) -> models.User:
-    if current_user.role != models.UserRole.PARENT:
-        raise messages.api_error(403, "common_parents_only")
+    privacy.parents_only("common_parents_only")(current_user)
     return current_user
 
 
@@ -164,7 +165,7 @@ def create_settlement(
     from_account = parent_account(db, settlement.from_account_id, settlement.from_user_id)
     to_account = parent_account(db, settlement.to_account_id, settlement.to_user_id)
     category = system_category(db, SETTLE_UP)
-    amount = crud.to_cents(settlement.amount)
+    amount = cents(settlement.amount)
     when = crud.to_naive_utc(settlement.date) if settlement.date else datetime.utcnow()
 
     paid, received = (
@@ -210,10 +211,6 @@ def delete_settlement(
             crud.delete_transaction(db, transaction)
     db.commit()
     return db_settlement
-
-
-def today() -> date:
-    return date.today()
 
 
 def visible_owner(
@@ -314,7 +311,7 @@ def create_planned_cost(
 ):
     validate_planned_cost(db, current_user, cost)
     data = cost.model_dump()
-    data["amount"] = finance.cents(data["amount"])
+    data["amount"] = cents(data["amount"])
     db_cost = models.PlannedCost(**data)
     db.add(db_cost)
     db.commit()
@@ -332,7 +329,7 @@ def update_planned_cost(
     db_cost = get_planned_cost(db, current_user, cost_id, write=True)
     validate_planned_cost(db, current_user, cost)
     for key, value in cost.model_dump().items():
-        setattr(db_cost, key, finance.cents(value) if key == "amount" else value)
+        setattr(db_cost, key, cents(value) if key == "amount" else value)
     db.commit()
     db.refresh(db_cost)
     return planned_cost_out(db, db_cost)
@@ -358,7 +355,7 @@ def common_overview(_: models.User = Depends(require_parent), db: Session = Depe
     totals: dict[str, float] = {}
     for item in items:
         for user_id, amount in item["shares"].items():
-            totals[user_id] = finance.cents(totals.get(user_id, 0.0) + amount)
+            totals[user_id] = cents(totals.get(user_id, 0.0) + amount)
     return {"items": items, "totals": totals}
 
 
@@ -458,7 +455,7 @@ def create_asset(
     tags = check_tags(db, asset.tag_ids)
     check_lease(asset)
     data = asset.model_dump(exclude={"tag_ids"})
-    data["price"] = finance.cents(data["price"])
+    data["price"] = cents(data["price"])
     db_asset = models.Asset(**data, tags=tags)
     db.add(db_asset)
     db.commit()
@@ -478,7 +475,7 @@ def update_asset(
     tags = check_tags(db, asset.tag_ids)
     check_lease(asset)
     for key, value in asset.model_dump(exclude={"tag_ids"}).items():
-        setattr(db_asset, key, finance.cents(value) if key == "price" else value)
+        setattr(db_asset, key, cents(value) if key == "price" else value)
     db_asset.tags = tags
     db.commit()
     db.refresh(db_asset)

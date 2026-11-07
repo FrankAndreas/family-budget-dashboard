@@ -3,15 +3,16 @@
 Who sees and changes a wish follows the rules for its owner's money; common wishes belong to all parents.
 """
 
-from datetime import date
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import auth, database, finance, models, privacy, schemas, messages
+from . import auth, database, messages, models, privacy, reports, schemas
 from .common_api import get_split
+from .privacy import is_parent
+from .money import cents
 
 router = APIRouter()
 
@@ -30,10 +31,6 @@ FIELDS = (
     "family_position",
     "bought_on",
 )
-
-
-def is_parent(user: models.User) -> bool:
-    return user.role == models.UserRole.PARENT
 
 
 def can_see(db: Session, user: models.User, owner_id: Optional[str], split_id: Optional[str], write=False) -> bool:
@@ -145,9 +142,7 @@ def delete_wish(
     return {"deleted": wish_id}
 
 
-def require_parent(user: models.User) -> None:
-    if not is_parent(user):
-        raise messages.api_error(403, "family_plan_parents_only")
+require_parent = privacy.parents_only("family_plan_parents_only")
 
 
 @router.get("/wishes/family-plan", response_model=List[schemas.FamilyPlanRow])
@@ -159,7 +154,7 @@ def family_plan(
     planned = [w for w in visible_wishes(db, current_user) if w.family_position is not None and not w.bought_on]
     for wish in sorted(planned, key=lambda w: w.family_position or 0):
         out = wish_out(db, current_user, wish)
-        total = finance.cents(total + (out["price"] or 0))
+        total = cents(total + (out["price"] or 0))
         rows.append({**out, "running_total": total})
     return rows
 
@@ -241,7 +236,7 @@ def mark_bought(
 ):
     wish = get_wish(db, current_user, wish_id, write=True)
     # Positions are kept, so "back to open" returns the wish to its old place
-    wish.bought_on = bought.bought_on or date.today()
+    wish.bought_on = bought.bought_on or reports.today()
     db.commit()
     db.refresh(wish)
     return wish_out(db, current_user, wish)

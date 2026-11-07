@@ -9,14 +9,12 @@ from fastapi import APIRouter, Depends
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from . import auth, database, messages, models, schemas
+from . import auth, database, messages, models, privacy, schemas
 
 router = APIRouter()
 
 
-def require_parent(user: models.User) -> None:
-    if user.role != models.UserRole.PARENT:
-        raise messages.api_error(403, "only_parents_tags")
+require_parent = privacy.parents_only("only_parents_tags")
 
 
 def name_taken(db: Session, name: str, except_id: Optional[str] = None) -> bool:

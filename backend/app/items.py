@@ -9,7 +9,7 @@ from collections import defaultdict
 from sqlalchemy.orm import Session
 
 from . import messages, models, privacy, schemas
-from .crud import to_cents
+from .money import cents
 
 
 def apply(db: Session, user: models.User, transaction: models.Transaction, items: list[schemas.ItemIn]) -> None:
@@ -31,14 +31,14 @@ def apply(db: Session, user: models.User, transaction: models.Transaction, items
         person = people.get(item.person_id) if item.person_id else None
         if item.person_id and (not person or person.is_active is False or not privacy.can_list_user(user, person)):
             raise messages.api_error(400, "item_person_not_found")
-    total = to_cents(sum(to_cents(i.amount) for i in items))
+    total = cents(sum(cents(i.amount) for i in items))
     if total <= 0:
         raise messages.api_error(400, "items_sum_positive")
 
     # The category with the largest item total; on a tie the one that comes first on the receipt
     per_category: dict[str, float] = defaultdict(float)
     for item in items:
-        per_category[item.category_id] += to_cents(item.amount)
+        per_category[item.category_id] += cents(item.amount)
     first_seen = {c: n for n, c in reversed(list(enumerate(i.category_id for i in items)))}
     main = max(per_category, key=lambda c: (per_category[c], -first_seen[c]))
 
@@ -46,7 +46,7 @@ def apply(db: Session, user: models.User, transaction: models.Transaction, items
         models.TransactionItem(
             position=position,
             name=item.name,
-            amount=to_cents(item.amount),
+            amount=cents(item.amount),
             category_id=item.category_id,
             person_id=item.person_id,
             tags=[tags[t] for t in dict.fromkeys(item.tag_ids)],

@@ -14,9 +14,9 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 from sqlalchemy.orm import Session
 
 from . import article_rules, auth, bank_csv, database, items, messages, models, privacy, receipt_ai, reconcile, schemas
-from .crud import to_cents
 from .migros_csv import Receipt, is_migros, norm, receipts
 from .seed import UNSORTED, system_category
+from .money import cents
 
 router = APIRouter()
 
@@ -24,9 +24,7 @@ MAX_BYTES = 1024 * 1024
 SOURCES = ("change", "rule", "ai", "fallback")
 
 
-def require_parent(user: models.User) -> None:
-    if user.role != models.UserRole.PARENT:
-        raise messages.api_error(403, "only_parents_import_migros")
+require_parent = privacy.parents_only("only_parents_import_migros")
 
 
 def read_file(file: UploadFile) -> list[Receipt]:
@@ -164,7 +162,7 @@ def payments(db: Session, accounts: list[models.Account], receipt: Receipt) -> l
 def fit_of(receipt: Receipt, payment: models.Transaction) -> tuple[bool, int]:
     """How well a payment fits a receipt: exact amount first, then the nearest day."""
     paid = min(r.booked_on for r in payment.bank_rows)
-    return to_cents(-payment.amount) != receipt.total, abs((paid - receipt.when.date()).days)
+    return cents(-payment.amount) != receipt.total, abs((paid - receipt.when.date()).days)
 
 
 def maybe_booked(db: Session, accounts: list[models.Account], receipt: Receipt) -> bool:

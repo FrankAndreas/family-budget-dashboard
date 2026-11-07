@@ -15,6 +15,7 @@ from typing import Any, Optional
 from zoneinfo import ZoneInfo
 
 from . import ibans
+from .names import key
 
 COLUMNS = ("iban", "booked at", "text", "credit/debit amount")
 ZURICH = ZoneInfo("Europe/Zurich")
@@ -30,10 +31,6 @@ CARD = re.compile(
 CARD_NUMBER = re.compile(r",? *(?:Debit )?[\w-]*-Nr\. ?\S*")
 IBAN = re.compile(r"\b[A-Z]{2}\d{2}(?: ?[A-Z0-9]{4}){3,7}(?: ?[A-Z0-9]{1,3})?\b")
 SPACES = re.compile(r"\s+")
-
-
-def key(name: str) -> str:
-    return (name or "").strip().casefold()
 
 
 def is_bank(text: str) -> bool:

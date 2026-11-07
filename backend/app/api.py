@@ -22,16 +22,12 @@ from . import (
     messages,
 )
 from .common_api import apply_item_decisions, visible_owner
+from .privacy import is_dependent, is_parent
 from .seed import SETTLE_UP
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-
-def is_dependent(user) -> bool:
-    """A child without own allowance: no own accounts or budgets; their costs are tagged household expenses."""
-    return user.role == "CHILD" and not user.has_allowance
 
 
 def check_member_tag(db: Session, member_id: Optional[str], account_id: str) -> None:
@@ -43,7 +39,7 @@ def check_member_tag(db: Session, member_id: Optional[str], account_id: str) -> 
         raise messages.api_error(400, "tag_child_without_allowance")
     account = crud.get_account(db, account_id)
     owner = account.user if account else None
-    if not owner or owner.role != "PARENT":
+    if not owner or not is_parent(owner):
         raise messages.api_error(400, "tag_household_only")
 
 
@@ -55,7 +51,7 @@ def check_shared(db: Session, split_id: Optional[str], account_id: str, category
         raise messages.api_error(400, "share_expenses_only")
     account = crud.get_account(db, account_id)
     owner = account.user if account else None
-    if not owner or owner.role != "PARENT":
+    if not owner or not is_parent(owner):
         raise messages.api_error(400, "share_parent_only")
     split = db.query(models.Split).filter(models.Split.id == split_id).first()
     if not split:
@@ -82,7 +78,7 @@ def read_users(
 ):
     # The people the family hub lists for this app; removed ones stay hidden with their data (spec 2026-10-30). A
     # parent looking at the family (Settings) sees the hub's list as it is now, not up to a minute old
-    if current_user.role == "PARENT":
+    if is_parent(current_user):
         token, _ = auth.request_token(request)
         try:
             hub_people.refresh(db, token or "", force=True)
@@ -105,7 +101,7 @@ def update_user(
     db: Session = Depends(database.get_db),
 ):
     """What only this app knows about a person: Jugendlohn and privacy. Name, role and PIN are the family hub's."""
-    if current_user.role != "PARENT":
+    if not is_parent(current_user):
         raise messages.api_error(403, "only_parents_update_users")
 
     target_user = db.query(crud.models.User).filter(crud.models.User.id == user_id).first()
@@ -120,7 +116,7 @@ def update_user(
         raise messages.api_error(403, "own_privacy_only")
 
     if user_update.has_allowance is not None and user_update.has_allowance != target_user.has_allowance:
-        if target_user.role != "CHILD":
+        if target_user.role != models.UserRole.CHILD:
             raise messages.api_error(400, "allowance_children_only")
         if not user_update.has_allowance and crud.get_accounts(db, user_id):
             raise messages.api_error(400, "delete_child_accounts_first")
@@ -139,7 +135,7 @@ def removed_users(
     current_user: models.User = Depends(auth.get_current_user_from_token), db: Session = Depends(database.get_db)
 ):
     """People the family hub no longer lists for this app: their data is kept until a parent deletes it here."""
-    if current_user.role != "PARENT":
+    if not is_parent(current_user):
         raise messages.api_error(403, "only_parents_delete_users")
     return (
         db.query(crud.models.User)
@@ -156,7 +152,7 @@ def delete_user(
     current_user: models.User = Depends(auth.get_current_user_from_token),
     db: Session = Depends(database.get_db),
 ):
-    if current_user.role != "PARENT":
+    if not is_parent(current_user):
         raise messages.api_error(403, "only_parents_delete_users")
 
     user_to_delete = db.query(crud.models.User).filter(crud.models.User.id == user_id).first()
@@ -178,7 +174,7 @@ def update_privacy(
     db: Session = Depends(database.get_db),
 ):
     # Only children can update their own privacy settings
-    if current_user.role != "CHILD":
+    if current_user.role != models.UserRole.CHILD:
         raise messages.api_error(status.HTTP_403_FORBIDDEN, "privacy_children_only")
 
     current_user.privacy_enabled = privacy_update.get("privacy_enabled", current_user.privacy_enabled)
@@ -274,7 +270,7 @@ def create_transaction(
     privacy.check_account_access(db, current_user, transaction.account_id, write=True)
     if transaction.items is not None:
         receipt = create_receipt(db, current_user, transaction)
-        return mark_purchase(db, current_user, receipt, transaction.asset_purchase or None)
+        return saved(db, mark_purchase(db, current_user, receipt, transaction.asset_purchase or None))
     # Without items the schema requires both (TransactionCreate.plain_needs_amount_and_category)
     assert transaction.category_id is not None and transaction.amount is not None
     category = crud.get_category(db, transaction.category_id)
@@ -285,9 +281,19 @@ def create_transaction(
     check_member_tag(db, transaction.member_id, transaction.account_id)
     split_shares = check_shared(db, transaction.split_id, transaction.account_id, category)
     check_asset(db, current_user, transaction.asset_id)
-    created = crud.create_transaction(db, transaction=transaction, category=category, split_shares=split_shares)
+    created = crud.create_transaction(
+        db, transaction=transaction, category=category, split_shares=split_shares, commit=False
+    )
     created = with_attachments(db, current_user, created, transaction.attachment_ids)
-    return mark_purchase(db, current_user, created, transaction.asset_purchase or None)
+    return saved(db, mark_purchase(db, current_user, created, transaction.asset_purchase or None))
+
+
+def saved(db: Session, transaction: models.Transaction) -> models.Transaction:
+    """A booking request saves once, after every check passed: a rejected change leaves nothing half saved (the
+    helpers below only flush; an error closes the session, which drops what was flushed)."""
+    db.commit()
+    db.refresh(transaction)
+    return transaction
 
 
 def mark_purchase(
@@ -317,8 +323,7 @@ def mark_purchase(
             transaction.asset_purchase = True
     elif wanted is False or transaction.asset_id != before or not transaction.asset_id:
         transaction.asset_purchase = False
-    db.commit()
-    db.refresh(transaction)
+    db.flush()
     return transaction
 
 
@@ -326,8 +331,7 @@ def with_attachments(db: Session, user: models.User, transaction: models.Transac
     """Keep the person's pending uploads with the booking (issue #56)."""
     if ids:
         attachments.link(db, user, transaction, ids)
-        db.commit()
-        db.refresh(transaction)
+        db.flush()
     return transaction
 
 
@@ -355,8 +359,7 @@ def create_receipt(db: Session, user: models.User, data: schemas.TransactionCrea
     db.flush()
     attachments.link(db, user, transaction, data.attachment_ids)
     suggest_rules(db, user, transaction)
-    db.commit()
-    db.refresh(transaction)
+    db.flush()
     return transaction
 
 
@@ -381,8 +384,7 @@ def update_receipt(
         transaction.asset_id = update.asset_id
     attachments.link(db, user, transaction, update.attachment_ids)
     suggest_rules(db, user, transaction)
-    db.commit()
-    db.refresh(transaction)
+    db.flush()
     return transaction
 
 
@@ -401,19 +403,18 @@ def update_transaction(
         privacy.check_account_access(db, current_user, db_transaction.account_id, write=True)
         for flag in flags:
             setattr(db_transaction, flag, bool(getattr(transaction_update, flag)))
-        db.commit()
         rest = transaction_update.model_dump(exclude_unset=True, exclude=flags)
         if not rest:
-            return reconcile.annotate(db, [db_transaction])[0]
+            return reconcile.annotate(db, [saved(db, db_transaction)])[0]
         transaction_update = schemas.TransactionUpdate(**rest)
     before = crud.get_transaction(db, transaction_id)
     asset_before = before.asset_id if before else None
     updated = change_transaction(db, current_user, transaction_id, transaction_update)
-    # update_receipt links them itself, inside its own commit
+    # update_receipt links them itself
     if not transaction_update.items:
         updated = with_attachments(db, current_user, updated, transaction_update.attachment_ids)
     updated = mark_purchase(db, current_user, updated, transaction_update.asset_purchase, asset_before)
-    return reconcile.annotate(db, [updated])[0]
+    return reconcile.annotate(db, [saved(db, updated)])[0]
 
 
 def change_transaction(
@@ -438,7 +439,7 @@ def change_transaction(
             if fields - {"description", "date", "asset_purchase"}:
                 raise messages.api_error(400, "edit_items_instead")
             return crud.update_transaction(
-                db, db_transaction, transaction_update, current, split_shares=db_transaction.split_shares
+                db, db_transaction, transaction_update, current, split_shares=db_transaction.split_shares, commit=False
             )
         # items: [] turns the receipt back into a plain booking with the amount and category sent
         if transaction_update.amount is None or transaction_update.category_id is None:
@@ -460,7 +461,9 @@ def change_transaction(
         split_shares = db_transaction.split_shares
         if db_transaction.split_shares and category.type != models.CategoryType.EXPENSE:
             raise messages.api_error(400, "share_expenses_only")
-    return crud.update_transaction(db, db_transaction, transaction_update, category, split_shares=split_shares)
+    return crud.update_transaction(
+        db, db_transaction, transaction_update, category, split_shares=split_shares, commit=False
+    )
 
 
 def update_transfer(db: Session, db_transaction, update: schemas.TransactionUpdate, category: models.Category):
@@ -472,7 +475,7 @@ def update_transfer(db: Session, db_transaction, update: schemas.TransactionUpda
         changed.discard("category_id")
     if changed:
         raise messages.api_error(400, "transfer_date_description_only")
-    return crud.update_transaction(db, db_transaction, update, category)
+    return crud.update_transaction(db, db_transaction, update, category, commit=False)
 
 
 @router.delete("/transactions/{transaction_id}", response_model=schemas.Transaction)
@@ -577,7 +580,7 @@ def set_share(
     if is_dependent(current_user):
         raise messages.api_error(403, "nothing_to_share_without_allowance")
     grantee = db.query(models.User).filter(models.User.id == grantee_id).first()
-    if not grantee or grantee.role != "PARENT" or grantee.id == current_user.id:
+    if not grantee or not is_parent(grantee) or grantee.id == current_user.id:
         raise messages.api_error(400, "share_with_parent_only")
     crud.set_share(db, current_user, grantee_id, share.level)
     return {"level": share.level}

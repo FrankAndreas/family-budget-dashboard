@@ -107,11 +107,11 @@ def _apply(db: Session, people: list[hub.HubPerson]) -> None:
                 hub_id=person.id,
                 role=models.UserRole(person.role),
                 # A new child starts dependent: they only read their costs until a parent switches on Jugendlohn
-                has_allowance=person.role != "CHILD",
+                has_allowance=person.role != models.UserRole.CHILD,
             )
             db.add(row)
         row.username = person.name
-        if row.role == models.UserRole.PARENT and person.role == "CHILD":
+        if row.role == models.UserRole.PARENT and person.role == models.UserRole.CHILD:
             # A parent's money stays theirs: as a child with privacy on, the other parents don't see it
             row.privacy_enabled = True
             row.has_allowance = True

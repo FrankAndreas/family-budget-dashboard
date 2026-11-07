@@ -14,6 +14,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, selectinload
 
 from . import auth, crud, database, finance, i18n, models, privacy
+from .money import cents
 
 router = APIRouter()
 
@@ -50,10 +51,6 @@ def range_end(period: str, day: date) -> Optional[date]:
     return {"month": month_start(day, -1), "3months": month_start(day, -1), "year": date(day.year + 1, 1, 1)}.get(
         period
     )
-
-
-def cents(value: float) -> float:
-    return round(value + 0.0, 2)
 
 
 @dataclass(frozen=True)

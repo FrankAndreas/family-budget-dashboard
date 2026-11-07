@@ -32,7 +32,9 @@ from . import (
     schemas,
     messages,
 )
-from .api import check_asset, check_member_tag, check_shared, is_dependent
+from .api import check_asset, check_member_tag, check_shared
+from .names import key
+from .privacy import is_dependent
 from .common_api import visible_owner
 from .seed import OTHER_INCOME, SETTLE_UP, system_category
 
@@ -62,11 +64,6 @@ TEMPLATE = (
     "2026-10-12,Bank,Groceries,84.30,Migros,,Equal 50/50,,receipt-0001.jpg\n"
     "2026-10-13,Bank,Healthcare,120.00,Dentist,Timmy,,,receipt-0002.jpg\n"
 )
-
-
-def key(name: str) -> str:
-    """Names match ignoring upper/lower case and surrounding spaces."""
-    return name.strip().casefold()
 
 
 def categories_by_name(db: Session) -> dict[str, models.Category]:
