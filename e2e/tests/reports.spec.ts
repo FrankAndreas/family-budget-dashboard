@@ -26,5 +26,17 @@ test('budget spending and analytics totals', async ({ page, request }) => {
     await expect(page.locator('.glass-card', { hasText: 'Expenses (This Month)' })).toContainText('CHF 45.50');
     await expect(page.locator('.glass-card', { hasText: 'Net Savings (This Month)' })).toContainText("CHF 2'954.50");
     await expect(page.getByText('Groceries').last()).toBeVisible();
+
+    // Spending per day (UX review 2026-11-07): bars, one series without a legend, up to today only, and the month so far
+    const daily = page.getByTestId('daily-spending');
+    await expect(daily.getByRole('heading', { name: 'Spending per day (this month)' })).toBeVisible();
+    await expect(daily).toContainText('CHF 45.50 so far');
+    await expect(daily.locator('.recharts-legend-wrapper')).toHaveCount(0);
+    const day = Number(today.slice(8, 10));
+    const ticks = (await daily.locator('.recharts-xAxis .recharts-cartesian-axis-tick-value').allInnerTexts()).map(t => parseInt(t, 10));
+    expect(Math.max(...ticks)).toBeLessThanOrEqual(day);
+    // Beside the pie the amount stays on one line
+    const amount = page.locator('.glass-card', { hasText: 'Spending by Category' }).getByText('CHF 45.50');
+    expect((await amount.boundingBox())!.height).toBeLessThan(30);
     expect(errors).toEqual([]);
 });

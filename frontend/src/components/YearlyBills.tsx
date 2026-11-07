@@ -152,7 +152,10 @@ export default function YearlyBills() {
                 )}
 
                 {bills.length === 0 ? (
-                    <p className="text-slate-400 text-center py-8">{t('bills.none')}</p>
+                    <div className="text-center py-8">
+                        <p className="text-slate-400">{t('bills.none')}</p>
+                        <p className="text-sm text-slate-500 mt-2 max-w-lg mx-auto">{t('bills.emptyHint')}</p>
+                    </div>
                 ) : (
                     <div className="space-y-2">
                         {bills.map(bill => (

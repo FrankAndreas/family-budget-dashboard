@@ -304,7 +304,10 @@ export default function Investments() {
             )}
 
             {shown.length === 0 ? (
-                <p className="text-slate-400 text-center py-8">{t('investments.none')}</p>
+                <div className="text-center py-8">
+                    <p className="text-slate-400">{t('investments.none')}</p>
+                    <p className="text-sm text-slate-500 mt-2 max-w-lg mx-auto">{t('investments.emptyHint')}</p>
+                </div>
             ) : (
                 <div className="space-y-3">
                     {active.length > 0 && (

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { LineChart, Line, BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import api from '../api';
 import { money } from '../finance';
 import { useFamily } from '../useFamily';
@@ -46,12 +46,13 @@ export default function Analytics() {
 
     const COLORS = ['#22d3ee', '#e879f9', '#818cf8', '#34d399', '#f87171', '#fbbf24', '#fb923c'];
 
-    const dailyData = (summary?.days ?? []).map(d => ({
-        date: formatDayShort(d.date),
-        income: d.income,
-        expenses: d.expenses,
-        net: d.income - d.expenses
-    }));
+    // Spending per day of this month, up to today: days still to come aren't zero spending, they're left out
+    const today = new Date();
+    const todayKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const dailyData = (summary?.days ?? [])
+        .filter(d => d.date <= todayKey)
+        .map(d => ({ date: formatDayShort(d.date), expenses: d.expenses }));
+    const spentSoFar = dailyData.reduce((sum, d) => sum + d.expenses, 0);
     const monthlyData = (summary?.months ?? []).map(m => ({
         month: formatMonthShort(m.month),
         income: m.income,
@@ -59,6 +60,9 @@ export default function Analytics() {
         savings: m.income - m.expenses
     }));
     const categoryData = (summary?.by_category ?? []).map(c => ({ name: c.name, value: c.amount }));
+    // The share in the list beside the pie (labels around the pie don't fit beside it)
+    const categoryTotal = categoryData.reduce((sum, c) => sum + c.value, 0);
+    const categoryShare = (value: number) => `${categoryTotal ? Math.round((value / categoryTotal) * 100) : 0}%`;
 
     const totalIncome = summary?.income ?? 0;
     const totalExpenses = summary?.expenses ?? 0;
@@ -70,8 +74,9 @@ export default function Analytics() {
 
     return (
         <div className="space-y-6">
-            {/* Scope and Time Range */}
-            <div className="flex justify-end gap-3">
+            {/* Scope and time range, right above the cards they change */}
+            <div className="flex flex-wrap items-center gap-3">
+                <span className="text-sm text-slate-400">{t('analytics.showing')}</span>
                 <ScopeSelector scopes={scopes} value={activeScope?.key ?? ''} onChange={setScopeKey} />
                 <select
                     value={timeRange}
@@ -124,24 +129,26 @@ export default function Analytics() {
                 </ResponsiveContainer>
             </div>
 
-            {/* Daily Trend */}
-            <div className="glass-card p-6">
-                <h2 className="text-xl font-bold mb-4">{t('analytics.dailyTrend')}</h2>
-                <ResponsiveContainer width="100%" height={300}>
-                    <LineChart data={dailyData}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+            {/* Spending per day: separate amounts, so bars (a curve would invent values between the days); one series,
+                named by the title, no legend. Income is in the 6-month comparison: one salary would dwarf every day */}
+            <div className="glass-card p-6" data-testid="daily-spending">
+                <div className="flex flex-wrap justify-between items-baseline gap-x-4 mb-4">
+                    <h2 className="text-xl font-bold">{t('analytics.dailyTrend')}</h2>
+                    <p className="text-slate-400">{t('analytics.spentSoFar', { amount: money(spentSoFar) })}</p>
+                </div>
+                <ResponsiveContainer width="100%" height={260}>
+                    <BarChart data={dailyData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                         <XAxis dataKey="date" stroke="#94a3b8" />
                         <YAxis stroke="#94a3b8" />
                         <Tooltip
                             formatter={(value) => money(Number(value))}
+                            cursor={{ fill: 'rgba(148, 163, 184, 0.12)' }}
                             contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
                             labelStyle={{ color: '#f8fafc' }}
                         />
-                        <Legend />
-                        <Line type="monotone" dataKey="income" stroke="#34d399" strokeWidth={2} name={t('analytics.incomeSeries')} />
-                        <Line type="monotone" dataKey="expenses" stroke="#f87171" strokeWidth={2} name={t('analytics.expensesSeries')} />
-                        <Line type="monotone" dataKey="net" stroke="#22d3ee" strokeWidth={2} name={t('analytics.netSeries')} />
-                    </LineChart>
+                        <Bar dataKey="expenses" fill="#f87171" radius={[4, 4, 0, 0]} maxBarSize={28} name={t('analytics.expensesSeries')} />
+                    </BarChart>
                 </ResponsiveContainer>
             </div>
 
@@ -202,29 +209,30 @@ export default function Analytics() {
                 <h2 className="text-xl font-bold mb-4">{t('analytics.byCategory', { range: rangeLabel })}</h2>
                 {categoryData.length > 0 ? (
                     <div className="flex flex-col md:flex-row items-center gap-8">
-                        <ResponsiveContainer width="100%" height={300}>
-                            <PieChart>
-                                <Pie
-                                    data={categoryData}
-                                    cx="50%"
-                                    cy="50%"
-                                    labelLine={false}
-                                    label={({ name, percent }) => `${name} ${((percent ?? 0) * 100).toFixed(0)}%`}
-                                    outerRadius={100}
-                                    fill="#8884d8"
-                                    dataKey="value"
-                                >
-                                    {categoryData.map((_, index) => (
-                                        <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                    ))}
-                                </Pie>
-                                <Tooltip
-                            formatter={(value) => money(Number(value))}
-                                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
-                                />
-                            </PieChart>
-                        </ResponsiveContainer>
-                        <div className="flex-1 space-y-2">
+                        {/* A fixed width for the pie, so the list beside it has room for its amounts */}
+                        <div className="w-full md:w-80 shrink-0">
+                            <ResponsiveContainer width="100%" height={300}>
+                                <PieChart>
+                                    <Pie
+                                        data={categoryData}
+                                        cx="50%"
+                                        cy="50%"
+                                        outerRadius={100}
+                                        fill="#8884d8"
+                                        dataKey="value"
+                                    >
+                                        {categoryData.map((_, index) => (
+                                            <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                        ))}
+                                    </Pie>
+                                    <Tooltip
+                                formatter={(value) => money(Number(value))}
+                                        contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px' }}
+                                    />
+                                </PieChart>
+                            </ResponsiveContainer>
+                        </div>
+                        <div className="flex-1 min-w-0 w-full space-y-2">
                             {categoryData.map((cat, index) => (
                                 <div key={cat.name} className="flex items-center justify-between p-2 bg-slate-800/30 rounded">
                                     <div className="flex items-center gap-2">
@@ -233,8 +241,9 @@ export default function Analytics() {
                                             style={{ backgroundColor: COLORS[index % COLORS.length] }}
                                         />
                                         <span>{cat.name}</span>
+                                        <span className="text-sm text-slate-400">· {categoryShare(cat.value)}</span>
                                     </div>
-                                    <span className="font-bold">{money(cat.value)}</span>
+                                    <span className="font-bold whitespace-nowrap">{money(cat.value)}</span>
                                 </div>
                             ))}
                         </div>
