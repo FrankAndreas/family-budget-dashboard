@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api from '../api';
-import { money } from '../finance';
+import { money, type Budget } from '../finance';
 import { monthNames } from '../format';
-
-interface Budget { category_id: string | null; tag_id?: string | null; limit: number; period: string; spent: number; percentage: number }
 
 // The top of the overview: your balance, what you spent this month against your budgets, and what is left. The
 // server calculates the month in Swiss time (GET /reports/summary, GET /budgets)

@@ -3,8 +3,7 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { money, type PlannedCost, type Split } from '../finance';
 import { ask } from '../confirm';
-
-interface Category { id: string; name: string; type: string }
+import type { Category } from '../accounts';
 
 // Common costs that come every month (rent, ...); they count in the monthly shares
 export default function MonthlyCosts({ splits, onChange }: { splits: Split[]; onChange: () => void }) {

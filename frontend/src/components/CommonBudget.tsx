@@ -8,6 +8,7 @@ import { formatDate } from '../format';
 import SplitManager from './SplitManager';
 import MonthlyCosts from './MonthlyCosts';
 import { ask } from '../confirm';
+import type { Account } from '../accounts';
 
 interface Balance { user_id: string; amount: number }
 interface SharedExpense {
@@ -19,7 +20,6 @@ interface SharedExpense {
     split_name: string | null;
     shares: Record<string, number>;
 }
-interface Account { id: string; user_id: string; name: string }
 interface Settlement { id: string; from_user_id: string; to_user_id: string; amount: number; date: string }
 
 // Costs the parents share: who owes whom, each parent's monthly share, and the splits

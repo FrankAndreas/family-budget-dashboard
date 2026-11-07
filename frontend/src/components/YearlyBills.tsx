@@ -10,8 +10,7 @@ import { ownerFields, ownerValue } from '../ownership';
 import OwnerSelect from './OwnerSelect';
 import { useScrollIntoView } from '../useScrollIntoView';
 import { ask } from '../confirm';
-
-interface Category { id: string; name: string; type: string }
+import type { Category } from '../accounts';
 
 const emptyForm = (userId: string) => ({
     id: null as string | null,

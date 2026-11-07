@@ -3,11 +3,11 @@ import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { useTags } from '../receipts';
 import { ask } from '../confirm';
+import type { Category } from '../accounts';
 
 interface Rule { id: string; name: string; category_id: string; category: string; tag_ids: string[] }
 // What a booking proposed; rule: the rule it would change
 interface Suggestion extends Rule { rule: { category: string; tag_ids: string[] } | null }
-interface Category { id: string; name: string; type: string; system_key?: string | null }
 
 const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white text-sm';
 

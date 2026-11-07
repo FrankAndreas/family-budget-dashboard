@@ -40,6 +40,21 @@ export function useSplits() {
     return { splits, reload };
 }
 
+export interface Budget {
+    id: string;
+    // A budget is for a category or for a tag (issue #56)
+    category_id: string | null;
+    tag_id?: string | null;
+    limit: number;
+    period: string;
+    // Spent in the current month (MONTHLY) or year (YEARLY), and as a percentage of the limit
+    spent: number;
+    percentage: number;
+}
+
+// A follow-up cost booked on an investment (repairs, service, tyres)
+export interface AssetExpense { id: string; amount: number; date: string; description: string | null }
+
 export interface Asset {
     id: string;
     name: string;
