@@ -179,7 +179,7 @@ export default function Investments() {
             onRestore={() => call(() => api.delete(`/api/v1/assets/${asset.id}/archive`), t('investments.archiveFailed'))} />
     );
 
-    const input = 'w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+    const input = 'w-full p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 
     // The typed new tag becomes a chip, and the field is free for the next one; an existing tag's name ticks it
     const addNewTag = () => {
@@ -203,7 +203,7 @@ export default function Investments() {
                     <select
                         value={filter}
                         onChange={(e) => setFilter(e.target.value as Filter)}
-                        className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                        className="p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
                         aria-label={t('investments.show')}
                     >
                         {FILTERS.map(f => <option key={f} value={f}>{t(`investments.filters.${f}`)}</option>)}

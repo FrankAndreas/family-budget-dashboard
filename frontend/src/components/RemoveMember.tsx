@@ -57,7 +57,7 @@ export default function RemoveMember({ member, onDone, onCancel }: Props) {
         }
     };
 
-    const select = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+    const select = 'p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 
     return (
         <form onSubmit={remove} className="mt-3 p-4 rounded-lg border border-red-500/40 bg-red-500/10 space-y-3">

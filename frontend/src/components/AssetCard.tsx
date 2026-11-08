@@ -103,7 +103,7 @@ export default function AssetCard({ asset, owner, alsoIn, canChange, expenses, o
                     <label className="text-slate-400">{t('investments.leftOn')}
                         <input type="date" value={leftOn} min={asset.purchase_date} max={today} required
                             onChange={(e) => setLeftOn(e.target.value)}
-                            className="block p-2 rounded bg-slate-800/50 border border-slate-600 text-white" />
+                            className="block p-2 rounded bg-slate-800/50 border border-slate-500 text-white" />
                     </label>
                     <button type="submit" className="btn-primary">{t('investments.archive')}</button>
                     <button type="button" onClick={() => setLeftOn(null)} className="px-2 text-slate-400 hover:text-white">{t('common.cancel')}</button>

@@ -48,7 +48,7 @@ export default function ShareSettings() {
                         <select
                             value={levelFor(parent.id)}
                             onChange={(e) => setLevel(parent.id, e.target.value as Level)}
-                            className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                            className="p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
                         >
                             {LEVELS.map(level => (
                                 <option key={level} value={level}>{t(`sharing.levels.${level}`)}</option>

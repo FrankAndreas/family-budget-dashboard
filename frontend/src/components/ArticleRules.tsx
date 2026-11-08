@@ -9,7 +9,7 @@ interface Rule { id: string; name: string; category_id: string; category: string
 // What a booking proposed; rule: the rule it would change
 interface Suggestion extends Rule { rule: { category: string; tag_ids: string[] } | null }
 
-const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white text-sm';
+const field = 'p-2 rounded bg-slate-800/50 border border-slate-500 text-white text-sm';
 
 // Article rules: what a receipt article (its whole name) is booked as by the Migros import; learnt on import, a few
 // hundred after a while, so the list is searched

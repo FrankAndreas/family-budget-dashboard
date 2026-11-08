@@ -170,7 +170,7 @@ export default function BudgetManager() {
                     <select
                         value={newBudget.category_id}
                         onChange={(e) => setNewBudget({ ...newBudget, category_id: e.target.value })}
-                        className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                        className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
                         required
                     >
                         <option value="">{t('budgets.selectCategory')}</option>
@@ -194,13 +194,13 @@ export default function BudgetManager() {
                         placeholder={t('budgets.limitPlaceholder')}
                         value={newBudget.limit}
                         onChange={(e) => setNewBudget({ ...newBudget, limit: e.target.value })}
-                        className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                        className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
                         required
                     />
                     <select
                         value={newBudget.period}
                         onChange={(e) => setNewBudget({ ...newBudget, period: e.target.value })}
-                        className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                        className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
                     >
                         <option value="MONTHLY">{t('budgets.monthly')}</option>
                         <option value="YEARLY">{t('budgets.yearly')}</option>
@@ -252,14 +252,14 @@ export default function BudgetManager() {
                                         min="0.01"
                                         value={editingBudget.limit}
                                         onChange={(e) => setEditingBudget({ ...editingBudget, limit: e.target.value })}
-                                        className="flex-1 p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                                        className="flex-1 p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
                                         aria-label={t('budgets.limit')}
                                         required
                                     />
                                     <select
                                         value={editingBudget.period}
                                         onChange={(e) => setEditingBudget({ ...editingBudget, period: e.target.value })}
-                                        className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                                        className="p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
                                         aria-label={t('budgets.period')}
                                     >
                                         <option value="MONTHLY">{t('budgets.monthly')}</option>

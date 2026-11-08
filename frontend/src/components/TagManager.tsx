@@ -7,7 +7,7 @@ import { ask } from '../confirm';
 
 type Usage = Record<string, { items: number; budgets: number; assets: number; article_rules: number }>;
 
-const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+const field = 'p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 
 // Settings → Tags (parents): what receipt items are for (Velo, Garten, ...), across categories (issue #56)
 export default function TagManager() {

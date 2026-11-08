@@ -81,7 +81,7 @@ export default function Analytics() {
                 <select
                     value={timeRange}
                     onChange={(e) => setTimeRange(e.target.value as TimeRange)}
-                    className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                    className="p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
                     aria-label={t('analytics.timeRange')}
                 >
                     {TIME_RANGES.map(range => (

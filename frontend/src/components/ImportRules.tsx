@@ -10,7 +10,7 @@ interface Rule {
 }
 interface Form { text: string; category_id: string; receipt_expected: boolean }
 
-const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+const field = 'p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 const empty: Form = { text: '', category_id: '', receipt_expected: false };
 
 // Rules for imported bookings (bank statements and files): text → category, matched as whole words, the longest text
@@ -137,7 +137,7 @@ export default function ImportRules({ version }: { version: number }) {
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                     <input type="search" value={query} onChange={e => setQuery(e.target.value)}
                         aria-label={t('importRules.search')} placeholder={t('importRules.search')}
-                        className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white text-sm flex-1 min-w-40" />
+                        className="p-2 rounded bg-slate-800/50 border border-slate-500 text-white text-sm flex-1 min-w-40" />
                     {!query && (
                         <button type="button" onClick={() => setListOpen(!listOpen)} aria-expanded={listOpen}
                             className="text-sm text-blue-400 hover:underline">

@@ -37,7 +37,7 @@ interface Row extends Omit<Item, 'amount'> {
     amount: string;
 }
 
-const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+const field = 'p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 const today = () => localDay();
 
 const toRow = (item: Item): Row => ({ ...item, amount: item.amount.toFixed(2), person_id: item.person_id ?? null });

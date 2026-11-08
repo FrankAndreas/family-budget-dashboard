@@ -49,7 +49,7 @@ export default function ChildCosts() {
                     {t('childCosts.month')}
                     <input type="month" value={month} max={thisMonth()} required
                         onChange={e => e.target.value && setMonth(e.target.value)}
-                        className="p-3 rounded-lg bg-slate-800/50 border border-slate-600 text-white" />
+                        className="p-3 rounded-lg bg-slate-800/50 border border-slate-500 text-white" />
                 </label>
                 {error && <p role="alert" className="text-red-300">{error}</p>}
                 {costs && (

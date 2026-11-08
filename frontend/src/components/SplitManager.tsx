@@ -62,7 +62,7 @@ export default function SplitManager({ splits, parents, onChange }: Props) {
         }
     };
 
-    const input = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+    const input = 'p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 
     return (
         <div className="glass-card p-6">

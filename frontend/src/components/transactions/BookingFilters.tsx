@@ -19,10 +19,10 @@ export default function BookingFilters({ query, categoryFilter, categories, cate
         <div className="flex flex-wrap gap-2 mb-4">
             <input type="search" value={query} onChange={e => onQuery(e.target.value)}
                 aria-label={t('transactions.search')} placeholder={t('transactions.search')}
-                className="flex-1 min-w-48 p-2 rounded bg-slate-800/50 border border-slate-600 text-white" />
+                className="flex-1 min-w-48 p-2 rounded bg-slate-800/50 border border-slate-500 text-white" />
             <select value={categoryFilter} onChange={e => onCategory(e.target.value)}
                 aria-label={t('transactions.filterCategory')}
-                className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white">
+                className="p-2 rounded bg-slate-800/50 border border-slate-500 text-white">
                 <option value="">{t('transactions.allCategories')}</option>
                 {categories.map(c => <option key={c.id} value={c.id}>{categoryLabel(c.id)}</option>)}
             </select>

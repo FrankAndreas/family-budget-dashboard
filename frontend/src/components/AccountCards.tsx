@@ -19,7 +19,7 @@ interface Props {
     onError: (message: string) => void;
 }
 
-const field = 'w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+const field = 'w-full p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 
 // The account cards, with adding, renaming and deleting accounts
 export default function AccountCards({

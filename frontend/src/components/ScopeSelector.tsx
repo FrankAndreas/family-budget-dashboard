@@ -16,7 +16,7 @@ export default function ScopeSelector({ scopes, value, onChange }: ScopeSelector
         <select
             value={value}
             onChange={(e) => onChange(e.target.value)}
-            className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+            className="p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
             aria-label={t('scopes.label')}
         >
             {scopes.map(scope => (
