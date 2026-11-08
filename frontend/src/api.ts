@@ -96,8 +96,9 @@ export function errorStatus(error: unknown): number | undefined {
 
 const PAGE_SIZE = 500;
 
-// The transactions endpoint is paginated; fetch every page for an account
-export async function fetchAllTransactions<T>(accountId: string): Promise<T[]> {
+// The transactions endpoint is paginated; fetch every page for an account. onFirstPage gets the newest bookings as
+// soon as they are there, so a list can show them while the older ones are still on their way
+export async function fetchAllTransactions<T>(accountId: string, onFirstPage?: (newest: T[]) => void): Promise<T[]> {
     const all: T[] = [];
     for (let skip = 0; ; skip += PAGE_SIZE) {
         const res = await api.get(`/api/v1/accounts/${accountId}/transactions`, {
@@ -105,6 +106,7 @@ export async function fetchAllTransactions<T>(accountId: string): Promise<T[]> {
         });
         all.push(...res.data);
         if (res.data.length < PAGE_SIZE) return all;
+        if (skip === 0) onFirstPage?.([...all]);
     }
 }
 

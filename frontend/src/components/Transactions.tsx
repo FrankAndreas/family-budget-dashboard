@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import api, { errorMessage } from '../api';
 import { money, type Asset, type Split } from '../finance';
@@ -13,6 +13,9 @@ import BookingFilters from './transactions/BookingFilters';
 import BookingRow, { type RowAction } from './transactions/BookingRow';
 import UnlinkedBankRows from './transactions/UnlinkedBankRows';
 import { byMonth, categoriesOf, lookups, matches } from './transactions/bookingList';
+
+// Bookings drawn at first, and more per "show older": thousands of rows made the page slow (performance review 2026-11-08)
+const PAGE = 100;
 
 interface Props {
     account: Account;
@@ -80,9 +83,23 @@ export default function Transactions({
 
     const [query, setQuery] = useState('');
     const [categoryFilter, setCategoryFilter] = useState('');
-    const filtering = !!query.trim() || !!categoryFilter;
-    const found = shown.filter(transaction => matches(transaction, query, categoryFilter, look));
-    const months = byMonth(found, look.isTransfer);
+    // The list follows the search a moment later, so typing never waits for it
+    const searched = useDeferredValue(query);
+    const filtering = !!searched.trim() || !!categoryFilter;
+    const found = shown.filter(transaction => matches(transaction, searched, categoryFilter, look));
+    // Month totals count every booking found; only the newest `limit` are drawn
+    // Another account, search, filter or view starts again with the newest
+    const view = [account.id, searched, categoryFilter, openOnly].join('|');
+    const [paging, setPaging] = useState({ view, limit: PAGE });
+    const limit = paging.view === view ? paging.limit : PAGE;
+    let left = limit;
+    const months = byMonth(found, look.isTransfer)
+        .map(month => {
+            const drawn = month.bookings.slice(0, Math.max(left, 0));
+            left -= drawn.length;
+            return { ...month, drawn };
+        })
+        .filter(month => month.drawn.length > 0);
     // The categories of the bookings in the list, for the filter
     const usedCategories = categories
         .filter(c => shown.some(tr => categoriesOf(tr).includes(c.id)))
@@ -227,7 +244,7 @@ export default function Transactions({
                                 </p>
                             </div>
                             <div className="space-y-2">
-                                {month.bookings.map(transaction => (
+                                {month.drawn.map(transaction => (
                                     <BookingRow
                                         key={transaction.id}
                                         transaction={transaction}
@@ -247,6 +264,11 @@ export default function Transactions({
                             </div>
                         </section>
                     ))
+                )}
+                {found.length > limit && (
+                    <button onClick={() => setPaging({ view, limit: limit + PAGE })} className="w-full py-2 text-sm text-sky-400 hover:underline">
+                        {t('transactions.showMore', { count: found.length - limit })}
+                    </button>
                 )}
             </div>
         </div>

@@ -126,6 +126,9 @@ const en: Messages = {
         noneFound: 'No bookings match the search.',
         foundCount_one: '{{count}} found',
         foundCount_other: '{{count}} found',
+        // Only the newest bookings are drawn; the rest come with this button (performance review 2026-11-08)
+        showMore_one: 'Show older bookings (1 more)',
+        showMore_other: 'Show older bookings ({{count}} more)',
         severalCategories: 'several categories',
         actions: 'Actions',
         splitShort: 'Split into items',

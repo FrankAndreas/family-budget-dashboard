@@ -124,6 +124,9 @@ const de = {
         noneFound: 'Keine Buchung passt zur Suche.',
         foundCount_one: '{{count}} gefunden',
         foundCount_other: '{{count}} gefunden',
+        // Only the newest bookings are drawn; the rest come with this button (performance review 2026-11-08)
+        showMore_one: 'Ältere Buchungen anzeigen (noch 1)',
+        showMore_other: 'Ältere Buchungen anzeigen (noch {{count}})',
         severalCategories: 'mehrere Kategorien',
         actions: 'Aktionen',
         splitShort: 'In Artikel aufteilen',

@@ -82,14 +82,26 @@ export default function Dashboard() {
             });
     }, [dataVersion, t]);
 
+    // The account whose bookings are loaded: another one shows its newest bookings while the older ones still load;
+    // after a change the list stays as it was until every page is there (performance review 2026-11-08)
+    const loadedAccount = useRef<string | null>(null);
     useEffect(() => {
         if (!selectedAccount) return;
-        fetchAllTransactions<Transaction>(selectedAccount)
-            .then(setTransactions)
+        let gone = false;
+        const switched = loadedAccount.current !== selectedAccount;
+        const show = (bookings: Transaction[]) => {
+            if (gone) return;
+            loadedAccount.current = selectedAccount;
+            setTransactions(bookings);
+        };
+        fetchAllTransactions<Transaction>(selectedAccount, switched ? show : undefined)
+            .then(show)
             .catch(error => {
+                if (gone) return;
                 console.error('Failed to load transactions', error);
                 setError(errorMessage(error, t('dashboard.loadTransactionsFailed')));
             });
+        return () => { gone = true; };
     }, [selectedAccount, dataVersion, t]);
 
     const ownerOf = (account: Account) => users.find(u => u.id === account.user_id);
