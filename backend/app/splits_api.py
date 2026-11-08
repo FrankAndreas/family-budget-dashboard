@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from . import auth, common_budget, crud, database, finance, messages, models, ownership, privacy, schemas
@@ -88,7 +88,12 @@ def common_balance(_: models.User = Depends(auth.require_parent), db: Session = 
 
 
 @router.get("/common/expenses", response_model=List[schemas.SharedExpense])
-def common_expenses(_: models.User = Depends(auth.require_parent), db: Session = Depends(database.get_db)):
+def common_expenses(
+    limit: Optional[int] = Query(default=None, ge=1),
+    _: models.User = Depends(auth.require_parent),
+    db: Session = Depends(database.get_db),
+):
+    """The shared expenses, newest first; the Common tab asks only for the newest (performance review 2026-11-08)."""
     split_names = {s.id: s.name for s in db.query(models.Split)}
     return [
         {
@@ -100,7 +105,7 @@ def common_expenses(_: models.User = Depends(auth.require_parent), db: Session =
             "split_name": split_names.get(t.split_id or ""),
             "shares": finance.split_amount(crud.cost(t.amount), t.split_shares or {}),
         }
-        for t, payer in common_budget.shared_transactions(db)
+        for t, payer in common_budget.shared_transactions(db, limit)
     ]
 
 

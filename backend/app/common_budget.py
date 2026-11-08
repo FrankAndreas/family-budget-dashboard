@@ -1,19 +1,22 @@
 """The common budget's money: shared expenses (booked with a split's percents) and settlements between parents."""
 
+from typing import Optional
+
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from . import crud, models
 
 
-def shared_transactions(db: Session) -> list[tuple[models.Transaction, str]]:
-    """Every shared expense with its payer's user id, newest first."""
+def shared_transactions(db: Session, limit: Optional[int] = None) -> list[tuple[models.Transaction, str]]:
+    """Every shared expense (or the newest `limit`) with its payer's user id, newest first."""
     rows = (
         db.query(models.Transaction, models.Account.user_id)
         .join(models.Account, models.Transaction.account_id == models.Account.id)
         # Shared = booked with the split's percentages (the split itself may have been deleted since)
         .filter(func.json_type(models.Transaction.split_shares) == "object")
         .order_by(models.Transaction.date.desc())
+        .limit(limit)
         .all()
     )
     return [(transaction, payer) for transaction, payer in rows]
