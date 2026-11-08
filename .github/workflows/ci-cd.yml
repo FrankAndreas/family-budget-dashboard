@@ -158,8 +158,13 @@ jobs:
           python-version: '3.14'
           cache: 'pip'
 
-      - name: Install backend dependencies (the app's and the hub's)
-        run: pip install -r backend/requirements.txt -r family-hub/backend/requirements.txt
+      - name: Install backend dependencies (the app's, and the hub's in its own environment)
+        run: |
+          pip install -r backend/requirements.txt
+          # The hub in an environment of its own: its pinned versions (e.g. SQLAlchemy) never clash with the
+          # app's, so Dependabot can update either side alone
+          python -m venv "$RUNNER_TEMP/hub-venv"
+          "$RUNNER_TEMP/hub-venv/bin/pip" install -r family-hub/backend/requirements.txt
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -187,7 +192,7 @@ jobs:
       - name: Run browser tests
         run: |
           cd e2e
-          E2E_PYTHON=python HUB_DIR="$GITHUB_WORKSPACE/family-hub" npm test
+          E2E_PYTHON=python HUB_PYTHON="$RUNNER_TEMP/hub-venv/bin/python" HUB_DIR="$GITHUB_WORKSPACE/family-hub" npm test
 
       - name: Upload test report
         if: failure()
