@@ -22,6 +22,9 @@ interface SharedExpense {
 }
 interface Settlement { id: string; from_user_id: string; to_user_id: string; amount: number; date: string }
 
+// The newest shared expenses shown (the balance counts all of them)
+const SHOWN_EXPENSES = 30;
+
 // Costs the parents share: who owes whom, each parent's monthly share, and the splits
 export default function CommonBudget() {
     const { t } = useTranslation();
@@ -47,7 +50,7 @@ export default function CommonBudget() {
     useEffect(() => {
         Promise.all([
             api.get('/api/v1/common/balance'),
-            api.get('/api/v1/common/expenses'),
+            api.get('/api/v1/common/expenses', { params: { limit: SHOWN_EXPENSES } }),
             api.get('/api/v1/common/overview'),
             api.get('/api/v1/settlements'),
             api.get('/api/v1/accounts')
@@ -291,7 +294,7 @@ export default function CommonBudget() {
                     <p className="text-slate-400 text-sm">{t('commonBudget.noSharedExpenses')}</p>
                 ) : (
                     <div className="space-y-2">
-                        {expenses.slice(0, 30).map(e => (
+                        {expenses.map(e => (
                             <div key={e.transaction_id} className="p-3 bg-slate-800/30 rounded-lg flex flex-wrap justify-between gap-2">
                                 <div>
                                     <p className="font-semibold">{e.description || t('common.noDescription')}</p>

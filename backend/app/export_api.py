@@ -9,7 +9,7 @@ from pathlib import Path
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import Response
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from . import article_rules, auth, crud, database, finance, i18n, models, privacy, reports
 from .assets import asset_out
@@ -70,6 +70,8 @@ def build_files(db: Session, user: models.User) -> dict[str, str]:
     transactions = (
         db.query(models.Transaction)
         .filter(models.Transaction.account_id.in_(account_by_id))
+        # The receipt items and their tags in two queries, not two per booking (performance review 2026-11-08)
+        .options(selectinload(models.Transaction.items).selectinload(models.TransactionItem.tags))
         .order_by(models.Transaction.date)
         .all()
     )
