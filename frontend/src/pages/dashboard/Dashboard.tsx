@@ -134,11 +134,17 @@ export default function Dashboard() {
         const [icon, ...name] = t(`dashboard.tabs.${tab}`).split(' ');
         return { icon, name: name.join(' ') };
     };
+    // The tab's title names the tab ("Budgets · Family Budget"), so screen readers and the list of tabs tell them apart
+    const tabName = split(activeTab as Tab).name;
+    const appName = t('common.appName');
+    useEffect(() => {
+        document.title = `${tabName} · ${appName}`;
+    }, [tabName, appName]);
 
     return (
         <div className="min-h-screen p-3 pb-24 sm:p-6">
             {/* Header: on a phone one line (name, who you are, Logout); from tablet width the greeting below the name */}
-            <div className="glass-card px-4 py-3 sm:p-6 mb-4 sm:mb-6">
+            <header className="glass-card px-4 py-3 sm:p-6 mb-4 sm:mb-6">
                 <div className="flex justify-between items-center gap-3">
                     <div className="shrink-0 sm:shrink sm:min-w-0">
                         <h1 className="text-xl sm:text-3xl font-bold whitespace-nowrap bg-gradient-to-r from-cyan-400 to-fuchsia-400 bg-clip-text text-transparent">
@@ -157,22 +163,18 @@ export default function Dashboard() {
                         </button>
                     </div>
                 </div>
-            </div>
-
-            {error && (
-                <div className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 flex justify-between items-center">
-                    <span>{error}</span>
-                    <button onClick={() => setError('')} className="text-red-300 hover:text-white" aria-label={t('common.dismissError')}>✕</button>
-                </div>
-            )}
+            </header>
 
             {/* Tab Navigation */}
             {/* From tablet width up: the tab row at the top */}
-            <div className="hidden sm:block glass-card p-2 mb-4 sm:mb-6 relative">
+            <nav aria-label={t('dashboard.tabsLabel')} className="hidden sm:block glass-card p-2 mb-4 sm:mb-6 relative">
                 <div ref={tabRow} onScroll={updateMoreTabs} className="flex gap-2 overflow-x-auto">
                     {tabs.map(tab => (
                         <button
                             key={tab}
+                            type="button"
+                            // The tab shown: said to screen readers, not only by its colour and border
+                            aria-current={activeTab === tab ? 'page' : undefined}
                             onClick={event => {
                                 event.currentTarget.scrollIntoView({ block: 'nearest', inline: 'nearest', behavior: 'smooth' });
                                 selectTab(tab);
@@ -193,9 +195,16 @@ export default function Dashboard() {
                         ›
                     </button>
                 )}
-            </div>
+            </nav>
 
-            {/* Tab Content */}
+            {/* Tab Content (and a failed load above it) */}
+            <main>
+            {error && (
+                <div role="alert" className="mb-6 p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 flex justify-between items-center">
+                    <span>{error}</span>
+                    <button onClick={() => setError('')} className="text-red-300 hover:text-white" aria-label={t('common.dismissError')}>✕</button>
+                </div>
+            )}
             {activeTab === 'overview' && (
                 <div className="space-y-6">
                     {/* Receipt mails forwarded by the family, for parents to release (issue #57) */}
@@ -278,6 +287,7 @@ export default function Dashboard() {
                     <DataManager onDataChanged={refresh} />
                 </div>
             )}
+            </main>
 
             {/* Phone: the tabs at the bottom, in reach of the thumb */}
             <nav aria-label={t('dashboard.tabsLabel')}
@@ -289,6 +299,7 @@ export default function Dashboard() {
                         <div className="absolute bottom-full inset-x-0 p-2 bg-slate-900 border-t border-slate-700 grid gap-1">
                             {rest.map(tab => (
                                 <button key={tab} type="button" onClick={() => selectTab(tab)}
+                                    aria-current={activeTab === tab ? 'page' : undefined}
                                     className={`text-left px-4 py-3 rounded-lg font-semibold ${activeTab === tab ? 'bg-blue-500/20 text-blue-400' : 'text-slate-200 hover:bg-slate-800'}`}>
                                     {t(`dashboard.tabs.${tab}`)}
                                 </button>

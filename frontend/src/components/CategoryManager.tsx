@@ -84,7 +84,7 @@ export default function CategoryManager() {
     return (
         <Section id="categories" title={t('categories.title')}>
             <p className="text-sm text-slate-400 mb-4">{t('categories.intro')}</p>
-            {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+            {error && <p role="alert" className="text-red-400 text-sm mb-3">{error}</p>}
 
             <form onSubmit={add} className="flex flex-wrap gap-2 mb-6">
                 <input aria-label={t('categories.newName')} placeholder={t('categories.newPlaceholder')} value={form.name} maxLength={50} required
@@ -127,7 +127,7 @@ export default function CategoryManager() {
                                     ) : (<>
                                         <span className="w-6 text-center">{category.icon}</span>
                                         <span className="flex-1">{category.name}{category.system_key && <span title={t('categories.locked')}> 🔒</span>}</span>
-                                        {used && <span className="text-slate-500">{used}</span>}
+                                        {used && <span className="text-slate-400">{used}</span>}
                                         <button onClick={() => setEditing({ id: category.id, name: category.name, type: category.type, icon: category.icon ?? '' })}
                                             className="link-edit">{t('common.edit')}</button>
                                         {!category.system_key && !used && (

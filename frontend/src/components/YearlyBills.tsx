@@ -103,11 +103,11 @@ export default function YearlyBills() {
         <div className="space-y-6">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="glass-card p-6">
-                    <h3 className="text-sky-400 text-lg font-semibold mb-2">{t('bills.perYear')}</h3>
+                    <h2 className="text-sky-400 text-lg font-semibold mb-2">{t('bills.perYear')}</h2>
                     <p className="text-3xl font-bold">{money(yearly)}</p>
                 </div>
                 <div className="glass-card p-6">
-                    <h3 className="text-emerald-400 text-lg font-semibold mb-2">{t('bills.putAside')}</h3>
+                    <h2 className="text-emerald-400 text-lg font-semibold mb-2">{t('bills.putAside')}</h2>
                     {Object.keys(perPerson).length === 0 ? <p className="text-3xl font-bold">{money(0)}</p> : (
                         Object.entries(perPerson).map(([id, amount]) => (
                             <p key={id} className="text-xl font-bold">{nameOf(id)}: {money(amount)}</p>
@@ -123,7 +123,7 @@ export default function YearlyBills() {
                         <button onClick={() => setForm(emptyForm(user.id))} className="btn-primary text-sm">{t('bills.add')}</button>
                     )}
                 </div>
-                {error && <p className="mb-3 text-red-300">{error}</p>}
+                {error && <p role="alert" className="mb-3 text-red-300">{error}</p>}
 
                 {form && (
                     <form ref={formRef} onSubmit={save} className="scroll-mt-4 mb-6 p-4 bg-slate-800/30 rounded-lg grid gap-2 md:grid-cols-2">
@@ -153,7 +153,7 @@ export default function YearlyBills() {
                 {bills.length === 0 ? (
                     <div className="text-center py-8">
                         <p className="text-slate-400">{t('bills.none')}</p>
-                        <p className="text-sm text-slate-500 mt-2 max-w-lg mx-auto">{t('bills.emptyHint')}</p>
+                        <p className="text-sm text-slate-400 mt-2 max-w-lg mx-auto">{t('bills.emptyHint')}</p>
                     </div>
                 ) : (
                     <div className="space-y-2">
@@ -182,8 +182,8 @@ export default function YearlyBills() {
                                         <p className="text-xs text-slate-400">{t('common.perMonth', { amount: money(bill.monthly) })}</p>
                                     </div>
                                     {canChange(bill) && (<>
-                                        <button onClick={() => edit(bill)} className="text-slate-500 hover:text-blue-400" aria-label={t('bills.edit')}>✎</button>
-                                        <button onClick={() => remove(bill)} className="text-slate-500 hover:text-red-400" aria-label={t('bills.delete')}>✕</button>
+                                        <button onClick={() => edit(bill)} className="text-slate-400 hover:text-blue-400" aria-label={t('bills.edit')}>✎</button>
+                                        <button onClick={() => remove(bill)} className="text-slate-400 hover:text-red-400" aria-label={t('bills.delete')}>✕</button>
                                     </>)}
                                 </div>
                             </div>

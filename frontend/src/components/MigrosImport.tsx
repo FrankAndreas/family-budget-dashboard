@@ -98,7 +98,7 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
                     <span className="block text-amber-300">{aiNote.message ?? t(`migros.ai.${aiNote.status}`)}</span>
                 )}
             </p>
-            {error && <p className="text-red-300 text-sm">{error}</p>}
+            {error && <p role="alert" className="text-red-300 text-sm">{error}</p>}
             <ul className="space-y-2">
                 {preview.receipts.map(receipt => {
                     const open = receipt.status === 'new' || receipt.status === 'maybe_booked';
@@ -144,14 +144,14 @@ export default function MigrosImport({ file, onImported, onCancel }: Props) {
                                             <span className="min-w-0 break-words">{line.name}</span>
                                             <span className="text-slate-400">{money(line.amount)}</span>
                                             {line.source === 'discount' ? (
-                                                <span className="text-slate-500">{t('migros.source.discount')}</span>
+                                                <span className="text-slate-400">{t('migros.source.discount')}</span>
                                             ) : (<>
                                                 <select className={field} value={line.category_id} disabled={busy}
                                                     aria-label={t('migros.category', { name: line.name })}
                                                     onChange={e => changeArticle(line.key, { category_id: e.target.value })}>
                                                     {choicesFor(line.category_id).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                                                 </select>
-                                                <span className="text-xs text-slate-500">{t(`migros.source.${line.source}`)}</span>
+                                                <span className="text-xs text-slate-400">{t(`migros.source.${line.source}`)}</span>
                                                 {tags.map(tag => {
                                                     const on = line.tag_ids.includes(tag.id);
                                                     return (

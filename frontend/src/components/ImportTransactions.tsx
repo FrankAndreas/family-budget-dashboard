@@ -65,7 +65,7 @@ const STATUS_STYLE: Record<PreviewRow['status'], string> = {
     ok: 'text-emerald-300',
     duplicate: 'text-yellow-300',
     error: 'text-red-300',
-    skipped: 'text-slate-500',
+    skipped: 'text-slate-400',
 };
 
 // The file, the duplicates the user chose to book anyway and the changed categories, as the import endpoints expect them
@@ -269,7 +269,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
             </div>
 
             {status && (
-                <div className={`mb-4 p-3 rounded-lg flex justify-between items-center border ${status.kind === 'success'
+                <div role={status.kind === 'success' ? 'status' : 'alert'} className={`mb-4 p-3 rounded-lg flex justify-between items-center border ${status.kind === 'success'
                     ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
                     : 'bg-red-500/20 border-red-500/50 text-red-300'
                     }`}>
@@ -312,7 +312,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                         {preview.errors > 0 && <span className="text-red-300">{t('importing.withErrors', { count: preview.errors })}</span>}
                         {(preview.skipped ?? 0) > 0 && t('importing.skippedRows', { count: preview.skipped })}
                     </p>
-                    {aiMessage && <p className="text-sm text-amber-300 mb-2">{aiMessage}</p>}
+                    {aiMessage && <p role="status" className="text-sm text-amber-300 mb-2">{aiMessage}</p>}
                     {preview.balances && preview.balances.length > 0 && (
                         <ul className="mb-2 text-sm space-y-1">
                             {preview.balances.map(b => {
@@ -344,7 +344,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                             <tbody>
                                 {preview.rows.map(row => (
                                     <tr key={row.line} className="border-t border-slate-700/50 align-top">
-                                        <td className="p-2 text-slate-500">{row.line}</td>
+                                        <td className="p-2 text-slate-400">{row.line}</td>
                                         <td className="p-2 whitespace-nowrap">{row.date}</td>
                                         <td className="p-2">{row.account}{row.owner && ` (${row.owner})`}</td>
                                         <td className="p-2">
@@ -361,9 +361,9 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                             ) : row.category}
                                             {row.shared && <span className="text-slate-400"> · {row.shared}</span>}
                                             {row.source === 'ai' && <div className="text-xs text-sky-400">{t('importing.byAi')}</div>}
-                                            {changes[row.line] && row.source !== 'ai' && <div className="text-xs text-slate-500">{t('importing.was')}<s>{row.file_category}</s></div>}
+                                            {changes[row.line] && row.source !== 'ai' && <div className="text-xs text-slate-400">{t('importing.was')}<s>{row.file_category}</s></div>}
                                             {row.rule && <div className="text-xs text-emerald-400">{t('importing.byRule', { rule: row.rule })}</div>}
-                                            {row.source === 'fallback' && row.status !== 'error' && !row.match && <div className="text-xs text-slate-500">{t('importing.byFallback')}</div>}
+                                            {row.source === 'fallback' && row.status !== 'error' && !row.match && <div className="text-xs text-slate-400">{t('importing.byFallback')}</div>}
                                             {row.matches && row.matches.length > 0 && (
                                                 <select
                                                     value={row.match ?? 'new'}

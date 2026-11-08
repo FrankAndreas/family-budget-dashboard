@@ -14,7 +14,7 @@ const Home = () => {
 
   if (state === 'no_access' || state === 'hub_down') return <NoAccess reason={state} />;
   // Not logged in yet: the browser is on its way to the family hub's login
-  if (!user) return <div className="flex h-screen items-center justify-center">{t('common.loading')}</div>;
+  if (!user) return <main className="flex h-screen items-center justify-center"><p role="status">{t('common.loading')}</p></main>;
   if (user.role === 'CHILD' && !user.has_allowance) return <ChildCosts />;
   return <Dashboard />;
 };

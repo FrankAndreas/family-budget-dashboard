@@ -173,7 +173,7 @@ export default function ScannedReceipts({ photos: loaded, reload, accounts, cate
     const first = photos.find(photo => accountFor(photo));
     return (
         <div className="mb-4 space-y-3">
-            {error && <p className="text-red-400 text-sm">{error}</p>}
+            {error && <p role="alert" className="text-red-400 text-sm">{error}</p>}
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-slate-400">{t('scan.waitingIntro', { count: photos.length })}</p>
                 <button type="button" className="btn-primary text-sm" disabled={!first || busy} onClick={() => check(first)}>
@@ -200,7 +200,7 @@ export default function ScannedReceipts({ photos: loaded, reload, accounts, cate
                                 </p>
                                 {/* The other parent's photo, and their accounts aren't shared for booking: say why nothing is chosen */}
                                 {photo.person_id && photo.person_id !== user?.id && !photo.suggested_account_id && !chosen[photo.id] && (
-                                    <p className="text-sm text-slate-500">
+                                    <p className="text-sm text-slate-400">
                                         {t('scan.notYourAccounts', { name: photo.person_name })}
                                     </p>
                                 )}

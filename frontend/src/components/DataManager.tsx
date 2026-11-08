@@ -293,7 +293,7 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
         <Section id="data" title={t('data.title')}>
 
             {status && (
-                <div className={`mb-6 p-3 rounded-lg flex justify-between items-center border ${status.kind === 'success'
+                <div role={status.kind === 'success' ? 'status' : 'alert'} className={`mb-6 p-3 rounded-lg flex justify-between items-center border ${status.kind === 'success'
                     ? 'bg-emerald-500/20 border-emerald-500/50 text-emerald-300'
                     : 'bg-red-500/20 border-red-500/50 text-red-300'
                     }`}>
@@ -371,7 +371,7 @@ export default function DataManager({ onDataChanged }: { onDataChanged?: () => v
                                     </label>
                                 )}
                                 {user?.role === 'PARENT' && (
-                                    <p className="text-sm text-slate-500 italic">{t('data.parentPrivacy')}</p>
+                                    <p className="text-sm text-slate-400 italic">{t('data.parentPrivacy')}</p>
                                 )}
                             </div>
                         )}

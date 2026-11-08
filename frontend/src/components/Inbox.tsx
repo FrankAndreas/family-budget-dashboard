@@ -83,7 +83,7 @@ export default function Inbox({ accounts, categories, people, aiEnabled, version
             </div>
             {mails.length > 0 && <p className="text-sm text-slate-400 mb-4">{t('inbox.intro')}</p>}
             {failed && <p className="text-red-400 text-sm mb-3">{t('inbox.loadFailed')}</p>}
-            {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+            {error && <p role="alert" className="text-red-400 text-sm mb-3">{error}</p>}
 
             {scanning ? (
                 <ScanReceipts aiEnabled={aiEnabled} onDone={() => { onScanDone(); photos.reload(); }} />
@@ -121,7 +121,7 @@ export default function Inbox({ accounts, categories, people, aiEnabled, version
                                             {' · '}{date(mail.sent_at ?? mail.received_at)}
                                             {' · '}{t('inbox.from', { address: mail.from_addr })}
                                         </p>
-                                        <p className="text-sm text-slate-500">
+                                        <p className="text-sm text-slate-400">
                                             📎 {mail.attachment_names.length ? mail.attachment_names.join(', ') : t('inbox.noAttachments')}
                                         </p>
                                     </div>

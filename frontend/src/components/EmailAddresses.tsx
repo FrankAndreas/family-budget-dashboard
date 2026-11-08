@@ -43,13 +43,13 @@ export default function EmailAddresses({ member, addresses, onChanged }: Props) 
         <div className="mt-3 text-sm">
             <p className="text-slate-400">{t('emails.label')}</p>
             {addresses.length === 0
-                ? <p className="text-slate-500">{t('emails.none')}</p>
+                ? <p className="text-slate-400">{t('emails.none')}</p>
                 : (
                     <ul className="flex flex-wrap gap-2 mt-1">
                         {addresses.map(email => (
                             <li key={email.id} className="px-2 py-0.5 rounded-full border border-slate-600">
                                 {email.address}
-                                <button type="button" onClick={() => remove(email)} className="ml-2 text-slate-500 hover:text-red-400"
+                                <button type="button" onClick={() => remove(email)} className="ml-2 text-slate-400 hover:text-red-400"
                                     aria-label={t('emails.remove', { address: email.address })}>✕</button>
                             </li>
                         ))}
@@ -61,7 +61,7 @@ export default function EmailAddresses({ member, addresses, onChanged }: Props) 
                     className="p-2 rounded bg-slate-800/50 border border-slate-500 text-white flex-1 min-w-48" />
                 <button type="submit" className="text-blue-400 hover:underline">{t('emails.add')}</button>
             </form>
-            {error && <p className="text-red-400 mt-1">{error}</p>}
+            {error && <p role="alert" className="text-red-400 mt-1">{error}</p>}
         </div>
     );
 }

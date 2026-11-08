@@ -104,12 +104,13 @@ export default function AccountCards({
                         <input
                             type="text"
                             placeholder={t('accounts.namePlaceholder')}
+                            aria-label={t('accounts.name')}
                             value={newAccountName}
                             onChange={(e) => setNewAccountName(e.target.value)}
                             className={`${field} mb-2`}
                             required
                         />
-                        <select value={newAccountType} onChange={(e) => setNewAccountType(e.target.value)} className={`${field} mb-2`}>
+                        <select value={newAccountType} onChange={(e) => setNewAccountType(e.target.value)} aria-label={t('accounts.type')} className={`${field} mb-2`}>
                             {ACCOUNT_TYPES.map(type => <option key={type} value={type}>{t(`accounts.types.${type}`)}</option>)}
                         </select>
                         {isParent && (
@@ -174,12 +175,12 @@ export default function AccountCards({
                             ) : (<>
                                 <h3 className="font-semibold text-lg">{account.name}</h3>
                                 {account.user_id !== user?.id && ownerOf(account) && (
-                                    <p className="text-xs text-slate-500">
+                                    <p className="text-xs text-slate-400">
                                         {ownerOf(account)!.username}{ownerOf(account)!.role === 'CHILD' ? t('accounts.ownAllowance') : ''}
                                     </p>
                                 )}
                                 <p className="text-sm text-slate-400">{t(`accounts.types.${account.type as typeof ACCOUNT_TYPES[number]}`)}</p>
-                                {isParent && account.iban && <p className="text-xs text-slate-500 font-mono">{groupedIban(account.iban)}</p>}
+                                {isParent && account.iban && <p className="text-xs text-slate-400 font-mono">{groupedIban(account.iban)}</p>}
                                 {(account.not_confirmed ?? 0) !== 0 && (
                                     <p className="text-xs text-slate-400">{t('reconcile.ofWhichNotConfirmed', { amount: money(account.not_confirmed ?? 0) })}</p>
                                 )}

@@ -162,7 +162,7 @@ export default function CommonBudget() {
     return (
         <div className="space-y-6">
             {error && (
-                <div className="p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 flex justify-between">
+                <div role="alert" className="p-4 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 flex justify-between">
                     <span>{error}</span>
                     <button onClick={() => setError('')} aria-label={t('common.dismissError')}>✕</button>
                 </div>
@@ -245,7 +245,7 @@ export default function CommonBudget() {
                                 {accountsOf(field.owner).map(a => <option key={a.id} value={a.id}>{a.name}</option>)}
                             </select>
                         ))}
-                        <p className="text-xs text-slate-500">{t('commonBudget.accountsHint')}</p>
+                        <p className="text-xs text-slate-400">{t('commonBudget.accountsHint')}</p>
                         <div className="flex gap-2">
                             <button type="submit" className="btn-primary flex-1">{t('commonBudget.recordPayment')}</button>
                             <button type="button" onClick={() => setSettling(null)} className="px-4 text-slate-400 hover:text-white">{t('common.cancel')}</button>

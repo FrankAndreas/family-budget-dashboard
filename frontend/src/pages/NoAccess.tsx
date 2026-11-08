@@ -6,7 +6,7 @@ export default function NoAccess({ reason }: { reason: 'no_access' | 'hub_down' 
     const { t } = useTranslation();
     const { logout, retry } = useAuth();
     return (
-        <div className="flex min-h-screen items-center justify-center p-4">
+        <main className="flex min-h-screen items-center justify-center p-4">
             <div role="alert" className="glass-card max-w-md p-6 text-center space-y-4">
                 <h1 className="text-xl font-semibold">{t(`hubLogin.${reason}.title`)}</h1>
                 <p className="text-slate-300">{t(`hubLogin.${reason}.text`)}</p>
@@ -16,6 +16,6 @@ export default function NoAccess({ reason }: { reason: 'no_access' | 'hub_down' 
                         : <button className="btn-secondary" onClick={() => void logout()}>{t('hubLogin.otherPerson')}</button>}
                 </div>
             </div>
-        </div>
+        </main>
     );
 }

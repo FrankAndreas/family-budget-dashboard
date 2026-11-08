@@ -84,7 +84,7 @@ export default function ArticleRules({ version }: { version: number }) {
         <div className="mt-6">
             <h4 className="font-semibold mb-1">{t('articleRules.title')}</h4>
             <p className="text-sm text-slate-400 mb-2">{t('articleRules.intro')}</p>
-            {message && <p className="text-sm text-red-300 mb-2">{message}</p>}
+            {message && <p role="alert" className="text-sm text-red-300 mb-2">{message}</p>}
             {suggestions.length > 0 && (
                 <div className="mb-4 p-3 rounded-lg border border-amber-500/40 bg-amber-500/10">
                     <div className="flex flex-wrap items-center justify-between gap-2 mb-1">
@@ -117,7 +117,7 @@ export default function ArticleRules({ version }: { version: number }) {
                                 {s.rule && <span className="text-xs text-slate-400">{t('articleRules.changesRule', { category: s.rule.category })}</span>}
                                 <button className="text-blue-400 hover:underline" onClick={() => add(s)}
                                     aria-label={t('articleRules.add', { name: s.name })}>{t('articleRules.addShort')}</button>
-                                <button className="text-slate-500 hover:text-red-400" onClick={() => ignore(s)}
+                                <button className="text-slate-400 hover:text-red-400" onClick={() => ignore(s)}
                                     aria-label={t('articleRules.ignore', { name: s.name })}>{t('articleRules.ignoreShort')}</button>
                             </li>
                         ))}
@@ -125,14 +125,14 @@ export default function ArticleRules({ version }: { version: number }) {
                 </div>
             )}
             {rules.length === 0 ? (
-                <p className="text-sm text-slate-500">{t('articleRules.none')}</p>
+                <p className="text-sm text-slate-400">{t('articleRules.none')}</p>
             ) : (<>
                 <input className={`${field} w-full mb-2`} value={query} onChange={e => setQuery(e.target.value)}
                     aria-label={t('articleRules.search')} placeholder={t('articleRules.search')} />
                 {query.trim() === '' ? (
-                    <p className="text-sm text-slate-500">{t('articleRules.count', { count: rules.length })}</p>
+                    <p className="text-sm text-slate-400">{t('articleRules.count', { count: rules.length })}</p>
                 ) : shown.length === 0 ? (
-                    <p className="text-sm text-slate-500">{t('articleRules.noMatch')}</p>
+                    <p className="text-sm text-slate-400">{t('articleRules.noMatch')}</p>
                 ) : (
                     <ul className="space-y-1 text-sm">
                         {shown.map(rule => editing?.id === rule.id ? (
@@ -167,9 +167,9 @@ export default function ArticleRules({ version }: { version: number }) {
                                     {rule.name} → {rule.category}
                                     {rule.tag_ids.length > 0 && <span className="text-slate-400"> · {rule.tag_ids.map(tagName).join(', ')}</span>}
                                 </span>
-                                <button className="text-slate-500 hover:text-blue-400" onClick={() => setEditing(rule)}
+                                <button className="text-slate-400 hover:text-blue-400" onClick={() => setEditing(rule)}
                                     aria-label={t('articleRules.edit', { name: rule.name })}>{t('common.edit')}</button>
-                                <button className="text-slate-500 hover:text-red-400" onClick={() => remove(rule)}
+                                <button className="text-slate-400 hover:text-red-400" onClick={() => remove(rule)}
                                     aria-label={t('articleRules.delete', { name: rule.name })}>{t('common.delete')}</button>
                             </li>
                         ))}

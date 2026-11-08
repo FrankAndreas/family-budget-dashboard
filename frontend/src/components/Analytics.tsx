@@ -93,17 +93,17 @@ export default function Analytics() {
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="glass-card p-6">
-                    <h3 className="text-emerald-400 text-sm font-semibold mb-2">{t('analytics.income', { range: rangeLabel })}</h3>
+                    <h2 className="text-emerald-400 text-sm font-semibold mb-2">{t('analytics.income', { range: rangeLabel })}</h2>
                     <p className="text-3xl font-bold">{money(totalIncome)}</p>
                 </div>
                 <div className="glass-card p-6">
-                    <h3 className="text-red-400 text-sm font-semibold mb-2">{t('analytics.expenses', { range: rangeLabel })}</h3>
+                    <h2 className="text-red-400 text-sm font-semibold mb-2">{t('analytics.expenses', { range: rangeLabel })}</h2>
                     <p className="text-3xl font-bold">{money(totalExpenses)}</p>
                 </div>
                 <div className="glass-card p-6">
-                    <h3 className={`${netSavings >= 0 ? 'text-sky-400' : 'text-red-400'} text-sm font-semibold mb-2`}>
+                    <h2 className={`${netSavings >= 0 ? 'text-sky-400' : 'text-red-400'} text-sm font-semibold mb-2`}>
                         {t(netSavings >= 0 ? 'analytics.netSavings' : 'analytics.netDeficit', { range: rangeLabel })}
-                    </h3>
+                    </h2>
                     <p className="text-3xl font-bold">{money(Math.abs(netSavings))}</p>
                 </div>
             </div>
@@ -111,8 +111,11 @@ export default function Analytics() {
             {/* Monthly Comparison */}
             <div className="glass-card p-6">
                 <h2 className="text-xl font-bold mb-4">{t('analytics.comparison')}</h2>
+                {/* The bars for the eye; the same numbers as a table for screen readers (the bars' values show only on
+                    hover). Accessibility review 2026-11-08 */}
+                <div aria-hidden="true">
                 <ResponsiveContainer width="100%" height={300}>
-                    <BarChart data={monthlyData}>
+                    <BarChart data={monthlyData} accessibilityLayer={false}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
                         <XAxis dataKey="month" stroke="#94a3b8" />
                         <YAxis stroke="#94a3b8" />
@@ -127,6 +130,28 @@ export default function Analytics() {
                         <Bar dataKey="savings" fill="#22d3ee" name={t('analytics.savingsSeries')} />
                     </BarChart>
                 </ResponsiveContainer>
+                </div>
+                <table className="sr-only">
+                    <caption>{t('analytics.comparison')}</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">{t('analytics.month')}</th>
+                            <th scope="col">{t('analytics.incomeSeries')}</th>
+                            <th scope="col">{t('analytics.expensesSeries')}</th>
+                            <th scope="col">{t('analytics.savingsSeries')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {monthlyData.map(m => (
+                            <tr key={m.month}>
+                                <th scope="row">{m.month}</th>
+                                <td>{money(m.income)}</td>
+                                <td>{money(m.expenses)}</td>
+                                <td>{money(m.savings)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
 
             {/* Spending per day: separate amounts, so bars (a curve would invent values between the days); one series,
@@ -136,8 +161,9 @@ export default function Analytics() {
                     <h2 className="text-xl font-bold">{t('analytics.dailyTrend')}</h2>
                     <p className="text-slate-400">{t('analytics.spentSoFar', { amount: money(spentSoFar) })}</p>
                 </div>
+                <div aria-hidden="true">
                 <ResponsiveContainer width="100%" height={260}>
-                    <BarChart data={dailyData}>
+                    <BarChart data={dailyData} accessibilityLayer={false}>
                         <CartesianGrid strokeDasharray="3 3" stroke="#334155" vertical={false} />
                         <XAxis dataKey="date" stroke="#94a3b8" />
                         <YAxis stroke="#94a3b8" />
@@ -150,6 +176,24 @@ export default function Analytics() {
                         <Bar dataKey="expenses" fill="#f87171" radius={[4, 4, 0, 0]} maxBarSize={28} name={t('analytics.expensesSeries')} />
                     </BarChart>
                 </ResponsiveContainer>
+                </div>
+                <table className="sr-only">
+                    <caption>{t('analytics.dailyTrend')}</caption>
+                    <thead>
+                        <tr>
+                            <th scope="col">{t('analytics.day')}</th>
+                            <th scope="col">{t('analytics.expensesSeries')}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {dailyData.map(d => (
+                            <tr key={d.date}>
+                                <th scope="row">{d.date}</th>
+                                <td>{money(d.expenses)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
 
             {/* Costs per dependent child */}
@@ -209,10 +253,11 @@ export default function Analytics() {
                 <h2 className="text-xl font-bold mb-4">{t('analytics.byCategory', { range: rangeLabel })}</h2>
                 {categoryData.length > 0 ? (
                     <div className="flex flex-col md:flex-row items-center gap-8">
-                        {/* A fixed width for the pie, so the list beside it has room for its amounts */}
-                        <div className="w-full md:w-80 shrink-0">
+                        {/* A fixed width for the pie, so the list beside it has room for its amounts. The list says the
+                            same to screen readers */}
+                        <div aria-hidden="true" className="w-full md:w-80 shrink-0">
                             <ResponsiveContainer width="100%" height={300}>
-                                <PieChart>
+                                <PieChart accessibilityLayer={false}>
                                     <Pie
                                         data={categoryData}
                                         cx="50%"
@@ -220,6 +265,8 @@ export default function Analytics() {
                                         outerRadius={100}
                                         fill="#8884d8"
                                         dataKey="value"
+                                        // Not a Tab stop: hidden from screen readers, the list beside it says the same
+                                        rootTabIndex={-1}
                                     >
                                         {categoryData.map((_, index) => (
                                             <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />

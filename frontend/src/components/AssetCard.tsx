@@ -41,7 +41,7 @@ export default function AssetCard({ asset, owner, alsoIn, canChange, expenses, o
                     <span className="text-xs px-2 py-0.5 h-fit rounded-full bg-amber-500/20 text-amber-300">{t('investments.leaseEndsSoon')}</span>
                 )}
             </div>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-slate-400">
                 {owner}
                 {alsoIn.length > 0 && <>{' · '}{t('investments.alsoIn', { tags: alsoIn.join(', ') })}</>}
             </p>
