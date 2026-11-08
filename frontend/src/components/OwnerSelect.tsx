@@ -21,7 +21,7 @@ export default function OwnerSelect({ value, onChange }: { value: string; onChan
             <select
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white"
+                className="w-full p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
                 aria-label={t('owner.label')}
             >
                 <option value={`owner:${user?.id}`}>{t('owner.mine')}</option>

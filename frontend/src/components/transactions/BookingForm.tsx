@@ -25,7 +25,7 @@ interface Props {
     onError: (message: string) => void;
 }
 
-export const field = 'w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+export const field = 'w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 
 const emptyForm = () => ({
     amount: '', description: '', category_id: '', member_id: '', split_id: '', asset_id: '', asset_purchase: false,

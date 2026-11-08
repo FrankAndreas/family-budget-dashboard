@@ -354,7 +354,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                                     onChange={(e) => changeCategory(row, e.target.value)}
                                                     disabled={busy}
                                                     aria-label={t('importing.categoryOfLine', { line: row.line })}
-                                                    className="p-1 rounded bg-slate-800/50 border border-slate-600 text-white"
+                                                    className="p-1 rounded bg-slate-800/50 border border-slate-500 text-white"
                                                 >
                                                     {choicesFor(row)!.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
                                                 </select>
@@ -398,7 +398,7 @@ export default function ImportTransactions({ onImported }: { onImported?: () => 
                                                             maxLength={120}
                                                             aria-label={t('importing.ruleTextOfLine', { line: row.line })}
                                                             title={t('importing.ruleTextHint')}
-                                                            className="p-1 w-36 rounded bg-slate-800/50 border border-slate-600 text-white"
+                                                            className="p-1 w-36 rounded bg-slate-800/50 border border-slate-500 text-white"
                                                         />
                                                     )}
                                                 </div>

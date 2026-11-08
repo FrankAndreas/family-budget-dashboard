@@ -157,7 +157,7 @@ export default function CommonBudget() {
         );
     }
 
-    const input = 'w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+    const input = 'w-full p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 
     return (
         <div className="space-y-6">

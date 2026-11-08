@@ -60,7 +60,8 @@ body {
 
 /* Buttons */
 .btn-primary {
-  background: linear-gradient(135deg, var(--accent-blue), var(--accent-magenta));
+  /* indigo-600 → fuchsia-700: white text reaches 6.3:1 at both ends (the lighter accents gave 2.5–3.0:1, WCAG asks 4.5) */
+  background: linear-gradient(135deg, #4f46e5, #a21caf);
   border: none;
   border-radius: 8px;
   color: white;

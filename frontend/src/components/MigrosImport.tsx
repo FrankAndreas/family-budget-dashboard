@@ -13,7 +13,7 @@ interface Props {
     onCancel: () => void;
 }
 
-const field = 'p-1 rounded bg-slate-800/50 border border-slate-600 text-white text-sm max-w-full';
+const field = 'p-1 rounded bg-slate-800/50 border border-slate-500 text-white text-sm max-w-full';
 
 // The receipts of a Migros export: each onto its payment or booked new, its articles by rule, AI or fallback; what
 // is booked becomes the articles' rules (spec 2026-10-28)

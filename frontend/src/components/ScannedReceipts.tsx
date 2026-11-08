@@ -24,7 +24,7 @@ interface Props {
     onChecking: (checking: boolean) => void;
 }
 
-const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+const field = 'p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 // The server's times are UTC without an offset
 const utc = (value: string) => new Date(/[zZ]|[+-]\d\d:\d\d$/.test(value) ? value : `${value}Z`);
 

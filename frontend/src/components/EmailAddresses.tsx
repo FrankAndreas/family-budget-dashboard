@@ -58,7 +58,7 @@ export default function EmailAddresses({ member, addresses, onChanged }: Props) 
             <form onSubmit={add} className="mt-2 flex flex-wrap gap-2">
                 <input type="email" required value={address} onChange={e => setAddress(e.target.value)}
                     aria-label={t('emails.newFor', { name: member.username })} placeholder={t('emails.placeholder')}
-                    className="p-2 rounded bg-slate-800/50 border border-slate-600 text-white flex-1 min-w-48" />
+                    className="p-2 rounded bg-slate-800/50 border border-slate-500 text-white flex-1 min-w-48" />
                 <button type="submit" className="text-blue-400 hover:underline">{t('emails.add')}</button>
             </form>
             {error && <p className="text-red-400 mt-1">{error}</p>}

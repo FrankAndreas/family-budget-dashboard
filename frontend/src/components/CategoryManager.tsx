@@ -12,7 +12,7 @@ const GROUPS = ['INCOME', 'EXPENSE', 'TRANSFER'] as const;
 
 const USES = ['transactions', 'budgets', 'planned_costs', 'import_rules', 'article_rules', 'items'] as const;
 
-const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+const field = 'p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 
 // Settings → Categories (parents): add, rename, retype and delete; the app's own categories (🔒) only change icon
 export default function CategoryManager() {

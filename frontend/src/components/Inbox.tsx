@@ -23,7 +23,7 @@ interface Props {
     onScanDone: () => void;
 }
 
-const field = 'p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+const field = 'p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
 
 // Parents only: receipt mails forwarded by the family (issue #57), unopened until one is released, and receipts
 // photographed on the phone (receipt scan)

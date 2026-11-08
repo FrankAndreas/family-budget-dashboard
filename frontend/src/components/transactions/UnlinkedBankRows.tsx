@@ -30,7 +30,7 @@ export default function UnlinkedBankRows({ rows, categories, canEdit, onBook }: 
                     {canEdit && (<>
                         <select value={bookAs[row.id] ?? ''} onChange={e => setBookAs({ ...bookAs, [row.id]: e.target.value })}
                             aria-label={t('reconcile.bookAs', { text: row.text })}
-                            className="p-1 rounded bg-slate-800/50 border border-slate-600 text-white">
+                            className="p-1 rounded bg-slate-800/50 border border-slate-500 text-white">
                             <option value="">{t('reconcile.chooseCategory')}</option>
                             {[...(row.amount < 0 ? expenses : income), ...transfers]
                                 // Not the ones the app books itself

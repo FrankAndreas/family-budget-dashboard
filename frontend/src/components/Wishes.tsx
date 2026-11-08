@@ -152,7 +152,7 @@ export default function Wishes() {
         change(api.delete(`/api/v1/wishes/${wish.id}`), t('wishes.deleteFailed'));
     };
 
-    const input = 'w-full p-2 rounded bg-slate-800/50 border border-slate-600 text-white';
+    const input = 'w-full p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
     const small = 'text-sm text-slate-500 hover:text-white transition-colors';
 
     // Own list first (even when empty), then the other people, then the common lists

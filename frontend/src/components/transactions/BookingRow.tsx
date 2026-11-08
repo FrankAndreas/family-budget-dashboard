@@ -142,7 +142,7 @@ export default function BookingRow({
                             {unlinked.length > 0 && (
                                 <select value="" onChange={e => e.target.value && onLinkRow(e.target.value)}
                                     aria-label={t('reconcile.linkLine')}
-                                    className="p-1 rounded bg-slate-800/50 border border-slate-600 text-white">
+                                    className="p-1 rounded bg-slate-800/50 border border-slate-500 text-white">
                                     <option value="">{t('reconcile.linkLine')}</option>
                                     {unlinked.map(row => (
                                         <option key={row.id} value={row.id}>{formatDate(row.booked_on)} · {row.text} · {money(row.amount)}</option>
