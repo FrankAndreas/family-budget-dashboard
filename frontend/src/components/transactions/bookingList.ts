@@ -21,7 +21,13 @@ export interface Lookups {
 }
 
 export function lookups(categories: Category[], children: FamilyUser[], people: FamilyUser[], assets: Asset[], tags: Tag[]): Lookups {
-    const category = (id: string) => categories.find(c => c.id === id);
+    const byId = <T extends { id: string }>(list: T[]) => new Map(list.map(x => [x.id, x]));
+    const categoryMap = byId(categories);
+    const category = (id: string) => categoryMap.get(id);
+    const childMap = byId(children);
+    const personMap = byId(people);
+    const assetMap = byId(assets);
+    const tagMap = byId(tags);
     return {
         categoryName: id => category(id)?.name ?? '',
         categoryLabel: id => {
@@ -31,11 +37,11 @@ export function lookups(categories: Category[], children: FamilyUser[], people: 
         isExpense: id => category(id)?.type === 'EXPENSE',
         isTransfer: transaction => category(transaction.category_id)?.type === 'TRANSFER',
         isSettleUp: transaction => category(transaction.category_id)?.system_key === 'SETTLE_UP',
-        memberName: id => children.find(c => c.id === id)?.username,
-        personName: id => people.find(p => p.id === id)?.username,
-        assetName: id => assets.find(a => a.id === id)?.name,
+        memberName: id => (id ? childMap.get(id)?.username : undefined),
+        personName: id => (id ? personMap.get(id)?.username : undefined),
+        assetName: id => (id ? assetMap.get(id)?.name : undefined),
         tagLabel: id => {
-            const tag = tags.find(x => x.id === id);
+            const tag = tagMap.get(id);
             return tag ? `${tag.icon ? `${tag.icon} ` : ''}${tag.name}` : '';
         },
     };
