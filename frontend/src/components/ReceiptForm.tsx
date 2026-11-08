@@ -176,7 +176,7 @@ export default function ReceiptForm({
                     ))}
                 </p>
             )}
-            {error && <p className="text-red-400 text-sm">{error}</p>}
+            {error && <p role="alert" className="text-red-400 text-sm">{error}</p>}
 
             <div className="grid gap-2 md:grid-cols-3">
                 <input aria-label={t('receipt.description')} placeholder={t('receipt.description')} value={description}
@@ -207,14 +207,14 @@ export default function ReceiptForm({
                                 onChange={e => update(i, { category_id: e.target.value })} className={field}>
                                 {categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
-                            {row.source === 'rule' && <span className="self-center text-xs text-slate-500">{t('receipt.byArticleRule')}</span>}
+                            {row.source === 'rule' && <span className="self-center text-xs text-slate-400">{t('receipt.byArticleRule')}</span>}
                             <select aria-label={t('receipt.itemPerson', { n: i + 1 })} value={row.person_id ?? ''}
                                 onChange={e => update(i, { person_id: e.target.value || null })} className={field}>
                                 <option value="">{t('receipt.noPerson')}</option>
                                 {people.map(p => <option key={p.id} value={p.id}>{p.username}</option>)}
                             </select>
                             <button type="button" aria-label={t('receipt.removeItem', { n: i + 1 })}
-                                onClick={() => setRows(rows.filter((_, j) => j !== i))} className="text-slate-500 hover:text-red-400">✕</button>
+                                onClick={() => setRows(rows.filter((_, j) => j !== i))} className="text-slate-400 hover:text-red-400">✕</button>
                         </div>
                         {tags.length > 0 && (
                             <div className="flex flex-wrap gap-2 text-xs">

@@ -73,7 +73,7 @@ export default function TagManager() {
     return (
         <Section id="tags" title={t('tags.title')}>
             <p className="text-sm text-slate-400 mb-4">{t('tags.intro')}</p>
-            {error && <p className="text-red-400 text-sm mb-3">{error}</p>}
+            {error && <p role="alert" className="text-red-400 text-sm mb-3">{error}</p>}
 
             <form onSubmit={add} className="flex flex-wrap gap-2 mb-4">
                 <input aria-label={t('tags.newName')} placeholder={t('tags.newPlaceholder')} value={form.name}
@@ -100,7 +100,7 @@ export default function TagManager() {
                         ) : (<>
                             <span className="w-6 text-center">{tag.icon}</span>
                             <span className="flex-1">{tag.name}</span>
-                            {describe(tag) && <span className="text-slate-500">{describe(tag)}</span>}
+                            {describe(tag) && <span className="text-slate-400">{describe(tag)}</span>}
                             <button onClick={() => setEditing({ id: tag.id, name: tag.name, icon: tag.icon ?? '' })}
                                 className="link-edit">{t('common.edit')}</button>
                             {!usage[tag.id]?.budgets && (

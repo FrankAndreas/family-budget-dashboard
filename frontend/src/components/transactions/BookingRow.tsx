@@ -68,7 +68,7 @@ export default function BookingRow({
                     <div className="hidden sm:flex items-center gap-1">
                         {actions.map(action => (
                             <button key={action.key} onClick={action.run} title={action.label} aria-label={action.label}
-                                className={`w-10 h-10 flex items-center justify-center rounded-lg text-slate-500 hover:bg-slate-700/40 transition-colors ${action.danger ? 'ml-2 hover:text-red-400' : 'hover:text-blue-400'}`}>
+                                className={`w-10 h-10 flex items-center justify-center rounded-lg text-slate-400 hover:bg-slate-700/40 transition-colors ${action.danger ? 'ml-2 hover:text-red-400' : 'hover:text-blue-400'}`}>
                                 {action.icon}
                             </button>
                         ))}
@@ -131,7 +131,7 @@ export default function BookingRow({
                             <span className="flex-1 min-w-32">🏦 {formatDate(row.booked_on)} · {row.text}</span>
                             <span className="w-24 text-right">{money(row.amount)}</span>
                             {canEdit && (
-                                <button onClick={() => onUnlinkRow(row.id)} className="text-slate-500 hover:text-red-400">
+                                <button onClick={() => onUnlinkRow(row.id)} className="text-slate-400 hover:text-red-400">
                                     {t('reconcile.unlink')}
                                 </button>
                             )}

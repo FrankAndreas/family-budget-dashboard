@@ -159,7 +159,7 @@ export default function BudgetManager() {
             )}
 
             {error && (
-                <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 flex justify-between items-center">
+                <div role="alert" className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-300 flex justify-between items-center">
                     <span>{error}</span>
                     <button onClick={() => setError('')} className="text-red-300 hover:text-white" aria-label={t('common.dismissError')}>✕</button>
                 </div>
@@ -170,6 +170,7 @@ export default function BudgetManager() {
                     <select
                         value={newBudget.category_id}
                         onChange={(e) => setNewBudget({ ...newBudget, category_id: e.target.value })}
+                        aria-label={t('budgets.category')}
                         className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
                         required
                     >
@@ -192,6 +193,7 @@ export default function BudgetManager() {
                         step="0.01"
                         min="0.01"
                         placeholder={t('budgets.limitPlaceholder')}
+                        aria-label={t('budgets.limit')}
                         value={newBudget.limit}
                         onChange={(e) => setNewBudget({ ...newBudget, limit: e.target.value })}
                         className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
@@ -200,6 +202,7 @@ export default function BudgetManager() {
                     <select
                         value={newBudget.period}
                         onChange={(e) => setNewBudget({ ...newBudget, period: e.target.value })}
+                        aria-label={t('budgets.period')}
                         className="w-full mb-2 p-2 rounded bg-slate-800/50 border border-slate-500 text-white"
                     >
                         <option value="MONTHLY">{t('budgets.monthly')}</option>

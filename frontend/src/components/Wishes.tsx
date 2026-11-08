@@ -153,7 +153,7 @@ export default function Wishes() {
     };
 
     const input = 'w-full p-2 rounded bg-slate-800/50 border border-slate-500 text-white';
-    const small = 'text-sm text-slate-500 hover:text-white transition-colors';
+    const small = 'text-sm text-slate-400 hover:text-white transition-colors';
 
     // Own list first (even when empty), then the other people, then the common lists
     const open = wishes.filter(w => !w.bought_on);
@@ -185,7 +185,7 @@ export default function Wishes() {
                         )}
                     </div>
                 </div>
-                {error && <p className="text-red-400 text-sm mt-3">{error}</p>}
+                {error && <p role="alert" className="text-red-400 text-sm mt-3">{error}</p>}
 
                 {form && (
                     <form ref={formRef} onSubmit={save} className="scroll-mt-4 mt-4 p-4 bg-slate-800/30 rounded-lg grid grid-cols-1 md:grid-cols-2 gap-2">
@@ -245,7 +245,7 @@ export default function Wishes() {
                                                 {wish.best_shop && (wish.best_url
                                                     ? <>{t('wishes.at')}<a href={wish.best_url} target="_blank" rel="noreferrer" className="text-sky-400 hover:underline">{wish.best_shop}</a></>
                                                     : t('wishes.atShop', { shop: wish.best_shop }))}
-                                                {wish.best_checked && <span className="text-slate-500">{t('wishes.checked', { date: formatDate(wish.best_checked) })}</span>}
+                                                {wish.best_checked && <span className="text-slate-400">{t('wishes.checked', { date: formatDate(wish.best_checked) })}</span>}
                                             </span>
                                         )}
                                         <span className="flex flex-wrap gap-3">
@@ -266,7 +266,7 @@ export default function Wishes() {
                                                     {t('common.edit')}
                                                 </button>
                                                 <button aria-label={t('wishes.deleteWish', { name: wish.name })} onClick={() => remove(wish)}
-                                                    className="text-sm text-slate-500 hover:text-red-400 transition-colors">{t('common.delete')}</button>
+                                                    className="text-sm text-slate-400 hover:text-red-400 transition-colors">{t('common.delete')}</button>
                                             </>)}
                                         </span>
                                     </div>
@@ -319,7 +319,7 @@ export default function Wishes() {
                         <ol className="space-y-2">
                             {plan.map((wish, i) => (
                                 <li key={wish.id} className="flex flex-wrap items-center gap-x-4 gap-y-1 p-3 rounded bg-slate-800/30">
-                                    <span className="w-6 text-slate-500">{i + 1}.</span>
+                                    <span className="w-6 text-slate-400">{i + 1}.</span>
                                     <span className="flex flex-col leading-none">
                                         <button aria-label={t('wishes.moveUpPlan', { name: wish.name })} disabled={i === 0}
                                             onClick={() => move(wish, 'up', 'family')} className={`${small} disabled:opacity-30`}>▲</button>

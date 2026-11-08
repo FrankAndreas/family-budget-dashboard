@@ -72,7 +72,7 @@ export default function SplitManager({ splits, parents, onChange }: Props) {
                     <button onClick={() => open()} className="btn-primary text-sm">{t('splits.add')}</button>
                 )}
             </div>
-            {error && <p className="mb-3 text-red-300">{error}</p>}
+            {error && <p role="alert" className="mb-3 text-red-300">{error}</p>}
             <div className="space-y-2">
                 {splits.map(split => (
                     <div key={split.id} className="p-3 bg-slate-800/30 rounded-lg flex flex-wrap justify-between gap-2">

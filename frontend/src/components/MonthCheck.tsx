@@ -58,7 +58,7 @@ export default function MonthCheck<A extends Account>({ accounts, canBook, versi
         <div className="glass-card p-6" data-testid="month-check">
             <h2 className="text-xl font-bold mb-1">{t('monthCheck.title')}</h2>
             <p className="text-sm text-slate-400 mb-4">{t('monthCheck.intro')}</p>
-            {error && <p className="text-red-400 text-sm mb-2">{error}</p>}
+            {error && <p role="alert" className="text-red-400 text-sm mb-2">{error}</p>}
             {accounts.map(account => {
                 const open = months[account.id] ?? [];
                 return (

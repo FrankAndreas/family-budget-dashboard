@@ -40,7 +40,7 @@ export default function ShareSettings() {
             <p className="text-slate-400 mb-4 text-sm">
                 {isChild ? t('sharing.introChild') : t('sharing.introParent')}
             </p>
-            {error && <p className="mb-3 text-red-300">{error}</p>}
+            {error && <p role="alert" className="mb-3 text-red-300">{error}</p>}
             <div className="space-y-3">
                 {parents.map(parent => (
                     <label key={parent.id} className="flex flex-wrap items-center justify-between gap-3 p-4 bg-slate-800/30 rounded-lg">

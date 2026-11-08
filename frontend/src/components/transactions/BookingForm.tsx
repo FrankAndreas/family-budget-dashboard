@@ -97,6 +97,7 @@ export default function BookingForm({
                 step="0.01"
                 min="0.01"
                 placeholder={t('transactions.amountPlaceholder')}
+                aria-label={t('transactions.amount')}
                 value={form.amount}
                 onChange={(e) => setForm({ ...form, amount: e.target.value })}
                 className={field}
@@ -114,12 +115,14 @@ export default function BookingForm({
             <input
                 type="text"
                 placeholder={t('transactions.descriptionPlaceholder')}
+                aria-label={t('transactions.description')}
                 value={form.description}
                 onChange={(e) => setForm({ ...form, description: e.target.value })}
                 className={field}
             />
             <select
                 value={form.category_id}
+                aria-label={t('transactions.category')}
                 onChange={(e) => setForm({
                     ...form,
                     category_id: e.target.value,

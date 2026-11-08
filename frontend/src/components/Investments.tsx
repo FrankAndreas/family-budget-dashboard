@@ -214,7 +214,7 @@ export default function Investments() {
                 </div>
             </div>
             <p className="text-sm text-slate-400 mb-4">{t('investments.intro')}</p>
-            {error && <p className="mb-3 text-red-300">{error}</p>}
+            {error && <p role="alert" className="mb-3 text-red-300">{error}</p>}
 
             {form && (
                 <form ref={formRef} onSubmit={save} className="scroll-mt-4 mb-6 p-4 bg-slate-800/30 rounded-lg grid gap-2 md:grid-cols-2">
@@ -305,7 +305,7 @@ export default function Investments() {
             {shown.length === 0 ? (
                 <div className="text-center py-8">
                     <p className="text-slate-400">{t('investments.none')}</p>
-                    <p className="text-sm text-slate-500 mt-2 max-w-lg mx-auto">{t('investments.emptyHint')}</p>
+                    <p className="text-sm text-slate-400 mt-2 max-w-lg mx-auto">{t('investments.emptyHint')}</p>
                 </div>
             ) : (
                 <div className="space-y-3">

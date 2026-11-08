@@ -130,7 +130,7 @@ export default function ImportRules({ version }: { version: number }) {
                 <button type="submit" className="btn-primary text-sm">{t('importRules.add')}</button>
             </form>
             <button onClick={addPresets} className="text-sm text-blue-400 hover:underline mb-3">{t('importRules.addPresets')}</button>
-            {message && <p className="text-sm text-slate-300 mb-2">{message}</p>}
+            {message && <p role="status" className="text-sm text-slate-300 mb-2">{message}</p>}
             {rules.length === 0 ? (
                 <p className="text-sm text-slate-400">{t('importRules.none')}</p>
             ) : (<>
@@ -172,7 +172,7 @@ export default function ImportRules({ version }: { version: number }) {
                                         {shown === rule.id ? t('importRules.hide') : t('importRules.show')}
                                     </button>
                                     <button onClick={() => copy(rule)} className="text-blue-400 hover:underline">{t('importRules.copy')}</button>
-                                    <button onClick={() => remove(rule)} className="text-slate-500 hover:text-red-400">{t('common.delete')}</button>
+                                    <button onClick={() => remove(rule)} className="text-slate-400 hover:text-red-400">{t('common.delete')}</button>
                                 </div>
                             )}
                             {shown === rule.id && (

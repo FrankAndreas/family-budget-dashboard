@@ -35,7 +35,7 @@ export default function ChildCosts() {
     const largest = costs?.by_category[0]?.amount ?? 0;
 
     return (
-        <div className="min-h-screen p-3 sm:p-6 space-y-4">
+        <main className="min-h-screen p-3 sm:p-6 space-y-4">
             <div className="glass-card p-4 sm:p-6 flex justify-between items-center gap-3">
                 <div className="min-w-0">
                     <h1 className="text-2xl font-bold">{t('childCosts.title')}</h1>
@@ -106,6 +106,6 @@ export default function ChildCosts() {
                         )}
                 </section>
             )}
-        </div>
+        </main>
     );
 }

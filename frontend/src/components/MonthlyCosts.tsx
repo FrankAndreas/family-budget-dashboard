@@ -76,7 +76,7 @@ export default function MonthlyCosts({ splits, onChange }: { splits: Split[]; on
                 )}
             </div>
             {splits.length === 0 && <p className="text-slate-400 text-sm">{t('monthlyCosts.needsSplit')}</p>}
-            {error && <p className="mb-3 text-red-300">{error}</p>}
+            {error && <p role="alert" className="mb-3 text-red-300">{error}</p>}
             {form && (
                 <form onSubmit={save} className="mb-4 p-4 bg-slate-800/30 rounded-lg grid gap-2 md:grid-cols-2">
                     <input className={input} placeholder={t('monthlyCosts.namePlaceholder')} value={form.name}
@@ -112,12 +112,12 @@ export default function MonthlyCosts({ splits, onChange }: { splits: Split[]; on
                                     id: cost.id, name: cost.name, category_id: cost.category_id,
                                     amount: String(cost.amount), split_id: cost.split_id ?? splits[0]?.id ?? ''
                                 })}
-                                className="text-slate-500 hover:text-blue-400"
+                                className="text-slate-400 hover:text-blue-400"
                                 aria-label={t('monthlyCosts.edit')}
                             >
                                 ✎
                             </button>
-                            <button onClick={() => remove(cost)} className="text-slate-500 hover:text-red-400" aria-label={t('monthlyCosts.delete')}>✕</button>
+                            <button onClick={() => remove(cost)} className="text-slate-400 hover:text-red-400" aria-label={t('monthlyCosts.delete')}>✕</button>
                         </div>
                     </div>
                 ))}
