@@ -21,6 +21,10 @@ updates:
       include: "scope"
     assignees:
       - "FrankAndreas"
+    groups:
+      # Minor and patch updates in one PR; majors still come one by one
+      pip-non-major:
+        update-types: ["minor", "patch"]
   
   # Frontend npm dependencies
   - package-ecosystem: "npm"
@@ -45,6 +49,10 @@ updates:
       # Ignore major version updates for stability
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    groups:
+      # Minor and patch updates in one PR; majors still come one by one
+      npm-non-major:
+        update-types: ["minor", "patch"]
 
   # Cloudflare email worker npm dependencies
   - package-ecosystem: "npm"
@@ -69,6 +77,10 @@ updates:
       # Ignore major version updates for stability
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
+    groups:
+      # Minor and patch updates in one PR; majors still come one by one
+      npm-non-major:
+        update-types: ["minor", "patch"]
 
   # GitHub Actions
   - package-ecosystem: "github-actions"
@@ -84,6 +96,10 @@ updates:
       - "ci/cd"
     commit-message:
       prefix: "chore(ci)"
+    groups:
+      # Minor and patch updates in one PR; majors still come one by one
+      actions-non-major:
+        update-types: ["minor", "patch"]
   
   # Docker
   - package-ecosystem: "docker"
@@ -96,6 +112,10 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    groups:
+      # Minor and patch updates in one PR; majors still come one by one
+      docker-non-major:
+        update-types: ["minor", "patch"]
   
   - package-ecosystem: "docker"
     directory: "/frontend"
@@ -107,3 +127,7 @@ updates:
     labels:
       - "dependencies"
       - "docker"
+    groups:
+      # Minor and patch updates in one PR; majors still come one by one
+      docker-non-major:
+        update-types: ["minor", "patch"]
