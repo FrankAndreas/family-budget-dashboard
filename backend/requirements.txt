@@ -6,7 +6,7 @@ python-multipart==0.0.33
 tzdata==2026.6
 alembic==1.20.1
 pypdf==6.21.4
-pypdfium2==5.14.0
+pypdfium2==5.15.0
 Pillow==13.0.0
 
 # The family hub's client (who is logged in, the app's people), from an exact commit of family-hub: the image has no git
