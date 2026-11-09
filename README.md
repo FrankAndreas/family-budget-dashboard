@@ -72,6 +72,10 @@ Bookings come in by hand, or in bulk from bank and Migros exports through small 
 - Design specs and implementation plans: [docs/superpowers/](docs/superpowers/).
 - Backlog: GitHub Issues.
 
+## Pre-commit checks
+
+`.githooks/pre-commit` runs the fast checks CI runs (lint, types) for the parts a commit touches. `npm install` in `frontend/` enables it; or once per clone: `git config core.hooksPath .githooks`. Skip once with `git commit --no-verify`.
+
 ## License
 
 [MIT](LICENSE)

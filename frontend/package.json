@@ -7,7 +7,8 @@
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0 && npm run check-texts",
     "preview": "vite preview",
     "type-check": "tsc -b",
-    "check-texts": "node scripts/check-texts.mjs"
+    "check-texts": "node scripts/check-texts.mjs",
+    "prepare": "git config core.hooksPath .githooks || true"
   },
   "dependencies": {
     "axios": "^1.21.0",
