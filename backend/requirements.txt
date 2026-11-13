@@ -10,4 +10,4 @@ pypdfium2==5.15.0
 Pillow==13.0.0
 
 # The family hub's client (who is logged in, the app's people), from an exact commit of family-hub: the image has no git
-family-hub-client @ https://github.com/FrankAndreas/family-hub/archive/62f20a6de5eaf2ca7c8823d4783842696ab607df.tar.gz#subdirectory=client
+family-hub-client @ https://github.com/FrankAndreas/family-hub/archive/668674a7d8f1381ca38b2139814108ee88282590.tar.gz#subdirectory=client
