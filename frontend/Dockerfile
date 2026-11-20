@@ -13,7 +13,7 @@ ENV VITE_API_URL=/
 RUN npm run build
 
 # Stage 2: serve it with nginx as a non-root user, on port 8080
-FROM nginxinc/nginx-unprivileged:alpine
+FROM nginxinc/nginx-unprivileged:1.31.7-alpine
 
 COPY --from=build --chown=nginx:nginx /app/dist /usr/share/nginx/html
 COPY --chown=nginx:nginx nginx.conf /etc/nginx/conf.d/default.conf
