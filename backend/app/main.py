@@ -29,6 +29,7 @@ from . import (
     import_rules,
     rule_presets,
     reconcile,
+    ask_api,
     reports,
     categories_api,
     tags_api,
@@ -102,6 +103,7 @@ app = FastAPI(
 )
 
 app.include_router(users_api.router, prefix="/api/v1")
+app.include_router(ask_api.router, prefix="/api/v1")
 app.include_router(accounts_api.router, prefix="/api/v1")
 app.include_router(transactions_api.router, prefix="/api/v1")
 app.include_router(budgets_api.router, prefix="/api/v1")

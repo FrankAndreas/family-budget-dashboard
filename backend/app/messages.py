@@ -13,6 +13,14 @@ from . import i18n
 
 MESSAGES: dict[str, dict[str, str]] = {
     "en": {
+        "ask_off": "Asking is not set up",
+        "ask_unclear": (
+            'I couldn\'t turn that into a sum. Ask for a category or tag and a period, e.g. "Groceries this month"'
+            ' or "Dining Out this year compared to last year".'
+        ),
+        "ask_ai_unavailable": "The AI isn't answering right now. Try again later.",
+        "ask_used_up_one": "You have used up your AI questions for this hour. Try again in {count} minute.",
+        "ask_used_up_other": "You have used up your AI questions for this hour. Try again in {count} minutes.",
         "not_logged_in": "Could not validate credentials",
         "no_access": "You don't have access to this app. Ask a parent to give it to you in the family hub.",
         "hub_unavailable": "The family hub can't be reached right now. Try again in a moment.",
@@ -198,6 +206,18 @@ MESSAGES: dict[str, dict[str, str]] = {
         ),
     },
     "de": {
+        "ask_off": "Fragen ist nicht eingerichtet",
+        "ask_unclear": (
+            "Das konnte ich nicht in eine Summe übersetzen. Frag nach einer Kategorie oder einem Tag und einem"
+            " Zeitraum, z. B. «Lebensmittel diesen Monat» oder «Auswärts essen dieses Jahr im Vergleich zum letzten»."
+        ),
+        "ask_ai_unavailable": "Die KI antwortet gerade nicht. Versuch es später nochmals.",
+        "ask_used_up_one": (
+            "Du hast deine KI-Fragen für diese Stunde aufgebraucht. Versuch es in {count} Minute nochmals."
+        ),
+        "ask_used_up_other": (
+            "Du hast deine KI-Fragen für diese Stunde aufgebraucht. Versuch es in {count} Minuten nochmals."
+        ),
         "not_logged_in": "Anmeldung ungültig, bitte melde dich neu an",
         "no_access": "Du hast keinen Zugang zu dieser App. Bitte einen Elternteil, ihn dir im Familien-Hub zu geben.",
         "hub_unavailable": "Der Familien-Hub ist gerade nicht erreichbar. Versuche es gleich nochmals.",

@@ -134,10 +134,17 @@ class InfomaniakClient:
 
 class FakeClient:
     """A fixed receipt for the browser tests (RECEIPT_AI_FAKE=1); never used in production. Bank texts: money out
-    is Groceries, money in Salary."""
+    is Groceries, money in Salary. A question (spending_ask): this month's groceries."""
 
     def complete(self, content: list[dict], schema: Optional[dict] = None) -> str:
         question = content[0].get("text", "") if content else ""
+        if "QUESTION:" in question:
+            from . import reports
+
+            month = reports.today().strftime("%Y-%m")
+            return json.dumps(
+                {"kind": "expense", "category": "Groceries", "tag": None, "from": month, "to": month, "compare": False}
+            )
         if ARTICLE_MARKER in question:
             names = json.loads(question.split(ARTICLE_MARKER, 1)[1])
             return json.dumps(
