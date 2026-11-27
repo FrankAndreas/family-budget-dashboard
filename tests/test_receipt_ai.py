@@ -1,11 +1,13 @@
 """Reading a receipt with the Infomaniak AI (issue #56). The tests never call the real service."""
 
+import io
 import json
 import logging
 import urllib.error
 from datetime import datetime, timedelta
 
 import pytest
+from fastapi import HTTPException
 
 from files import image_png, pdf_with_text
 from helpers import BASE_URL, admin_headers, category_id, register
@@ -20,10 +22,11 @@ class Fake:
     """Answers with a fixed text and remembers what it was sent."""
 
     def __init__(self, answer):
-        self.answer, self.sent = answer, []
+        self.answer, self.sent, self.schemas = answer, [], []
 
-    def complete(self, content):
+    def complete(self, content, schema=None):
         self.sent.append(content)
+        self.schemas.append(schema)
         if isinstance(self.answer, Exception):
             raise self.answer
         return self.answer
@@ -233,3 +236,67 @@ def test_answer_parsing_directly():
     assert len(draft["items"][0]["name"]) == 120 and draft["items"][0]["category_id"] == "g-id"
     many = '{"total": 1, "items": [' + ",".join(['{"name": "a", "amount": 0.01, "category": "x"}'] * 150) + "]}"
     assert len(receipt_ai.parse(many, categories, {}, "u-id")["items"]) == 100
+
+
+class Service:
+    """Infomaniak's chat API as urlopen sees it: remembers the request bodies, optionally refuses response_format."""
+
+    def __init__(self, refuse_schema=False):
+        self.bodies, self.refuse_schema = [], refuse_schema
+
+    def __call__(self, request, timeout):
+        body = json.loads(request.data)
+        self.bodies.append(body)
+        if self.refuse_schema and "response_format" in body:
+            raise urllib.error.HTTPError(request.full_url, 400, "Bad Request", {}, None)
+        return io.BytesIO(json.dumps({"choices": [{"message": {"content": "{}"}}]}).encode())
+
+
+@pytest.fixture
+def service(monkeypatch):
+    monkeypatch.setattr(receipt_ai.InfomaniakClient, "schema_supported", True)
+    fake = Service()
+    monkeypatch.setattr(receipt_ai.urllib.request, "urlopen", fake)
+    return fake
+
+
+def infomaniak():
+    return receipt_ai.InfomaniakClient(receipt_ai.Settings("t", "p", "m", 30))
+
+
+TEXT = [{"type": "text", "text": "q"}]
+
+
+def test_schema_is_sent_as_response_format(service):
+    assert infomaniak().complete(TEXT, schema={"type": "object"}) == "{}"
+    assert service.bodies[0]["response_format"] == {
+        "type": "json_schema",
+        "json_schema": {"name": "answer", "schema": {"type": "object"}, "strict": True},
+    }
+
+
+def test_schema_refused_is_dropped_for_good(service):
+    service.refuse_schema = True
+    assert infomaniak().complete(TEXT, schema={"type": "object"}) == "{}"
+    assert len(service.bodies) == 2 and "response_format" not in service.bodies[1]
+    infomaniak().complete(TEXT, schema={"type": "object"})
+    assert len(service.bodies) == 3 and "response_format" not in service.bodies[2]
+
+
+def test_no_schema_no_response_format(service):
+    infomaniak().complete(TEXT)
+    assert "response_format" not in service.bodies[0]
+
+
+def test_limit_message_per_use(client, monkeypatch):
+    register(client, "mum")
+    keys = []
+    monkeypatch.setattr(receipt_ai.messages, "plural", lambda key, count: keys.append(key) or key)
+    with database.SessionLocal() as db:
+        user_id = db.query(models.User).filter(models.User.username == "mum").one().id
+        receipt_ai.take_read(db, user_id, 1)
+        for key in ({}, {"key": "ask_used_up"}):
+            with pytest.raises(HTTPException) as error:
+                receipt_ai.take_read(db, user_id, 1, **key)
+            assert error.value.status_code == 429
+    assert keys == ["receipt_reads_used_up", "ask_used_up"]
