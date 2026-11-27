@@ -87,6 +87,9 @@ class TestParse:
             answer(**{"from": "2016-01", "to": "2026-11"}),
             answer(**{"from": "2026-12", "to": "2026-12"}),
             answer(kind="transfers"),
+            answer(**{"from": "0000-05", "to": "0000-05"}),
+            answer(**{"from": "0001-01", "to": "0001-01"}, compare=True),
+            json.dumps({"kind": "expense", "from": "2026-11", "to": "2026-11", "compare": False}),
             "I can't answer that",
             "{not json}",
         ],
@@ -149,3 +152,8 @@ def test_prompt():
     assert "Groceries" in text and "Salary" in text and "Velo" in text and "2026-11-15" in text
     assert text.endswith(spending_ask.ASK_MARKER + "Wie viel für Velos?")
     assert spending_ask.prompt("q", [], [], TODAY, "en").endswith(spending_ask.ASK_MARKER + "q")
+
+
+def test_prompt_says_unknown_names_are_unknown():
+    assert "not in the lists" in spending_ask.prompt("q", [], [], TODAY, "en")
+    assert "nicht in den Listen" in spending_ask.prompt("q", [], [], TODAY, "de")

@@ -47,6 +47,8 @@ Regeln:
   Einnahmen über einen Zeitraum ist.
 - category: genau einer dieser Namen oder null für alle: {categories}
 - tag: genau einer dieser Namen oder null; nie category und tag zusammen: {tags}
+- Nennt die Frage eine Kategorie oder einen Tag, der nicht in den Listen steht, ist kind "unknown". null nur, wenn
+  nach allen Ausgaben oder Einnahmen gefragt wird (z. B. «Wie viel haben wir diesen Monat ausgegeben?»).
 - from und to: der erste und der letzte Monat des Zeitraums (beide inklusive). "Diesen Monat" ist {month}; ohne
   Zeitraum in der Frage gilt dieser Monat.
 - compare: true, wenn mit dem Zeitraum davor verglichen werden soll.
@@ -59,6 +61,8 @@ Rules:
   a period.
 - category: exactly one of these names, or null for all: {categories}
 - tag: exactly one of these names, or null; never category and tag together: {tags}
+- If the question names a category or tag that is not in the lists, kind is "unknown". Use null only when the
+  question asks about all spending or all income (e.g. "How much did we spend this month?").
 - from and to: the first and the last month of the period (both included). "This month" is {month}; with no period
   in the question, use this month.
 - compare: true if it should be compared with the period before.
@@ -89,7 +93,8 @@ def prompt(question: str, categories: list[str], tags: list[str], today: date, l
 
 def month(value: object) -> Optional[date]:
     match = MONTH.match(value) if isinstance(value, str) else None
-    if not match or not 1 <= int(match.group(2)) <= 12:
+    # Before 1900 is no family's bookings (and year 0 or a month before it isn't a date at all)
+    if not match or not 1 <= int(match.group(2)) <= 12 or int(match.group(1)) < 1900:
         return None
     return date(int(match.group(1)), int(match.group(2)), 1)
 
@@ -105,7 +110,8 @@ def parse(answer: str, db: Session, today: date) -> Optional[Query]:
         data = json.loads(match.group(0)) if match else None
     except ValueError:
         return None
-    if not isinstance(data, dict) or data.get("kind") not in KINDS:
+    # Both keys must be there: a missing one would otherwise read as "all", a guess
+    if not isinstance(data, dict) or data.get("kind") not in KINDS or not {"category", "tag"} <= data.keys():
         return None
     kind = KINDS[data["kind"]]
     category_name, tag_name = data.get("category"), data.get("tag")
