@@ -168,6 +168,17 @@ const de = {
         updateFailed: 'Budget konnte nicht geändert werden',
         deleteFailed: 'Budget konnte nicht gelöscht werden',
     },
+    ask: {
+        label: 'Frag nach deinen Ausgaben',
+        placeholder: 'z. B. Wie viel haben wir diesen Monat für Lebensmittel ausgegeben?',
+        ask: 'Fragen',
+        thinking: 'Moment…',
+        answer: '{{what}}, {{period}}: {{amount}}',
+        before: 'Davor ({{period}}): {{amount}}',
+        allExpenses: 'Alle Ausgaben',
+        allIncome: 'Alle Einnahmen',
+        failed: 'Die Frage konnte nicht beantwortet werden. Versuch es später nochmals.',
+    },
     analytics: {
         ranges: { month: 'Dieser Monat', '3months': 'Letzte 3 Monate', year: 'Dieses Jahr', all: 'Gesamte Zeit' },
         timeRange: 'Zeitraum',

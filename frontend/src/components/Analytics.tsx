@@ -5,6 +5,7 @@ import api from '../api';
 import { money } from '../finance';
 import { useFamily } from '../useFamily';
 import ScopeSelector from './ScopeSelector';
+import AskBox from './AskBox';
 import { formatDayShort, formatMonthShort } from '../format';
 
 interface Amounts { income: number; expenses: number }
@@ -89,6 +90,8 @@ export default function Analytics() {
                     ))}
                 </select>
             </div>
+
+            <AskBox key={ownerId} ownerId={ownerId} />
 
             {/* Summary Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

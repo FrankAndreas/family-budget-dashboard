@@ -77,32 +77,40 @@ class AiUnavailable(Exception):
 
 
 class AiClient(Protocol):
-    def complete(self, content: list[dict]) -> str: ...
+    def complete(self, content: list[dict], schema: Optional[dict] = None) -> str: ...
 
 
 class InfomaniakClient:
-    """Infomaniak's OpenAI-compatible chat API."""
+    """Infomaniak's OpenAI-compatible chat API. A schema is asked for with `response_format: json_schema`; once the
+    service refuses that, it is left out from then on (the answer is checked by the caller either way)."""
+
+    schema_supported: bool = True
 
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
 
-    def complete(self, content: list[dict]) -> str:
+    def complete(self, content: list[dict], schema: Optional[dict] = None) -> str:
         base = f"https://api.infomaniak.com/2/ai/{self.settings.product_id}/openai/v1"
-        body = {
+        body: dict[str, Any] = {
             "model": self.settings.model,
             "temperature": 0,
             "messages": [{"role": "user", "content": content}],
         }
-        request = urllib.request.Request(
-            base + ENDPOINT,
-            data=json.dumps(body).encode(),
-            method="POST",
-            headers={"Authorization": f"Bearer {self.settings.token}", "Content-Type": "application/json"},
-        )
+        if schema is not None and InfomaniakClient.schema_supported:
+            body["response_format"] = {
+                "type": "json_schema",
+                "json_schema": {"name": "answer", "schema": schema, "strict": True},
+            }
         try:
-            with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
-                answer = json.load(response)
-            return str(answer["choices"][0]["message"]["content"])
+            try:
+                return self._post(base, body)
+            except urllib.error.HTTPError as error:
+                if error.code not in (400, 422) or "response_format" not in body:
+                    raise
+                logger.warning("AI service %s refused response_format", ENDPOINT)
+                InfomaniakClient.schema_supported = False
+                body.pop("response_format")
+                return self._post(base, body)
         except urllib.error.HTTPError as error:
             # Neither the URL (product ID) nor the error body goes into the log
             logger.warning("AI service %s answered HTTP %s", ENDPOINT, error.code)
@@ -112,13 +120,31 @@ class InfomaniakClient:
             logger.warning("AI service %s sent an unexpected answer", ENDPOINT)
         raise AiUnavailable(ENDPOINT)
 
+    def _post(self, base: str, body: dict) -> str:
+        request = urllib.request.Request(
+            base + ENDPOINT,
+            data=json.dumps(body).encode(),
+            method="POST",
+            headers={"Authorization": f"Bearer {self.settings.token}", "Content-Type": "application/json"},
+        )
+        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:
+            answer = json.load(response)
+        return str(answer["choices"][0]["message"]["content"])
+
 
 class FakeClient:
     """A fixed receipt for the browser tests (RECEIPT_AI_FAKE=1); never used in production. Bank texts: money out
-    is Groceries, money in Salary."""
+    is Groceries, money in Salary. A question (spending_ask): this month's groceries."""
 
-    def complete(self, content: list[dict]) -> str:
+    def complete(self, content: list[dict], schema: Optional[dict] = None) -> str:
         question = content[0].get("text", "") if content else ""
+        if "QUESTION:" in question:
+            from . import reports
+
+            month = reports.today().strftime("%Y-%m")
+            return json.dumps(
+                {"kind": "expense", "category": "Groceries", "tag": None, "from": month, "to": month, "compare": False}
+            )
         if ARTICLE_MARKER in question:
             names = json.loads(question.split(ARTICLE_MARKER, 1)[1])
             return json.dumps(
@@ -400,7 +426,9 @@ def parse(text: str, categories: dict[str, str], tags: dict[str, str], unsorted_
     }
 
 
-def take_read(db: Session, user_id: str, per_hour: int, now: Optional[datetime] = None) -> None:
+def take_read(
+    db: Session, user_id: str, per_hour: int, now: Optional[datetime] = None, key: str = "receipt_reads_used_up"
+) -> None:
     """Count one read for the person, or raise a 429 when they have used up the last hour's reads.
 
     Reads are kept in the database, so a restart doesn't reset them; reads older than an hour are removed here."""
@@ -417,7 +445,7 @@ def take_read(db: Session, user_id: str, per_hour: int, now: Optional[datetime] 
         db.commit()
         seconds = (reads[0].read_at + timedelta(hours=1) - now).total_seconds()
         minutes = max(1, int(seconds // 60) + 1)
-        raise HTTPException(status_code=429, detail=messages.plural("receipt_reads_used_up", minutes))
+        raise HTTPException(status_code=429, detail=messages.plural(key, minutes))
     db.add(models.ReceiptRead(user_id=user_id, read_at=now))
     db.commit()
 

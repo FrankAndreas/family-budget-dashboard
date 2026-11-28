@@ -170,6 +170,17 @@ const en: Messages = {
         updateFailed: 'Failed to update budget',
         deleteFailed: 'Failed to delete budget',
     },
+    ask: {
+        label: 'Ask about your spending',
+        placeholder: 'e.g. What did we spend on groceries this month?',
+        ask: 'Ask',
+        thinking: 'Thinking…',
+        answer: '{{what}}, {{period}}: {{amount}}',
+        before: 'Before ({{period}}): {{amount}}',
+        allExpenses: 'All expenses',
+        allIncome: 'All income',
+        failed: 'The question could not be answered. Try again later.',
+    },
     analytics: {
         ranges: { month: 'This Month', '3months': 'Last 3 Months', year: 'This Year', all: 'All Time' },
         timeRange: 'Time range',
